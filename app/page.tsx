@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import GoogleOSSettings, {
+  defaultSettings,
+  GoogleOSSettingsState,
+} from "./components/GoogleOSSettings";
 
 type Row = any;
 type MetaParams = {
@@ -119,6 +123,21 @@ export default function Dashboard() {
   
   const [activeTab, setActiveTab] = useState('CEO Summary');
   const [activeMetaTab, setActiveMetaTab] = useState('Settings');
+  const [activeGoogleTab, setActiveGoogleTab] = useState('Settings');
+  const [googleSettings, setGoogleSettings] = 
+    useState<GoogleOSSettingsState>(defaultSettings);
+
+  const googleTabs = [
+    'Settings',
+    'Overview',
+    'Channel Mix',
+    'Campaign',
+    'Ad Group',
+    'Search Terms',
+    'Keywords',
+    'Funnel',
+    'Alerts',
+  ];
 
   const today = new Date();
 
@@ -221,100 +240,171 @@ export default function Dashboard() {
   const tabs = ['CEO Summary', 'Meta OS', 'Google OS', 'Retention OS', 'Product OS'];
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_10%_10%,rgba(37,99,235,0.10),transparent_28%),radial-gradient(circle_at_90%_20%,rgba(16,185,129,0.08),transparent_28%),#f8fafc] p-7 text-slate-900">
-      <header className="sticky top-0 z-20 mb-6 flex items-center justify-between border-b border-slate-200/80 bg-slate-50/80 py-5 backdrop-blur-xl">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">GrowthOS</p>
-          <p className="mt-1 text-slate-500">Revenue, spend, channel efficiency, customer quality and decision alerts.</p>
-        </div>
-        <div className="rounded-full border bg-white px-4 py-2 text-sm font-semibold shadow-sm">
-          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-500" />
-          {loading ? 'Syncing...' : 'Live Dashboard'}
-        </div>
-      </header>
+    <main className="min-h-screen bg-[#090d16] text-slate-100">
+      <div className="flex min-h-screen">
+        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-[#0b1020] p-6 lg:block">
+          <div className="mb-9">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-black text-slate-950 shadow-[0_0_40px_rgba(255,255,255,0.18)]">
+              GO
+            </div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">GrowthOS</p>
+            <h1 className="mt-2 text-2xl font-black tracking-[-0.06em] text-white">Command Center</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-400">CEO-grade operating system for revenue, media, customers and inventory decisions.</p>
+          </div>
 
-      <nav className="mb-6 flex w-fit gap-1 rounded-full bg-slate-200/70 p-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={
-              activeTab === tab
-                ? 'rounded-full bg-white px-5 py-2 text-sm font-black shadow-sm'
-                : 'rounded-full px-5 py-2 text-sm font-bold text-slate-500 hover:text-slate-900'
-            }
-          >
-            {tab}
-          </button>
-        ))}
-      </nav>
+          <nav className="space-y-2">
+            {tabs.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={
+                  activeTab === tab
+                    ? 'flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left text-sm font-black text-slate-950 shadow-[0_18px_60px_rgba(255,255,255,0.16)]'
+                    : 'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-bold text-slate-400 hover:bg-white/10 hover:text-white'
+                }
+              >
+                <span>{tab}</span>
+                <span className={activeTab === tab ? 'h-2 w-2 rounded-full bg-emerald-500' : 'h-2 w-2 rounded-full bg-slate-700'} />
+              </button>
+            ))}
+          </nav>
 
-      <DateControl
-        start={start}
-        end={end}
-        compareStart={compareStart}
-        compareEnd={compareEnd}
-        setStart={setStart}
-        setEnd={setEnd}
-        setCompareStart={setCompareStart}
-        setCompareEnd={setCompareEnd}
-        onApply={fetchData}
-        loading={loading}
-        setPreset={setPreset}
-      />
+          <div className="absolute bottom-6 left-6 right-6 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Status</p>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-sm font-black text-white">{loading ? 'Syncing data' : 'Live data'}</span>
+            </div>
+          </div>
+        </aside>
 
-      {activeTab === 'CEO Summary' && <CeoSummary metrics={metrics} data={data} />}
+        <section className="flex-1 overflow-hidden bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.16),transparent_28%),radial-gradient(circle_at_90%_10%,rgba(16,185,129,0.12),transparent_24%),linear-gradient(180deg,#0f172a_0%,#f8fafc_38%)]">
+          <div className="mx-auto max-w-[1600px] p-4 md:p-8">
+            <header className="mb-6 rounded-[2rem] border border-white/10 bg-white/[0.08] p-5 shadow-2xl shadow-slate-950/20 backdrop-blur-2xl md:p-7">
+              <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.26em] text-cyan-200">{activeTab}</p>
+                  <h2 className="mt-2 text-3xl font-black tracking-[-0.06em] text-white md:text-5xl">GrowthOS Dashboard</h2>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">Revenue, spend, channel efficiency, customer quality and decision alerts in one operating cockpit.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-right sm:grid-cols-4">
+                  <HeroPill label="Revenue" value={formatCurrency(metrics.revenue)} />
+                  <HeroPill label="Spend" value={formatCurrency(metrics.spend)} />
+                  <HeroPill label="ROAS" value={formatNumber(metrics.roas)} />
+                  <HeroPill label="New CAC" value={formatCurrency(metrics.newCac)} />
+                </div>
+              </div>
 
-      {activeTab === 'Meta OS' && (
-        <MetaOS
-          activeMetaTab={activeMetaTab}
-          setActiveMetaTab={setActiveMetaTab}
-          start={start}
-          end={end}
-          compareStart={compareStart}
-          compareEnd={compareEnd}
-        />
-      )}
+              <nav className="mt-6 flex gap-2 overflow-x-auto rounded-2xl bg-slate-950/55 p-2 lg:hidden">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={
+                      activeTab === tab
+                        ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950'
+                        : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-400'
+                    }
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </nav>
+            </header>
 
-      {activeTab !== 'CEO Summary' && activeTab !== 'Meta OS' && (
-        <section className="rounded-3xl border bg-white/90 p-10 shadow-sm">
-          <h2 className="text-2xl font-black tracking-tight">{activeTab}</h2>
-          <p className="mt-2 text-slate-500">This GrowthOS module will come next.</p>
+            <DateControl
+              start={start}
+              end={end}
+              compareStart={compareStart}
+              compareEnd={compareEnd}
+              setStart={setStart}
+              setEnd={setEnd}
+              setCompareStart={setCompareStart}
+              setCompareEnd={setCompareEnd}
+              onApply={fetchData}
+              loading={loading}
+              setPreset={setPreset}
+            />
+
+            <div className="text-slate-950">
+              {activeTab === 'CEO Summary' && <CeoSummary metrics={metrics} data={data} />}
+
+              {activeTab === 'Meta OS' && (
+                <MetaOS
+                  activeMetaTab={activeMetaTab}
+                  setActiveMetaTab={setActiveMetaTab}
+                  start={start}
+                  end={end}
+                  compareStart={compareStart}
+                  compareEnd={compareEnd}
+                />
+              )}
+
+              {activeTab === 'Google OS' && (
+                <GoogleOS
+                  activeGoogleTab={activeGoogleTab}
+                  setActiveGoogleTab={setActiveGoogleTab}
+                  googleTabs={googleTabs}
+                  googleSettings={googleSettings}
+                  setGoogleSettings={setGoogleSettings}
+                />
+              )}
+
+              {activeTab !== 'CEO Summary' && activeTab !== 'Meta OS' && activeTab !== 'Google OS' && (
+                <section className="rounded-[2rem] border border-white/70 bg-white/90 p-10 shadow-2xl shadow-slate-200/70 backdrop-blur-xl">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Coming Next</p>
+                  <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">{activeTab}</h2>
+                  <p className="mt-2 text-slate-500">This GrowthOS module will come next.</p>
+                </section>
+              )}
+            </div>
+          </div>
         </section>
-      )}
+      </div>
     </main>
   );
 }
 
+function HeroPill({ label, value }: any) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.08] px-4 py-3 backdrop-blur-xl">
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-1 text-sm font-black text-white md:text-base">{value}</p>
+    </div>
+  );
+}
 function DateControl({ start, end, compareStart, compareEnd, setStart, setEnd, setCompareStart, setCompareEnd, onApply, loading, setPreset, }: any) {
   return (
-    <section className="mb-7 rounded-3xl border bg-white/90 p-6 shadow-sm backdrop-blur-xl">
+    <section className="mb-7 rounded-[2rem] border border-white/70 bg-white/95 p-5 shadow-2xl shadow-slate-900/10 backdrop-blur-xl md:p-6">
       <div className="mb-5 flex items-end justify-between gap-6">
         <div>
           <h3 className="text-lg font-black tracking-tight">Date Control</h3>
           <p className="text-sm text-slate-500">Primary period vs comparison period</p>
         </div>
-        <button onClick={onApply} className="rounded-2xl bg-slate-950 px-7 py-3 text-sm font-black text-white">
+        <button onClick={onApply} className="rounded-2xl bg-gradient-to-r from-slate-950 to-slate-800 px-7 py-3 text-sm font-black text-white shadow-xl shadow-slate-900/20 transition hover:-translate-y-0.5">
           {loading ? 'Loading...' : 'Apply'}
         </button>
       </div>
       <div className="flex flex-wrap gap-2 mb-5">
-        <button onClick={() => setPreset("yesterday")} className="rounded-full border px-4 py-2 text-sm font-semibold"
+        <button onClick={() => setPreset("yesterday")} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white"
 >         Yesterday
         </button>
-        <button onClick={() => setPreset("l7")} className="rounded-full border px-4 py-2 text-sm font-semibold">
+        <button onClick={() => setPreset("l7")} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">
           Last 7 Days
         </button>
-        <button onClick={() => setPreset("l14")} className="rounded-full border px-4 py-2 text-sm font-semibold">
+        <button onClick={() => setPreset("l14")} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">
           Last 14 Days
         </button>
-        <button onClick={() => setPreset("l30")} className="rounded-full border px-4 py-2 text-sm font-semibold">
+        <button onClick={() => setPreset("l30")} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">
           Last 30 Days
         </button>
-        <button onClick={() => setPreset("mtd")} className="rounded-full border px-4 py-2 text-sm font-semibold">
+        <button onClick={() => setPreset("mtd")} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">
           This Month
         </button>
-        <button onClick={() => setPreset("lastMonth")} className="rounded-full border px-4 py-2 text-sm font-semibold">
+        <button onClick={() => setPreset("lastMonth")} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">
           Last Month
         </button>
       </div>
@@ -378,6 +468,70 @@ function CeoSummary({ metrics, data }: any) {
   );
 }
 
+function GoogleOS({ activeGoogleTab, setActiveGoogleTab, googleTabs, googleSettings, setGoogleSettings }: any) {
+  return (
+    <section className="rounded-[2rem] border border-white/70 bg-white/95 p-6 shadow-2xl shadow-slate-200/70 backdrop-blur-xl">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Google OS</p>
+          <h2 className="mt-1 text-3xl font-black tracking-[-0.05em]">Search & Intent Decision System</h2>
+          <p className="mt-1 max-w-3xl text-slate-500">
+            Settings, channel mix, campaign diagnosis, ad group control, search terms, keywords, funnel and alerts.
+          </p>
+        </div>
+        <div className="rounded-full border bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm">
+          Search Terms First System
+        </div>
+      </div>
+
+      <div className="mb-6 flex max-w-full gap-2 overflow-x-auto rounded-2xl bg-slate-950 p-2 shadow-inner">
+        {googleTabs.map((tab: string) => (
+          <button
+            key={tab}
+            onClick={() => setActiveGoogleTab(tab)}
+            className={
+              activeGoogleTab === tab
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-sm'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-400 hover:bg-white/10 hover:text-white'
+            }
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeGoogleTab === 'Settings' && (
+        <div className="rounded-3xl border bg-slate-50 p-6 shadow-sm">
+          <GoogleOSSettings settings={googleSettings} setSettings={setGoogleSettings} />
+        </div>
+      )}
+
+      {activeGoogleTab !== 'Settings' && (
+        <div className="space-y-6">
+          <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <DataTile label="Module" value={activeGoogleTab} />
+            <DataTile label="Primary Use" value={activeGoogleTab === 'Search Terms' ? 'Negative / Positive Keyword Decisions' : 'Performance Diagnosis'} />
+            <DataTile label="Status" value="UI Ready" />
+          </section>
+
+          <Panel title={activeGoogleTab + ' Workspace'}>
+            <EmptyState
+              title={activeGoogleTab + ' logic comes next'}
+              text="The Claude-style UI shell is integrated. Now connect this tab to your Google OS API/table logic without touching the design system."
+            />
+          </Panel>
+
+          <PanelDark title="Decision Logic Placeholder">
+            <RiskBox title="Keep" text="Use this area for winners, positives, profitable campaigns or scalable signals." />
+            <RiskBox title="Watch" text="Use this area for low-data terms, volatile campaigns or learning-stage assets." />
+            <RiskBox title="Block / Fix" text="Use this area for waste, negatives, CPA leaks or funnel drop-offs." />
+          </PanelDark>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function MetaOS({ activeMetaTab, setActiveMetaTab, start, end, compareStart, compareEnd }: any) {
   const [params, setParams] = useState<MetaParams>(DEFAULT_PARAMS);
   const [campaigns, setCampaigns] = useState<string[]>([]);
@@ -403,22 +557,22 @@ function MetaOS({ activeMetaTab, setActiveMetaTab, start, end, compareStart, com
   const metaTabs = ['Settings', 'Overview', 'Campaign Analysis', 'Ad Set Analysis', 'Creative Analysis', 'Funnel Analysis', 'Alerts & Recommendations'];
 
   return (
-    <section className="rounded-[2rem] border bg-white/90 p-6 shadow-sm backdrop-blur-xl">
+    <section className="rounded-[2rem] border border-white/70 bg-white/95 p-6 shadow-2xl shadow-slate-200/70 backdrop-blur-xl">
       <div className="mb-6">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">Meta OS</p>
         <h2 className="mt-1 text-3xl font-black tracking-[-0.05em]">Performance Decision System</h2>
         <p className="mt-1 text-slate-500">Settings-driven analysis across overview, campaigns, ad sets, creatives, funnel and alerts.</p>
       </div>
 
-      <div className="mb-6 flex max-w-full gap-1 overflow-x-auto rounded-full bg-slate-200/70 p-1">
+      <div className="mb-6 flex max-w-full gap-2 overflow-x-auto rounded-2xl bg-slate-950 p-2 shadow-inner">
         {metaTabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveMetaTab(tab)}
             className={
               activeMetaTab === tab
-                ? 'whitespace-nowrap rounded-full bg-white px-4 py-2 text-sm font-black shadow-sm'
-                : 'whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900'
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-sm'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-400 hover:bg-white/10 hover:text-white'
             }
           >
             {tab}
@@ -463,7 +617,7 @@ function MetaSettings({ params, setParams }: any) {
         <SettingInput label="Max Frequency" value={params.maxFrequency} onChange={(v: string) => update('maxFrequency', v)} />
         <SettingInput label="CPM Increase %" value={params.cpmIncreasePct} onChange={(v: string) => update('cpmIncreasePct', v)} />
       </SettingCard>
-      <div className="rounded-3xl border bg-slate-950 p-6 text-white">
+      <div className="rounded-[2rem] border border-slate-800 bg-gradient-to-br from-slate-950 to-slate-900 p-6 text-white shadow-2xl shadow-slate-900/25">
         <h3 className="text-lg font-black">How this powers Meta OS</h3>
         <p className="mt-2 text-sm text-slate-400">Every tab uses these rules to classify Scale, Watch, Kill, Test and fatigue risks.</p>
         <div className="mt-5 space-y-2 text-sm text-slate-300">
@@ -913,7 +1067,7 @@ function Field({ label, value, setValue }: any) {
   return (
     <label>
       <span className="mb-1 block text-xs font-bold text-slate-500">{label}</span>
-      <input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-2xl border bg-slate-50 px-4 py-3 font-semibold outline-none" />
+      <input type="date" value={value} onChange={(e) => setValue(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-black text-slate-900 outline-none ring-0 transition focus:border-slate-950 focus:shadow-lg" />
     </label>
   );
 }
@@ -921,7 +1075,7 @@ function Field({ label, value, setValue }: any) {
 function MetricCard({ title, value, delta, goodUp = false, status }: any) {
   const isGood = goodUp ? delta >= 0 : delta <= 0;
   return (
-    <div className="rounded-3xl border bg-white/90 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
+    <div className="group relative overflow-hidden rounded-[2rem] border border-white/70 bg-white p-5 shadow-2xl shadow-slate-200/70 transition hover:-translate-y-1 hover:shadow-slate-300/70"><div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-blue-600 to-emerald-400" />
       <p className="text-xs font-black uppercase tracking-wider text-slate-500">{title}</p>
       <h3 className="mt-2 text-2xl font-black tracking-tight">{value}</h3>
       <div className="mt-3 flex items-center justify-between gap-2">
@@ -940,7 +1094,7 @@ function MetaMetric(props: any) {
 
 function Panel({ title, children }: any) {
   return (
-    <section className="rounded-3xl border bg-white/90 p-6 shadow-sm">
+    <section className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-2xl shadow-slate-200/70">
       <h3 className="mb-4 text-lg font-black tracking-tight">{title}</h3>
       {children}
     </section>
@@ -949,7 +1103,7 @@ function Panel({ title, children }: any) {
 
 function PanelDark({ title, children }: any) {
   return (
-    <section className="rounded-3xl border border-slate-800 bg-slate-950 p-6 text-white shadow-sm">
+    <section className="rounded-[2rem] border border-slate-800 bg-gradient-to-br from-slate-950 to-slate-900 p-6 text-white shadow-2xl shadow-slate-900/25">
       <h3 className="mb-4 text-lg font-black tracking-tight">{title}</h3>
       <div className="grid grid-cols-3 gap-4">{children}</div>
     </section>
@@ -958,7 +1112,7 @@ function PanelDark({ title, children }: any) {
 
 function DataTile({ label, value }: any) {
   return (
-    <div className="rounded-2xl border bg-slate-50 p-4">
+    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
       <p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-black tracking-tight">{value}</p>
     </div>
@@ -967,7 +1121,7 @@ function DataTile({ label, value }: any) {
 
 function MiniStat({ label, value }: any) {
   return (
-    <div className="rounded-2xl bg-white p-3">
+    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
       <p className="text-xs font-bold text-slate-500">{label}</p>
       <p className="mt-1 font-black">{value}</p>
     </div>
@@ -1022,7 +1176,7 @@ function DriverRow({ label, value, note }: any) {
 
 function DecisionRow({ title, subtitle, status, children }: any) {
   return (
-    <div className="rounded-3xl border bg-slate-50 p-4">
+    <div className="rounded-[1.75rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-lg shadow-slate-200/60">
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
           <h4 className="font-black">{title}</h4>
@@ -1042,7 +1196,7 @@ function StatusBadge({ status }: any) {
 
 function ConcentrationCard({ title, value, danger }: any) {
   return (
-    <div className="rounded-3xl border bg-white p-5 shadow-sm">
+    <div className="rounded-[2rem] border border-white/70 bg-white p-5 shadow-2xl shadow-slate-200/70">
       <p className="text-sm font-bold text-slate-500">{title}</p>
       <p className="mt-1 text-3xl font-black tracking-tight">{value}</p>
       <p className={danger ? 'mt-2 text-xs font-black text-red-600' : 'mt-2 text-xs font-black text-emerald-600'}>{danger ? 'High Risk' : 'Healthy'}</p>
@@ -1052,7 +1206,7 @@ function ConcentrationCard({ title, value, danger }: any) {
 
 function Bucket({ title, items, empty }: any) {
   return (
-    <div className="rounded-3xl border bg-white p-6 shadow-sm">
+    <div className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-2xl shadow-slate-200/70">
       <h3 className="mb-4 font-black">{title}</h3>
       {items.length === 0 ? <p className="text-sm text-slate-500">{empty}</p> : items.slice(0, 8).map((c: any, i: number) => <p key={i} className="mb-2 font-semibold">{c.campaign_name} → ROAS {formatNumber(c.roas)}</p>)}
     </div>
@@ -1061,7 +1215,7 @@ function Bucket({ title, items, empty }: any) {
 
 function CreativeBucket({ title, subtitle, items }: any) {
   return (
-    <div className="rounded-3xl border bg-white p-6 shadow-sm">
+    <div className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-2xl shadow-slate-200/70">
       <h3 className="font-black">{title}</h3>
       <p className="mb-4 text-sm text-slate-500">{subtitle}</p>
       {items.length === 0 && <p className="text-sm text-slate-500">No creatives in this bucket.</p>}
@@ -1079,7 +1233,7 @@ function CreativeBucket({ title, subtitle, items }: any) {
 
 function CampaignPicker({ campaigns, value, onChange }: any) {
   return (
-    <div className="rounded-3xl border bg-white p-5 shadow-sm">
+    <div className="rounded-[2rem] border border-white/70 bg-white p-5 shadow-2xl shadow-slate-200/70">
       <label className="block text-xs font-black uppercase tracking-wider text-slate-500">Campaign</label>
       <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-2 w-full rounded-2xl border bg-slate-50 px-4 py-3 font-bold outline-none">
         {campaigns.map((c: string) => <option key={c} value={c}>{c}</option>)}
@@ -1090,7 +1244,7 @@ function CampaignPicker({ campaigns, value, onChange }: any) {
 
 function SettingCard({ title, children }: any) {
   return (
-    <div className="rounded-3xl border bg-slate-50 p-6">
+    <div className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-lg shadow-slate-200/60">
       <h3 className="mb-4 font-black">{title}</h3>
       <div className="grid grid-cols-2 gap-4">{children}</div>
     </div>
@@ -1101,7 +1255,7 @@ function SettingInput({ label, value, onChange }: any) {
   return (
     <label>
       <span className="mb-1 block text-xs font-bold text-slate-500">{label}</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-2xl border bg-white px-4 py-3 font-black outline-none" />
+      <input value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-black outline-none focus:border-slate-950" />
     </label>
   );
 }
@@ -1138,15 +1292,15 @@ function Toggle({ active, onClick, label }: any) {
 }
 
 function EmptyState({ title, text }: any) {
-  return <div className="rounded-3xl border border-dashed bg-slate-50 p-10"><h3 className="text-xl font-black">{title}</h3><p className="mt-2 text-slate-500">{text}</p></div>;
+  return <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white/80 p-10 shadow-xl shadow-slate-200/70"><h3 className="text-xl font-black">{title}</h3><p className="mt-2 text-slate-500">{text}</p></div>;
 }
 
 function LoadingCard({ text }: any) {
-  return <div className="rounded-3xl border bg-white p-6 font-bold text-slate-500 shadow-sm">{text}</div>;
+  return <div className="rounded-[2rem] border border-white/70 bg-white p-6 font-bold text-slate-500 shadow-2xl shadow-slate-200/70">{text}</div>;
 }
 
 function ProfitLine({ label, value }: any) {
-  return <div className="flex justify-between rounded-2xl border bg-slate-50 p-4"><span className="font-bold text-slate-500">{label}</span><strong>{value}</strong></div>;
+  return <div className="flex justify-between rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"><span className="font-bold text-slate-500">{label}</span><strong>{value}</strong></div>;
 }
 
 function formatIndex(index: number) {
