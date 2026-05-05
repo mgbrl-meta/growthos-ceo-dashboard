@@ -1,6 +1,11 @@
 'use client';
 
-export default function GoogleFunnel() {
+type Props = {
+  startDate: string;
+  endDate: string;
+};
+
+export default function GoogleFunnel({ startDate, endDate }: Props) {
   return (
     <div className="rounded-3xl border bg-white/90 p-6 shadow-sm">
       <h3 className="text-xl font-black">Funnel</h3>
