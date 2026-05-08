@@ -20,7 +20,7 @@ const safeDivide = (a: any, b: any) => {
   return numerator / denominator;
 };
 
-export default function CeoSummary({ metrics }: CeoSummaryProps) {
+export default function CeoSummary({ metrics = {} }: any) {
   return (
     <div className="space-y-6">
       <section className="grid grid-cols-1 gap-4 md:grid-cols-5">

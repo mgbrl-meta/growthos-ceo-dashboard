@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 
-// Import tab components (we will create them next)
+// Import tab components
 import ProductOverview from './product/ProductOverview';
 import SkuPerformance from './product/SkuPerformance';
 import DemandTrends from './product/DemandTrends';
@@ -17,6 +18,7 @@ type Props = {
   endDate: string;
   compareStartDate?: string;
   compareEndDate?: string;
+  setTopTabs?: (tabs: ReactNode | null) => void;
 };
 
 export default function ProductOS({
@@ -24,6 +26,7 @@ export default function ProductOS({
   endDate,
   compareStartDate,
   compareEndDate,
+  setTopTabs,
 }: Props) {
   const [activeTab, setActiveTab] = useState('Overview');
 
@@ -38,26 +41,32 @@ export default function ProductOS({
     'Settings',
   ];
 
-  return (
-    <div className="mt-6">
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6">
+  useEffect(() => {
+    if (!setTopTabs) return;
+
+    setTopTabs(
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-2">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-lg border text-sm ${
+            className={
               activeTab === tab
-                ? 'bg-black text-white'
-                : 'bg-white text-black'
-            }`}
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:bg-white hover:text-slate-950'
+            }
           >
             {tab}
           </button>
         ))}
       </div>
+    );
 
-      {/* Tab Content */}
+    return () => setTopTabs(null);
+  }, [activeTab, setTopTabs]);
+
+  return (
+    <div className="mt-6">
       <div>
         {activeTab === 'Overview' && (
           <ProductOverview startDate={startDate} endDate={endDate} />

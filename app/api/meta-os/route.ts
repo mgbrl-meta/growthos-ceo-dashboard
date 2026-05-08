@@ -12,6 +12,10 @@ export async function GET(req: Request) {
 
   let query = "";
 
+  if (!start || !end) {
+    return Response.json({ error: "Missing start or end" }, { status: 400 });
+  }
+
   if (tab === "overview") {
     query = `
       WITH current_period AS (
@@ -65,6 +69,30 @@ export async function GET(req: Request) {
       FROM \`shopify-colab.brillare_shopify.meta_os_daily\`
       WHERE date BETWEEN @start AND @end
       ORDER BY campaign_name
+    `;
+  }
+
+  if (tab === "campaign-weekly") {
+    query = `
+      SELECT
+        FORMAT_DATE('%Y-%m', date) AS month,
+        CASE
+          WHEN EXTRACT(DAY FROM date) BETWEEN 1 AND 7 THEN 'W1'
+          WHEN EXTRACT(DAY FROM date) BETWEEN 8 AND 14 THEN 'W2'
+          WHEN EXTRACT(DAY FROM date) BETWEEN 15 AND 21 THEN 'W3'
+          ELSE 'W4'
+        END AS week,
+        campaign_name,
+        SUM(spend) AS spend,
+        SUM(revenue) AS revenue,
+        SUM(purchases) AS purchases,
+        SAFE_DIVIDE(SUM(spend), SUM(purchases)) AS cpa,
+        SAFE_DIVIDE(SUM(revenue), SUM(purchases)) AS aov,
+        SAFE_DIVIDE(SUM(revenue), SUM(spend)) AS roas
+      FROM \`shopify-colab.brillare_shopify.meta_os_daily\`
+      WHERE date BETWEEN @start AND @end
+      GROUP BY month, week, campaign_name
+      ORDER BY month, week, campaign_name
     `;
   }
 
@@ -194,54 +222,108 @@ export async function GET(req: Request) {
       FROM current_period, compare_period
     `;
   }
-if (tab === "creative-daily-4pi") {
-  query = `
-    WITH daily_campaign AS (
+
+  if (tab === "creative-daily-4pi") {
+    query = `
+      WITH daily_campaign AS (
+        SELECT
+          date,
+          campaign_name,
+          SAFE_DIVIDE(SUM(spend), SUM(impressions)) * 1000 AS campaign_cpm,
+          SAFE_DIVIDE(SUM(spend), SUM(purchases)) AS campaign_cpa
+        FROM \`shopify-colab.brillare_shopify.meta_os_daily\`
+        WHERE date BETWEEN @start AND @end
+          AND (@campaign = '' OR campaign_name = @campaign)
+        GROUP BY date, campaign_name
+      )
+      SELECT
+        d.date,
+        d.campaign_name,
+        d.ad_id,
+        d.creative_name,
+        SUM(d.spend) AS spend,
+        SUM(d.revenue) AS revenue,
+        SUM(d.purchases) AS purchases,
+        SUM(d.impressions) AS impressions,
+        SUM(d.reach) AS reach,
+        SUM(d.clicks) AS clicks,
+        SAFE_DIVIDE(SUM(d.revenue), SUM(d.spend)) AS roas,
+        SAFE_DIVIDE(SUM(d.spend), SUM(d.purchases)) AS cpa,
+        SAFE_DIVIDE(SUM(d.clicks), SUM(d.impressions)) * 100 AS ctr,
+        SAFE_DIVIDE(SUM(d.spend), SUM(d.impressions)) * 1000 AS cpm,
+        SAFE_DIVIDE(SUM(d.impressions), SUM(d.reach)) AS frequency,
+        dc.campaign_cpm,
+        dc.campaign_cpa
+      FROM \`shopify-colab.brillare_shopify.meta_os_daily\` d
+      LEFT JOIN daily_campaign dc
+        ON d.date = dc.date
+        AND d.campaign_name = dc.campaign_name
+      WHERE d.date BETWEEN @start AND @end
+        AND (@campaign = '' OR d.campaign_name = @campaign)
+      GROUP BY
+        d.date,
+        d.campaign_name,
+        d.ad_id,
+        d.creative_name,
+        dc.campaign_cpm,
+        dc.campaign_cpa
+      ORDER BY d.creative_name, d.date
+    `;
+  }
+
+  if (tab === "creative-alerts") {
+    query = `
+      SELECT
+        ad_id,
+        ANY_VALUE(creative_name) AS creative_name,
+        SUM(spend) AS spend,
+        SUM(impressions) AS impressions,
+        SUM(reach) AS reach,
+        SUM(clicks) AS clicks,
+        SUM(lpv) AS lpv,
+        SUM(atc) AS atc,
+        SUM(checkout) AS checkout,
+        SUM(purchases) AS purchases,
+        SUM(revenue) AS revenue,
+        SAFE_DIVIDE(SUM(spend), SUM(impressions)) * 1000 AS cpm,
+        SAFE_DIVIDE(SUM(clicks), SUM(impressions)) * 100 AS ctr,
+        SAFE_DIVIDE(SUM(spend), SUM(clicks)) AS cpc,
+        SAFE_DIVIDE(SUM(spend), SUM(purchases)) AS cpa,
+        SAFE_DIVIDE(SUM(revenue), SUM(spend)) AS roas,
+        SAFE_DIVIDE(SUM(impressions), SUM(reach)) AS frequency
+      FROM \`shopify-colab.brillare_shopify.meta_os_daily\`
+      WHERE date BETWEEN @start AND @end
+      GROUP BY ad_id
+      HAVING spend > 0
+      ORDER BY spend DESC
+    `;
+  }
+
+  if (tab === "campaign-daily-chart") {
+    query = `
       SELECT
         date,
         campaign_name,
-        SAFE_DIVIDE(SUM(spend), SUM(impressions)) * 1000 AS campaign_cpm,
-        SAFE_DIVIDE(SUM(spend), SUM(purchases)) AS campaign_cpa
+
+        SUM(spend) AS spend,
+        SUM(revenue) AS revenue,
+        SUM(purchases) AS purchases,
+        SUM(impressions) AS impressions,
+        SUM(clicks) AS clicks,
+
+        SAFE_DIVIDE(SUM(spend), SUM(impressions)) * 1000 AS cpm,
+        SAFE_DIVIDE(SUM(clicks), SUM(impressions)) * 100 AS ctr,
+        SAFE_DIVIDE(SUM(spend), SUM(purchases)) AS cpa
+
       FROM \`shopify-colab.brillare_shopify.meta_os_daily\`
       WHERE date BETWEEN @start AND @end
         AND (@campaign = '' OR campaign_name = @campaign)
-      GROUP BY date, campaign_name
-    )
 
-    SELECT
-      d.date,
-      d.campaign_name,
-      d.ad_id,
-      d.creative_name,
-      SUM(d.spend) AS spend,
-      SUM(d.revenue) AS revenue,
-      SUM(d.purchases) AS purchases,
-      SUM(d.impressions) AS impressions,
-      SUM(d.reach) AS reach,
-      SUM(d.clicks) AS clicks,
-      SAFE_DIVIDE(SUM(d.revenue), SUM(d.spend)) AS roas,
-      SAFE_DIVIDE(SUM(d.spend), SUM(d.purchases)) AS cpa,
-      SAFE_DIVIDE(SUM(d.clicks), SUM(d.impressions)) * 100 AS ctr,
-      SAFE_DIVIDE(SUM(d.spend), SUM(d.impressions)) * 1000 AS cpm,
-      SAFE_DIVIDE(SUM(d.impressions), SUM(d.reach)) AS frequency,
-      dc.campaign_cpm,
-      dc.campaign_cpa
-    FROM \`shopify-colab.brillare_shopify.meta_os_daily\` d
-    LEFT JOIN daily_campaign dc
-      ON d.date = dc.date
-      AND d.campaign_name = dc.campaign_name
-    WHERE d.date BETWEEN @start AND @end
-      AND (@campaign = '' OR d.campaign_name = @campaign)
-    GROUP BY
-      d.date,
-      d.campaign_name,
-      d.ad_id,
-      d.creative_name,
-      dc.campaign_cpm,
-      dc.campaign_cpa
-    ORDER BY d.creative_name, d.date
-  `;
-}
+      GROUP BY date, campaign_name
+      ORDER BY date
+    `;
+  }
+
   if (!query) {
     return Response.json({ error: "Invalid Meta OS tab" }, { status: 400 });
   }
@@ -249,7 +331,13 @@ if (tab === "creative-daily-4pi") {
   try {
     const [rows] = await bigquery.query({
       query,
-      params: { start, end, compareStart, compareEnd, campaign },
+      params: {
+        start,
+        end,
+        compareStart,
+        compareEnd,
+        campaign,
+      },
     });
 
     if (tab === "overview" || tab === "funnel") {
@@ -260,7 +348,7 @@ if (tab === "creative-daily-4pi") {
       });
     }
 
-    if (tab === "trend") {
+    if (tab === "trend" || tab === "creative-daily-4pi") {
       return Response.json(
         rows.map((row: any) => ({
           ...row,
@@ -268,19 +356,9 @@ if (tab === "creative-daily-4pi") {
         }))
       );
     }
-if (tab === "creative-daily-4pi") {
-  return Response.json(
-    rows.map((row: any) => ({
-      ...row,
-      date: row.date?.value || row.date,
-    }))
-  );
-}
+
     return Response.json(rows);
   } catch (err: any) {
-    return Response.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }

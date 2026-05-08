@@ -121,10 +121,12 @@ export default function Dashboard() {
     setCompareStart(formatDate(compareStartDate));
     setCompareEnd(formatDate(compareEndDate));
   };
-  
+
   const [activeTab, setActiveTab] = useState('CEO Summary');
+  const [topTabs, setTopTabs] = useState<React.ReactNode>(null);
   const [activeMetaTab, setActiveMetaTab] = useState('Settings');
   const today = new Date();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const format = (d: Date) => d.toISOString().split("T")[0];
 
@@ -227,92 +229,131 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen bg-[#090d16] text-slate-100">
       <div className="flex min-h-screen">
-        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-[#0b1020] p-6 lg:block">
-          <div className="mb-9">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-black text-slate-950 shadow-[0_0_40px_rgba(255,255,255,0.18)]">
-              GO
+        <aside
+          className={`sticky top-0 h-screen shrink-0 border-r border-slate-800 bg-slate-950 text-white transition-all duration-300 ${sidebarOpen ? 'w-[230px]' : 'w-[72px]'
+            }`}
+        >
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="absolute -right-3 top-6 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-950 text-xs font-black text-white shadow-lg"
+          >
+            {sidebarOpen ? '‹' : '›'}
+          </button>
+
+          <div className="flex h-full flex-col p-4">
+            {/* LOGO */}
+            <div className="mb-8 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-sm font-black text-slate-950">
+                GO
+              </div>
+
+              {sidebarOpen && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">
+                    GrowthOS
+                  </p>
+
+                  <h1 className="mt-1 text-lg font-black tracking-[-0.04em]">
+                    Command Center
+                  </h1>
+                </div>
+              )}
             </div>
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">GrowthOS</p>
-            <h1 className="mt-2 text-2xl font-black tracking-[-0.06em] text-white">Command Center</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-400">CEO-grade operating system for revenue, media, customers and inventory decisions.</p>
-          </div>
 
-          <nav className="space-y-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={
-                  activeTab === tab
-                    ? 'flex w-full items-center justify-between rounded-2xl bg-white px-4 py-3 text-left text-sm font-black text-slate-950 shadow-[0_18px_60px_rgba(255,255,255,0.16)]'
-                    : 'flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-bold text-slate-400 hover:bg-white/10 hover:text-white'
-                }
-              >
-                <span>{tab}</span>
-                <span className={activeTab === tab ? 'h-2 w-2 rounded-full bg-emerald-500' : 'h-2 w-2 rounded-full bg-slate-700'} />
-              </button>
-            ))}
-          </nav>
+            {/* DESCRIPTION */}
+            {sidebarOpen && (
+              <p className="mb-6 text-xs leading-5 text-slate-400">
+                CEO-grade operating system for revenue, media,
+                customers and inventory decisions.
+              </p>
+            )}
 
-          <div className="absolute bottom-6 left-6 right-6 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Status</p>
-            <div className="mt-3 flex items-center gap-3">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
-              </span>
-              <span className="text-sm font-black text-white">{loading ? 'Syncing data' : 'Live data'}</span>
+            {/* TABS */}
+            <nav className="space-y-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  title={tab}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-black transition ${activeTab === tab
+                      ? 'bg-white text-slate-950'
+                      : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                    }`}
+                >
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${activeTab === tab
+                        ? 'bg-emerald-500'
+                        : 'bg-slate-600'
+                      }`}
+                  />
+
+                  {sidebarOpen && <span>{tab}</span>}
+                </button>
+              ))}
+            </nav>
+
+            {/* STATUS */}
+            <div className="mt-auto rounded-2xl border border-slate-800 bg-white/5 p-3">
+              {sidebarOpen ? (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Status
+                  </p>
+
+                  <p className="mt-2 text-sm font-black text-white">
+                    <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                    Live data
+                  </p>
+                </>
+              ) : (
+                <div className="mx-auto h-2 w-2 rounded-full bg-emerald-400" />
+              )}
             </div>
           </div>
         </aside>
-
-        <section className="flex-1 overflow-hidden bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.16),transparent_28%),radial-gradient(circle_at_90%_10%,rgba(16,185,129,0.12),transparent_24%),linear-gradient(180deg,#0f172a_0%,#f8fafc_38%)]">
+        
+        <section className="flex-1 overflow-visible bg-slate-100">
           <div className="mx-auto max-w-[1600px] p-4 md:p-8">
-            <header className="mb-6 rounded-[2rem] border border-white/10 bg-white/[0.08] p-5 shadow-2xl shadow-slate-950/20 backdrop-blur-2xl md:p-7">
-              <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.26em] text-cyan-200">{activeTab}</p>
-                  <h2 className="mt-2 text-3xl font-black tracking-[-0.06em] text-white md:text-5xl">GrowthOS Dashboard</h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">Revenue, spend, channel efficiency, customer quality and decision alerts in one operating cockpit.</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-right sm:grid-cols-4">
-                  <HeroPill label="Revenue" value={formatCurrency(metrics.revenue)} />
-                  <HeroPill label="Spend" value={formatCurrency(metrics.spend)} />
-                  <HeroPill label="ROAS" value={formatNumber(metrics.roas)} />
-                  <HeroPill label="New CAC" value={formatCurrency(metrics.newCac)} />
-                </div>
-              </div>
+            <div className="sticky top-0 z-[9999] mb-4">
+              <header className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-md">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+                      {activeTab}
+                    </p>
 
-              <nav className="mt-6 flex gap-2 overflow-x-auto rounded-2xl bg-slate-950/55 p-2 lg:hidden">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={
-                      activeTab === tab
-                        ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950'
-                        : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-400'
-                    }
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </nav>
-            </header>
+                    <h2 className="mt-0.5 text-xl font-black tracking-[-0.04em] text-slate-950">
+                      {activeTab === 'Google OS'
+                        ? 'Intent Intelligence System'
+                        : activeTab === 'Meta OS'
+                          ? 'Meta Growth Intelligence'
+                          : activeTab === 'Product OS'
+                            ? 'Product Intelligence System'
+                            : activeTab === 'Retention OS'
+                              ? 'Customer Retention System'
+                              : 'GrowthOS Dashboard'}
+                    </h2>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <DateControl
+                      start={start}
+                      end={end}
+                      compareStart={compareStart}
+                      compareEnd={compareEnd}
+                      setStart={setStart}
+                      setEnd={setEnd}
+                      setCompareStart={setCompareStart}
+                      setCompareEnd={setCompareEnd}
+                      onApply={fetchData}
+                      loading={loading}
+                      setPreset={setPreset}
+                    />
+                  </div>
+                </div>
 
-            <DateControl
-              start={start}
-              end={end}
-              compareStart={compareStart}
-              compareEnd={compareEnd}
-              setStart={setStart}
-              setEnd={setEnd}
-              setCompareStart={setCompareStart}
-              setCompareEnd={setCompareEnd}
-              onApply={fetchData}
-              loading={loading}
-              setPreset={setPreset}
-            />
+                {topTabs && <div className="mt-2">{topTabs}</div>}
+              </header>
+            </div>
 
             <div className="text-slate-950">
               {activeTab === 'CEO Summary' && <CeoSummary metrics={metrics} data={data} />}
@@ -325,15 +366,17 @@ export default function Dashboard() {
                   end={end}
                   compareStart={compareStart}
                   compareEnd={compareEnd}
+                  setTopTabs={setTopTabs}
                 />
               )}
 
               {activeTab === 'Google OS' && (
-                <GoogleOS 
+                <GoogleOS
                   startDate={start}
                   endDate={end}
                   compareStartDate={compareStart}
-                  compareEndDate={compareEnd}                
+                  compareEndDate={compareEnd}
+                  setTopTabs={setTopTabs}
                 />
               )}
 
@@ -343,6 +386,7 @@ export default function Dashboard() {
                   endDate={end}
                   compareStartDate={compareStart}
                   compareEndDate={compareEnd}
+                  setTopTabs={setTopTabs}
                 />
               )}
 
@@ -363,9 +407,13 @@ export default function Dashboard() {
 
 function HeroPill({ label, value }: any) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.08] px-4 py-3 backdrop-blur-xl">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-black text-white md:text-base">{value}</p>
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right">
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+        {label}
+      </p>
+      <p className="text-sm font-black text-slate-950">
+        {value}
+      </p>
     </div>
   );
 }

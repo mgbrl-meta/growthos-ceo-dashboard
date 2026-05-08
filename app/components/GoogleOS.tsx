@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import GoogleSettings, {
   defaultSettings,
@@ -21,16 +22,16 @@ type Props = {
   endDate: string;
   compareStartDate?: string;
   compareEndDate?: string;
+  setTopTabs?: (tabs: ReactNode) => void;
 };
 
 export default function GoogleOS({
-
   startDate,
   endDate,
   compareStartDate,
   compareEndDate,
+  setTopTabs,
 }: Props) {
-
   const [activeGoogleTab, setActiveGoogleTab] = useState('Settings');
 
   const [googleSettings, setGoogleSettings] =
@@ -48,42 +49,32 @@ export default function GoogleOS({
     'Alerts',
   ];
 
+  useEffect(() => {
+    if (!setTopTabs) return;
+
+    setTopTabs(
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-2">
+        {googleTabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveGoogleTab(tab)}
+            className={
+              activeGoogleTab === tab
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:bg-white hover:text-slate-950'
+            }
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+    );
+
+    return () => setTopTabs(null);
+  }, [activeGoogleTab, setTopTabs]);
+
   return (
     <section className="space-y-6">
-      {/* Header */}
-      <div className="rounded-[2rem] border bg-white/90 p-6 shadow-sm backdrop-blur-xl">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-600">
-          Google OS
-        </p>
-
-        <h2 className="mt-1 text-3xl font-black tracking-[-0.05em]">
-          Intent Intelligence System
-        </h2>
-
-        <p className="mt-1 text-sm text-slate-500">
-          Search terms, keywords, campaigns, waste detection and scaling signals.
-        </p>
-
-        {/* Tabs */}
-        <div className="mt-4 flex max-w-full gap-1 overflow-x-auto rounded-full bg-slate-200/70 p-1">
-          {googleTabs.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveGoogleTab(tab)}
-              className={
-                activeGoogleTab === tab
-                  ? 'whitespace-nowrap rounded-full bg-white px-4 py-2 text-sm font-black shadow-sm'
-                  : 'whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-900'
-              }
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab Content */}
-
       {activeGoogleTab === 'Settings' && (
         <GoogleSettings
           settings={googleSettings}
@@ -108,11 +99,15 @@ export default function GoogleOS({
       )}
 
       {activeGoogleTab === 'Search Terms' && (
-        <GoogleSearchTerms startDate={startDate} endDate={endDate} settings={googleSettings} />
+        <GoogleSearchTerms
+          startDate={startDate}
+          endDate={endDate}
+          settings={googleSettings}
+        />
       )}
 
       {activeGoogleTab === 'Keywords' && (
-         <GoogleKeywords startDate={startDate} endDate={endDate} />
+        <GoogleKeywords startDate={startDate} endDate={endDate} />
       )}
 
       {activeGoogleTab === 'Funnel' && (
