@@ -14,11 +14,14 @@ export async function GET() {
     const [rows] = await bigquery.query({ query });
 
     return NextResponse.json(rows);
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    console.error('Mapped products API error:', error?.message || error);
 
     return NextResponse.json(
-      { error: 'Failed to load mapped products' },
+      {
+        error: 'Failed to load mapped products',
+        detail: error?.message || String(error),
+      },
       { status: 500 }
     );
   }
