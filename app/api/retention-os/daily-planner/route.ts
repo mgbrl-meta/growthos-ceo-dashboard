@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { BigQuery } from '@google-cloud/bigquery';
-
-const bigquery = new BigQuery();
+import { bigquery } from '@/lib/bigquery';
 
 export async function GET() {
     try {

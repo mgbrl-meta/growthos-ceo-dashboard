@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { BigQuery } from '@google-cloud/bigquery';
-
-const bigquery = new BigQuery();
+import { bigquery } from '@/lib/bigquery';
 
 const TABLE = 'shopify-colab.brillare_shopify.retention_product_master';
 
