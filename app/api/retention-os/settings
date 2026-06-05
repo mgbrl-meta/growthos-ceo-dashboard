@@ -1,0 +1,50 @@
+'use client';
+
+const settings = [
+  ['Business Goal', 'Contribution Profit + LTV Growth'],
+  ['Profit Weight', '40%'],
+  ['LTV Weight', '30%'],
+  ['Confidence Weight', '20%'],
+  ['Ease Weight', '10%'],
+  ['WhatsApp Capacity', '4 Broadcasts / Month'],
+  ['Email Capacity', '4 Broadcasts / Month'],
+  ['SMS/RCS Capacity', '4 Broadcasts / Month'],
+  ['Learning Window', '30 Days'],
+  ['Minimum Confidence', '60%'],
+];
+
+export default function Settings() {
+  return (
+    <section className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-xl">
+      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+        Engine Settings
+      </p>
+
+      <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+        Retention Brain Configuration
+      </h2>
+
+      <p className="mt-2 max-w-3xl text-sm text-slate-500">
+        These settings define how the Retention OS prioritises opportunities,
+        hypotheses, actions and learnings.
+      </p>
+
+      <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {settings.map(([label, value]) => (
+          <div
+            key={label}
+            className="rounded-3xl border border-slate-200 bg-slate-50 p-5"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              {label}
+            </p>
+
+            <p className="mt-3 text-lg font-black text-slate-950">
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}

@@ -37,34 +37,50 @@ export default function MetaCampaignAnalysis({ start, end, params }: any) {
   const [selectedChartCampaign, setSelectedChartCampaign] = useState("");
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
+  async function load() {
+    setLoading(true);
 
-      try {
-        const res = await fetch(
-          `/api/meta-os?tab=campaign&start=${start}&end=${end}`
-        );
+    try {
+      // CAMPAIGN LIST
+      const res = await fetch(
+        `/api/meta-os?tab=campaign&start=${start}&end=${end}`
+      );
 
-        const json = await res.json();
+      const json = await res.json();
 
-        setRows(Array.isArray(json) ? json : []);
-        const weeklyRes = await fetch(
-          `/api/meta-os?tab=campaign-weekly&start=${start}&end=${end}`
-        );
+      const campaignRows = Array.isArray(json) ? json : [];
 
-        const weeklyJson = await weeklyRes.json();
+      setRows(campaignRows);
 
-        setWeeklyRows(Array.isArray(weeklyJson) ? weeklyJson : []);
-      } catch (error) {
-        console.error('Campaign analysis error', error);
-        setRows([]);
-      } finally {
-        setLoading(false);
+      // AUTO SELECT FIRST CAMPAIGN
+      const activeCampaign =
+        selectedCampaign ||
+        campaignRows?.[0]?.campaign_name ||
+        '';
+
+      if (!selectedCampaign && activeCampaign) {
+        setSelectedCampaign(activeCampaign);
       }
-    }
 
-    load();
-  }, [start, end]);
+      // WEEKLY DATA
+      const weeklyRes = await fetch(
+        `/api/meta-os?tab=campaign-weekly&start=${start}&end=${end}&campaign=${encodeURIComponent(activeCampaign)}`
+      );
+
+      const weeklyJson = await weeklyRes.json();
+
+      setWeeklyRows(Array.isArray(weeklyJson) ? weeklyJson : []);
+    } catch (error) {
+      console.error('Campaign analysis error', error);
+      setRows([]);
+      setWeeklyRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  load();
+}, [start, end, selectedCampaign]);
 
   useEffect(() => {
     if (!selectedChartCampaign) return;
