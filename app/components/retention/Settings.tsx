@@ -219,7 +219,7 @@ export default function Settings() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json?.error || 'Save failed');
+        throw new Error(json?.detail || json?.error || 'Save failed');
       }
 
       setUnmappedProducts((prev) => prev.filter((row) => row.sku !== sku));
@@ -235,7 +235,7 @@ export default function Settings() {
       alert('Product mapping saved.');
     } catch (error) {
       console.error(error);
-      alert('Failed to save product mapping.');
+      alert(error instanceof Error ? error.message : 'Failed to save product mapping.');
     } finally {
       setSavingSku('');
     }
@@ -1788,21 +1788,45 @@ function CustomSelect({
   options: string[];
   onChange: (value: string) => void;
 }) {
+  const [customMode, setCustomMode] = useState(false);
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl border border-slate-200 px-3 py-2"
-    >
-      <option value="">Select</option>
+    <div>
+      <select
+        value={customMode ? '__add_new__' : value}
+        onChange={(e) => {
+          const selected = e.target.value;
 
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {option}
-        </option>
-      ))}
+          if (selected === '__add_new__') {
+            setCustomMode(true);
+            onChange('');
+            return;
+          }
 
-      <option value="__add_new__">+ Add New</option>
-    </select>
+          setCustomMode(false);
+          onChange(selected);
+        }}
+        className="w-full rounded-xl border border-slate-200 px-3 py-2"
+      >
+        <option value="">Select</option>
+
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+
+        <option value="__add_new__">+ Add New</option>
+      </select>
+
+      {customMode && (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Enter custom value"
+          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2"
+        />
+      )}
+    </div>
   );
 }
