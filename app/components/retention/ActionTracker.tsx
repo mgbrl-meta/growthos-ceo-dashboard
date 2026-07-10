@@ -221,6 +221,7 @@ export default function ActionTracker() {
               <th className="p-4">Profit</th>
               <th className="p-4">Status</th>
               <th className="p-4">Planned Date</th>
+              <th className="p-4">Learning</th>
               <th className="p-4">Notes</th>
             </tr>
           </thead>
@@ -296,7 +297,7 @@ export default function ActionTracker() {
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="p-8 text-center text-sm font-bold text-slate-500"
                 >
                   No actions found.

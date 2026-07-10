@@ -1,38 +1,51 @@
 import { NextResponse } from 'next/server';
 import { bigquery } from '@/lib/bigquery';
 
+const PROJECT = 'shopify-colab';
+const DATASET = 'brillare_shopify';
+const SOURCE_TABLE = 'retention_customer_journey_state_v1_tbl';
+
 export async function GET() {
   try {
     const query = `
       SELECT
         customer_key,
+
+        journey_stage,
+        journey_state,
+
         qualified_orders,
         qualified_revenue,
-        first_order_date,
-        last_order_date,
-        customer_age_days,
+
         days_since_last_order,
-        orders_per_month,
-        first_order_month,
-        journey_stage,
-        journey_health,
-        blocker,
-        next_goal,
-        revenue_tier,
+
+        base_probability,
+        priority_multiplier,
+        state_score,
+
         calculated_date
-      FROM \`shopify-colab.brillare_shopify.retention_customer_journey\`
+
+      FROM \`${PROJECT}.${DATASET}.${SOURCE_TABLE}\`
+
       ORDER BY qualified_revenue DESC
+
       LIMIT 500
     `;
 
-    const [rows] = await bigquery.query({ query });
+    const [rows] = await bigquery.query({
+      query,
+      location: 'asia-southeast1',
+    });
 
     return NextResponse.json(rows);
   } catch (error) {
-    console.error(error);
+    console.error('Customer Journey API error:', error);
 
     return NextResponse.json(
-      { error: 'Failed to load customer journey' },
+      {
+        error: 'Failed to load customer journey snapshot table',
+        sourceTable: SOURCE_TABLE,
+      },
       { status: 500 }
     );
   }

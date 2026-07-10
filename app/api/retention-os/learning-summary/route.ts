@@ -1,23 +1,36 @@
 import { NextResponse } from 'next/server';
 import { bigquery } from '@/lib/bigquery';
 
+const PROJECT = 'shopify-colab';
+const DATASET = 'brillare_shopify';
+const SOURCE_TABLE = 'retention_learning_summary_tbl';
+const LOCATION = 'asia-southeast1';
+
 export async function GET() {
   try {
     const query = `
       SELECT *
-      FROM \`shopify-colab.brillare_shopify.retention_learning_summary\`
+      FROM \`${PROJECT}.${DATASET}.${SOURCE_TABLE}\`
+
       ORDER BY total_actual_profit DESC
+
       LIMIT 100
     `;
 
-    const [rows] = await bigquery.query({ query });
+    const [rows] = await bigquery.query({
+      query,
+      location: LOCATION,
+    });
 
     return NextResponse.json(rows);
   } catch (error) {
-    console.error(error);
+    console.error('Learning summary API error:', error);
 
     return NextResponse.json(
-      { error: 'Failed to load learning summary' },
+      {
+        error: 'Failed to load learning summary snapshot table',
+        sourceTable: SOURCE_TABLE,
+      },
       { status: 500 }
     );
   }
