@@ -67,7 +67,7 @@ export default function Settings() {
       const unmappedJson = await unmappedRes.json();
 
       const unmappedRows = Array.isArray(unmappedJson)
-        ? unmappedJson.slice(0, 20)
+        ? unmappedJson
         : [];
 
       setUnmappedProducts(unmappedRows);
