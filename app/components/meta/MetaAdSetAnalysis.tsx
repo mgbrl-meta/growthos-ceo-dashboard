@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 type Row = any;
 
@@ -28,31 +28,66 @@ export default function MetaAdSetAnalysis({
 }: any) {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!selectedCampaign) return;
+    if (!selectedCampaign && Array.isArray(campaigns) && campaigns.length > 0) {
+      setSelectedCampaign(campaigns[0]);
+    }
+  }, [campaigns, selectedCampaign, setSelectedCampaign]);
+
+  useEffect(() => {
+    if (!start || !end || !selectedCampaign) {
+      setRows([]);
+      return;
+    }
+
+    let cancelled = false;
 
     async function load() {
       setLoading(true);
+      setError("");
 
       try {
-        const res = await fetch(
-          `/api/meta-os?tab=adset&start=${start}&end=${end}&campaign=${encodeURIComponent(
-            selectedCampaign
-          )}`
-        );
+        const query = new URLSearchParams({
+          tab: "adset",
+          start,
+          end,
+          campaign: selectedCampaign,
+        });
+
+        const res = await fetch(`/api/meta-os?${query.toString()}`, {
+          cache: "no-store",
+        });
 
         const json = await res.json();
-        setRows(Array.isArray(json) ? json : []);
-      } catch (error) {
-        console.error('Ad set analysis error', error);
-        setRows([]);
+
+        if (!res.ok) {
+          throw new Error(json?.error || "Failed to load ad sets");
+        }
+
+        if (!cancelled) {
+          setRows(Array.isArray(json) ? json : []);
+        }
+      } catch (error: any) {
+        console.error("Ad set analysis error", error);
+
+        if (!cancelled) {
+          setRows([]);
+          setError(error?.message || "Failed to load ad sets");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
     load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [start, end, selectedCampaign]);
 
   if (!selectedCampaign) {
@@ -66,6 +101,37 @@ export default function MetaAdSetAnalysis({
 
   if (loading) {
     return <LoadingCard text="Loading ad sets..." />;
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <CampaignPicker
+          campaigns={campaigns}
+          value={selectedCampaign}
+          onChange={setSelectedCampaign}
+        />
+
+        <EmptyState title="Ad set data failed to load" text={error} />
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="space-y-6">
+        <CampaignPicker
+          campaigns={campaigns}
+          value={selectedCampaign}
+          onChange={setSelectedCampaign}
+        />
+
+        <EmptyState
+          title="No ad set data"
+          text={`No ad set records were returned for ${selectedCampaign} between ${start} and ${end}.`}
+        />
+      </div>
+    );
   }
 
   const parentBenchmark = {
@@ -92,10 +158,10 @@ export default function MetaAdSetAnalysis({
     })
     .sort((a, b) => Number(b.spend || 0) - Number(a.spend || 0));
 
-  const scale = enriched.filter((x) => x.decision === 'SCALE');
-  const test = enriched.filter((x) => x.decision === 'TEST');
-  const kill = enriched.filter((x) => x.decision === 'KILL');
-  const ignore = enriched.filter((x) => x.decision === 'IGNORE');
+  const scale = enriched.filter((x) => x.decision === "SCALE");
+  const test = enriched.filter((x) => x.decision === "TEST");
+  const kill = enriched.filter((x) => x.decision === "KILL");
+  const ignore = enriched.filter((x) => x.decision === "IGNORE");
 
   return (
     <div className="space-y-6">
@@ -124,27 +190,21 @@ export default function MetaAdSetAnalysis({
           {enriched.map((adset, i) => (
             <DecisionRow
               key={i}
-              title={adset.adset_name || 'Unnamed ad set'}
+              title={adset.adset_name || "Unnamed ad set"}
               status={adset.decision}
               subtitle={`Spend share ${formatNumber(adset.spend_share)}% · ${
                 adset.reason
               }`}
             >
               <MiniStat label="Spend" value={formatCurrency(adset.spend)} />
-              <MiniStat
-                label="Revenue"
-                value={formatCurrency(adset.revenue)}
-              />
+              <MiniStat label="Revenue" value={formatCurrency(adset.revenue)} />
               <MiniStat label="ROAS" value={formatNumber(adset.roas)} />
               <MiniStat label="CPA" value={formatCurrency(adset.cpa)} />
               <MiniStat
                 label="Purchases"
                 value={formatNumber(adset.purchases, 0)}
               />
-              <MiniStat
-                label="Freq"
-                value={formatNumber(adset.frequency)}
-              />
+              <MiniStat label="Freq" value={formatNumber(adset.frequency)} />
             </DecisionRow>
           ))}
         </div>
@@ -154,12 +214,12 @@ export default function MetaAdSetAnalysis({
 }
 
 function buildBenchmark(rows: any[]) {
-  const spend = sum(rows, 'spend');
-  const revenue = sum(rows, 'revenue');
-  const purchases = sum(rows, 'purchases');
-  const impressions = sum(rows, 'impressions');
-  const clicks = sum(rows, 'clicks');
-  const reach = sum(rows, 'reach');
+  const spend = sum(rows, "spend");
+  const revenue = sum(rows, "revenue");
+  const purchases = sum(rows, "purchases");
+  const impressions = sum(rows, "impressions");
+  const clicks = sum(rows, "clicks");
+  const reach = sum(rows, "reach");
 
   return {
     spend,
@@ -192,41 +252,41 @@ function getDecisionBucket(row: any, benchmark: any, params: MetaParams) {
   if (!hasEnoughData) {
     if (roasIndex >= 1.1 || cpaIndex <= 0.9) {
       return {
-        decision: 'TEST',
-        reason: 'Low data, but early efficiency is better than benchmark',
+        decision: "TEST",
+        reason: "Low data, but early efficiency is better than benchmark",
       };
     }
 
     return {
-      decision: 'IGNORE',
-      reason: 'Low signal / not enough spend or purchases yet',
+      decision: "IGNORE",
+      reason: "Low signal / not enough spend or purchases yet",
     };
   }
 
   if (roasIndex >= 1.1 && cpaIndex <= 0.9) {
     return {
-      decision: 'SCALE',
-      reason: 'ROAS better than benchmark and CPA lower than benchmark',
+      decision: "SCALE",
+      reason: "ROAS better than benchmark and CPA lower than benchmark",
     };
   }
 
   if (roasIndex <= 0.85 && cpaIndex >= 1.15) {
     return {
-      decision: 'KILL',
-      reason: 'ROAS below benchmark and CPA above benchmark',
+      decision: "KILL",
+      reason: "ROAS below benchmark and CPA above benchmark",
     };
   }
 
   if (spendIndex < 0.7 && (roasIndex >= 1 || cpaIndex <= 1)) {
     return {
-      decision: 'TEST',
-      reason: 'Under-spent but performance is near or better than benchmark',
+      decision: "TEST",
+      reason: "Under-spent but performance is near or better than benchmark",
     };
   }
 
   return {
-    decision: 'IGNORE',
-    reason: 'Average performance; no clear scale or kill signal',
+    decision: "IGNORE",
+    reason: "Average performance; no clear scale or kill signal",
   };
 }
 
@@ -244,15 +304,15 @@ function safeDivide(a: any, b: any) {
 }
 
 function formatCurrency(value: number = 0) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 }
 
 function formatNumber(value: number = 0, digits = 2) {
-  return new Intl.NumberFormat('en-IN', {
+  return new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: digits,
   }).format(Number(value || 0));
 }
@@ -291,11 +351,16 @@ function CampaignPicker({ campaigns, value, onChange }: any) {
       </label>
 
       <select
-        value={value}
+        value={value || ""}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full rounded-2xl border bg-slate-50 px-4 py-3 font-bold outline-none"
+        disabled={!Array.isArray(campaigns) || campaigns.length === 0}
+        className="mt-2 w-full rounded-2xl border bg-slate-50 px-4 py-3 font-bold outline-none disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {campaigns.map((campaign: string) => (
+        {(!Array.isArray(campaigns) || campaigns.length === 0) && (
+          <option value="">No campaigns available</option>
+        )}
+
+        {(Array.isArray(campaigns) ? campaigns : []).map((campaign: string) => (
           <option key={campaign} value={campaign}>
             {campaign}
           </option>
@@ -335,13 +400,13 @@ function DecisionRow({ title, subtitle, status, children }: any) {
 
 function StatusBadge({ status }: any) {
   const cls =
-    status === 'SCALE'
-      ? 'bg-emerald-100 text-emerald-700'
-      : status === 'KILL'
-        ? 'bg-red-100 text-red-700'
-        : status === 'TEST'
-          ? 'bg-blue-100 text-blue-700'
-          : 'bg-slate-200 text-slate-600';
+    status === "SCALE"
+      ? "bg-emerald-100 text-emerald-700"
+      : status === "KILL"
+        ? "bg-red-100 text-red-700"
+        : status === "TEST"
+          ? "bg-blue-100 text-blue-700"
+          : "bg-slate-200 text-slate-600";
 
   return (
     <span
@@ -369,11 +434,11 @@ function DecisionBucket({ title, items }: any) {
           {items.slice(0, 8).map((item: any, i: number) => (
             <div key={i} className="rounded-2xl border bg-white p-4">
               <p className="font-black">
-                {item.campaign_name || item.adset_name || 'Unnamed'}
+                {item.campaign_name || item.adset_name || "Unnamed"}
               </p>
 
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                Spend {formatCurrency(item.spend)} · ROAS{' '}
+                Spend {formatCurrency(item.spend)} · ROAS{" "}
                 {formatNumber(item.roas)} · CPA {formatCurrency(item.cpa)}
               </p>
 
