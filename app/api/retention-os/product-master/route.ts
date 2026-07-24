@@ -14,11 +14,14 @@ export async function GET() {
     const [rows] = await bigquery.query({ query });
 
     return NextResponse.json(rows);
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    console.error('Product mapping load error:', error?.message || error);
 
     return NextResponse.json(
-      { error: 'Failed to load product mappings' },
+      {
+        error: 'Failed to load product mappings',
+        detail: error?.message || String(error),
+      },
       { status: 500 }
     );
   }
@@ -36,7 +39,9 @@ export async function POST(req: NextRequest) {
           SELECT
             @sku AS sku,
             @product_title AS product_title,
+            SAFE_CAST(NULLIF(@cogs, '') AS NUMERIC) AS cogs,
             @category AS category,
+            NULLIF(TRIM(@category_type), '') AS category_type,
             @routine AS routine,
             @role AS role,
             @active AS active,
@@ -52,7 +57,9 @@ export async function POST(req: NextRequest) {
 
         WHEN MATCHED THEN UPDATE SET
           product_title = S.product_title,
+          cogs = S.cogs,
           category = S.category,
+          category_type = S.category_type,
           routine = S.routine,
           role = S.role,
           active = S.active,
@@ -67,7 +74,9 @@ export async function POST(req: NextRequest) {
         WHEN NOT MATCHED THEN INSERT (
           sku,
           product_title,
+          cogs,
           category,
+          category_type,
           routine,
           role,
           active,
@@ -84,7 +93,9 @@ export async function POST(req: NextRequest) {
         VALUES (
           S.sku,
           S.product_title,
+          S.cogs,
           S.category,
+          S.category_type,
           S.routine,
           S.role,
           S.active,
@@ -105,14 +116,18 @@ export async function POST(req: NextRequest) {
         params: {
           sku: row.sku || '',
           product_title: row.product_title || '',
+          cogs:
+            row.cogs === '' || row.cogs == null
+              ? ''
+              : String(row.cogs),
           category: row.category || '',
+          category_type: row.category_type || '',
           routine: row.routine || '',
           role: row.product_type === 'Bundle' ? 'Bundle' : row.role || '',
           active: row.active ?? true,
 
           product_family: row.product_family || '',
-          product_sub_category:
-            row.product_sub_category || '',
+          product_sub_category: row.product_sub_category || '',
           product_type: row.product_type || 'Single',
 
           routine_step:
@@ -129,7 +144,7 @@ export async function POST(req: NextRequest) {
             row.product_type === 'Bundle'
               ? row.bundle_components || ''
               : '',
-        }
+        },
       });
     }
 

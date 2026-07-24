@@ -81,7 +81,9 @@ export default function Settings() {
             typeof row.product_title === 'object'
               ? row.product_title?.value || ''
               : row.product_title || '',
+          cogs: '',
           category: '',
+          category_type: '',
           routine: '',
           role: '',
           product_family: '',
@@ -112,7 +114,12 @@ export default function Settings() {
             typeof row.product_title === 'object'
               ? row.product_title?.value || ''
               : row.product_title || '',
+          cogs:
+            row.cogs === null || row.cogs === undefined
+              ? ''
+              : String(row.cogs),
           category: row.category || '',
+          category_type: row.category_type || '',
           routine: row.routine || '',
           role: row.role || '',
           product_family: row.product_family || '',
@@ -545,6 +552,7 @@ export default function Settings() {
   ]);
 
   const categoryOptions = uniqueOptions('category', ['Hair', 'Skin', 'Body']);
+  const categoryTypeOptions = uniqueOptions('category_type', []);
   const routineOptions = uniqueOptions('routine', [
     'Hair Growth',
     'Hair Fall',
@@ -719,14 +727,16 @@ export default function Settings() {
           </div>
 
           <div className="mt-5 overflow-x-auto rounded-2xl border border-amber-200 bg-white">
-            <table className="w-full min-w-[1200px] text-left text-sm">
+            <table className="w-full min-w-[1450px] text-left text-sm">
               <thead className="bg-amber-100 text-xs uppercase tracking-widest text-amber-800">
                 <tr>
                   <th className="p-4">SKU</th>
                   <th className="p-4">Product</th>
+                  <th className="p-4">COGS (₹)</th>
                   <th className="p-4">Orders</th>
                   <th className="p-4">Customers</th>
                   <th className="p-4">Category</th>
+                  <th className="p-4">Category Type</th>
                   <th className="p-4">Routine</th>
                   <th className="p-4">Role</th>
                   <th className="p-4">Product Type</th>
@@ -743,7 +753,22 @@ export default function Settings() {
                 {unmappedProducts.map((row: any, index: number) => (
                   <tr key={`unmapped-${row.sku}-${index}`} className="border-t border-amber-100">
                     <td className="p-4 font-black">{row.sku}</td>
-                    <td className="p-4">{row.product_title}</td>
+                    <td className="p-4 min-w-[240px]">{row.product_title}</td>
+
+                    <td className="p-4 min-w-[120px]">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={mappingDrafts[row.sku]?.cogs ?? ''}
+                        onChange={(e) =>
+                          updateDraft(row.sku, 'cogs', e.target.value)
+                        }
+                        placeholder="0.00"
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                      />
+                    </td>
+
                     <td className="p-4">{row.orders}</td>
                     <td className="p-4">{row.customers}</td>
 
@@ -753,6 +778,16 @@ export default function Settings() {
                         options={categoryOptions}
                         onChange={(value) =>
                           handleCustomSelect(row.sku, 'category', value)
+                        }
+                      />
+                    </td>
+
+                    <td className="p-4 min-w-[170px]">
+                      <CustomSelect
+                        value={mappingDrafts[row.sku]?.category_type || ''}
+                        options={categoryTypeOptions}
+                        onChange={(value) =>
+                          handleCustomSelect(row.sku, 'category_type', value)
                         }
                       />
                     </td>
@@ -881,7 +916,7 @@ export default function Settings() {
                   <tr>
                     <td
                       className="p-6 text-sm font-bold text-slate-500"
-                      colSpan={14}
+                      colSpan={16}
                     >
                       No unmapped products found.
                     </td>
@@ -917,12 +952,14 @@ export default function Settings() {
           </div>
 
           <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[1900px] text-left text-sm">
+            <table className="w-full min-w-[2150px] text-left text-sm">
               <thead>
                 <tr className="border-b">
                   <th className="p-3">SKU</th>
                   <th className="p-3">Product</th>
+                  <th className="p-3">COGS (₹)</th>
                   <th className="p-3">Category</th>
+                  <th className="p-3">Category Type</th>
                   <th className="p-3">Routine</th>
                   <th className="p-3">Role</th>
                   <th className="p-3">Product Type</th>
@@ -945,12 +982,40 @@ export default function Settings() {
                       {row.product_title}
                     </td>
 
+                    <td className="p-3 min-w-[120px]">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={mappedDrafts[row.sku]?.cogs ?? ''}
+                        onChange={(e) =>
+                          updateMappedDraft(row.sku, 'cogs', e.target.value)
+                        }
+                        placeholder="0.00"
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2"
+                      />
+                    </td>
+
                     <td className="p-3 min-w-[160px]">
                       <CustomSelect
                         value={mappedDrafts[row.sku]?.category || ''}
                         options={categoryOptions}
                         onChange={(value) =>
                           handleMappedCustomSelect(row.sku, 'category', value)
+                        }
+                      />
+                    </td>
+
+                    <td className="p-3 min-w-[170px]">
+                      <CustomSelect
+                        value={mappedDrafts[row.sku]?.category_type || ''}
+                        options={categoryTypeOptions}
+                        onChange={(value) =>
+                          handleMappedCustomSelect(
+                            row.sku,
+                            'category_type',
+                            value
+                          )
                         }
                       />
                     </td>
@@ -1098,7 +1163,7 @@ export default function Settings() {
 
                 {mappedProducts.length === 0 && (
                   <tr>
-                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={13}>
+                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={15}>
                       No mapped products yet.
                     </td>
                   </tr>

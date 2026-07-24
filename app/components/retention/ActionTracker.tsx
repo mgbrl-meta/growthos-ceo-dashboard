@@ -2,13 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import type {
+  PatternWorkflowAction,
+  PatternWorkflowApiResponse,
+} from './types';
+
 const money = (value: number) =>
   `INR ${Math.round(value || 0).toLocaleString('en-IN')}`;
 
 export default function ActionTracker() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-
   const [statusFilter, setStatusFilter] = useState('All');
   const [search, setSearch] = useState('');
 
@@ -17,10 +21,36 @@ export default function ActionTracker() {
       setLoading(true);
 
       try {
-        const res = await fetch('/api/retention-os/action-log');
-        const json = await res.json();
+        const [actionResponse, patternResponse] = await Promise.all([
+          fetch('/api/retention-os/action-log', {
+            cache: 'no-store',
+          }),
+          fetch('/api/retention-os/pattern-actions', {
+            cache: 'no-store',
+          }),
+        ]);
 
-        setRows(Array.isArray(json) ? json : []);
+        const actionJson = await actionResponse.json();
+        const patternJson =
+          (await patternResponse.json()) as PatternWorkflowApiResponse;
+
+        const actionRows = Array.isArray(actionJson) ? actionJson : [];
+        const patternRows: PatternWorkflowAction[] =
+          patternJson.ok && Array.isArray(patternJson.data)
+            ? patternJson.data
+            : [];
+
+        const merged = new Map<string, any>();
+
+        actionRows.forEach((row: any) => {
+          if (row.action_id) merged.set(row.action_id, row);
+        });
+
+        patternRows.forEach((row) => {
+          merged.set(row.action_id, row);
+        });
+
+        setRows([...merged.values()]);
       } catch (error) {
         console.error('Action log fetch error', error);
         setRows([]);
@@ -37,7 +67,11 @@ export default function ActionTracker() {
       const matchesStatus =
         statusFilter === 'All' || row.status === statusFilter;
 
-      const matchesSearch = `${row.action_title || ''} ${row.opportunity_type || ''} ${row.opportunity_group || ''}`
+      const matchesSearch = `${row.action_title || ''} ${
+        row.opportunity_type || ''
+      } ${row.opportunity_group || ''} ${row.workflow_type || ''} ${
+        row.source_sku || ''
+      } ${row.target_sku || ''}`
         .toLowerCase()
         .includes(search.toLowerCase());
 
@@ -55,6 +89,10 @@ export default function ActionTracker() {
     0
   );
 
+  const patternOriginCount = filtered.filter(
+    (row) => row.source_system === 'PATTERN_DISCOVERY'
+  ).length;
+
   const recordLearning = async (row: any) => {
     const actualRevenue = prompt(
       'Enter actual revenue generated',
@@ -70,43 +108,30 @@ export default function ActionTracker() {
 
     if (actualProfit === null) return;
 
-    const learningNote = prompt(
-      'Key learning?',
-      ''
-    );
-
-    const nextRecommendation = prompt(
-      'Next recommendation?',
-      ''
-    );
+    const learningNote = prompt('Key learning?', '');
+    const nextRecommendation = prompt('Next recommendation?', '');
 
     try {
-      const res = await fetch('/api/retention-os/learning-log', {
+      const response = await fetch('/api/retention-os/learning-log', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action_id: row.action_id,
           opportunity_type: row.opportunity_type,
           opportunity_group: row.opportunity_group,
-
           expected_revenue: row.expected_revenue,
           expected_profit: row.expected_profit,
-
           actual_revenue: Number(actualRevenue || 0),
           actual_profit: Number(actualProfit || 0),
-
           result: 'Completed',
-
           learning_note: learningNote || '',
           next_recommendation: nextRecommendation || '',
         }),
       });
 
-      const json = await res.json();
+      const json = await response.json();
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(json?.error || 'Failed');
       }
 
@@ -119,21 +144,20 @@ export default function ActionTracker() {
 
   const updateActionStatus = async (actionId: string, status: string) => {
     try {
-      const res = await fetch('/api/retention-os/action-log', {
+      const response = await fetch('/api/retention-os/action-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action_id: actionId,
-          status,
-        }),
+        body: JSON.stringify({ action_id: actionId, status }),
       });
 
-      const json = await res.json();
+      const json = await response.json();
 
-      if (!res.ok) throw new Error(json?.error || 'Update failed');
+      if (!response.ok) {
+        throw new Error(json?.error || 'Update failed');
+      }
 
-      setRows((prev) =>
-        prev.map((row) =>
+      setRows((previous) =>
+        previous.map((row) =>
           row.action_id === actionId ? { ...row, status } : row
         )
       );
@@ -154,7 +178,8 @@ export default function ActionTracker() {
       </h2>
 
       <p className="mt-2 text-sm text-slate-500">
-        Track planned, running and completed retention actions.
+        Track planned, running and completed retention actions with Pattern
+        Discovery lineage.
       </p>
 
       {loading && (
@@ -163,41 +188,30 @@ export default function ActionTracker() {
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <Card
-          label="Actions"
-          value={filtered.length.toString()}
-        />
-
-        <Card
-          label="Expected Revenue"
-          value={money(totalExpectedRevenue)}
-        />
-
-        <Card
-          label="Expected Profit"
-          value={money(totalExpectedProfit)}
-        />
-
+      <div className="mt-6 grid gap-4 md:grid-cols-5">
+        <Card label="Actions" value={filtered.length.toString()} />
+        <Card label="Pattern-Origin" value={patternOriginCount.toString()} />
+        <Card label="Expected Revenue" value={money(totalExpectedRevenue)} />
+        <Card label="Expected Profit" value={money(totalExpectedProfit)} />
         <Card
           label="Running"
-          value={
-            filtered.filter((r) => r.status === 'Running').length.toString()
-          }
+          value={filtered
+            .filter((row) => row.status === 'Running')
+            .length.toString()}
         />
       </div>
 
       <div className="mt-5 flex flex-wrap gap-3">
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search actions..."
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search actions, pattern or SKU..."
           className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
         />
 
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(event) => setStatusFilter(event.target.value)}
           className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
         >
           <option>All</option>
@@ -209,20 +223,21 @@ export default function ActionTracker() {
       </div>
 
       <div className="mt-5 overflow-x-auto rounded-3xl border border-slate-200">
-        <table className="w-full min-w-[1500px] text-left">
+        <table className="w-full min-w-[1750px] text-left">
           <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
             <tr>
               <th className="p-4">Action</th>
+              <th className="p-4">Source</th>
               <th className="p-4">Opportunity</th>
-              <th className="p-4">Segment</th>
+              <th className="p-4">Source → Target</th>
               <th className="p-4">Channel</th>
               <th className="p-4">Customers</th>
               <th className="p-4">Revenue</th>
               <th className="p-4">Profit</th>
               <th className="p-4">Status</th>
               <th className="p-4">Planned Date</th>
-              <th className="p-4">Learning</th>
               <th className="p-4">Notes</th>
+              <th className="p-4">Learning</th>
             </tr>
           </thead>
 
@@ -230,40 +245,72 @@ export default function ActionTracker() {
             {filtered.map((row) => (
               <tr
                 key={row.action_id}
-                className="border-t border-slate-100"
+                className="border-t border-slate-100 align-top"
               >
-                <td className="p-4 font-black">
-                  {row.action_title}
+                <td className="p-4">
+                  <p className="max-w-[300px] font-black text-slate-950">
+                    {row.action_title}
+                  </p>
+                  {row.priority_band && (
+                    <p className="mt-1 text-xs font-black text-blue-700">
+                      {row.priority_band} · Score{' '}
+                      {Number(row.operator_priority_score || 0).toFixed(1)}
+                    </p>
+                  )}
                 </td>
 
                 <td className="p-4">
-                  {row.opportunity_type}
+                  {row.source_system === 'PATTERN_DISCOVERY' ? (
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[10px] font-black text-blue-700">
+                      Pattern Discovery
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600">
+                      Existing Planner
+                    </span>
+                  )}
                 </td>
 
                 <td className="p-4">
-                  {row.opportunity_group}
+                  <p className="font-bold">{row.opportunity_type}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {row.workflow_type || row.opportunity_group}
+                  </p>
                 </td>
 
                 <td className="p-4">
-                  {row.channel}
+                  <p className="font-bold">{row.source_sku || '—'}</p>
+                  {row.target_sku && (
+                    <p className="mt-1 text-blue-700">→ {row.target_sku}</p>
+                  )}
                 </td>
+
+                <td className="p-4">{row.channel}</td>
 
                 <td className="p-4">
                   {Number(row.expected_customers || 0).toLocaleString('en-IN')}
+                  {row.evidence_support ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Evidence:{' '}
+                      {Number(row.evidence_support).toLocaleString('en-IN')}
+                    </p>
+                  ) : null}
                 </td>
 
                 <td className="p-4 font-bold">
-                  {money(row.expected_revenue)}
+                  {money(Number(row.expected_revenue || 0))}
                 </td>
 
                 <td className="p-4 font-bold">
-                  {money(row.expected_profit)}
+                  {money(Number(row.expected_profit || 0))}
                 </td>
 
                 <td className="p-4">
                   <select
                     value={row.status || 'Planned'}
-                    onChange={(e) => updateActionStatus(row.action_id, e.target.value)}
+                    onChange={(event) =>
+                      updateActionStatus(row.action_id, event.target.value)
+                    }
                     className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black"
                   >
                     <option>Planned</option>
@@ -279,12 +326,15 @@ export default function ActionTracker() {
                     : row.planned_date || ''}
                 </td>
 
-                <td className="p-4 text-slate-500">
-                  {row.notes}
+                <td className="p-4">
+                  <p className="max-w-[330px] text-sm leading-5 text-slate-500">
+                    {row.notes}
+                  </p>
                 </td>
 
                 <td className="p-4">
                   <button
+                    type="button"
                     onClick={() => recordLearning(row)}
                     className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white"
                   >
@@ -297,7 +347,7 @@ export default function ActionTracker() {
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={11}
+                  colSpan={12}
                   className="p-8 text-center text-sm font-bold text-slate-500"
                 >
                   No actions found.
@@ -311,22 +361,13 @@ export default function ActionTracker() {
   );
 }
 
-function Card({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function Card({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
-
-      <p className="mt-2 text-2xl font-black text-slate-950">
-        {value}
-      </p>
+      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
     </div>
   );
 }
