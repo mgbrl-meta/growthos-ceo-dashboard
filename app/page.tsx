@@ -392,7 +392,7 @@ export default function Dashboard() {
               )}
               
               {activeTab === 'Retention OS' && (
-  <RetentionOS />
+              <RetentionOS selectedDate={end} />
 )}
 
               {activeTab !== 'CEO Summary' && activeTab !== 'Meta OS' && activeTab !== 'Google OS' && activeTab !== 'Product OS' && activeTab !== 'Retention OS' && (
