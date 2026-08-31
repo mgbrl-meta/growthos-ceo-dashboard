@@ -1,0 +1,1733 @@
+
+
+============================================================
+FILE: .\app\page.tsx
+============================================================
+
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import DateControl from './components/DateControl';
+import CeoSummary from './components/CeoSummary';
+import GoogleOS from './components/GoogleOS';
+import MetaOS from './components/MetaOS';
+import ProductOS from './components/ProductOS';
+import RetentionOS from './components/RetentionOS';
+
+type Row = any;
+type MetaParams = {
+  targetRoas: number;
+  targetCpa: number;
+  scalePct: number;
+  killPct: number;
+  minSpend: number;
+  minPurchases: number;
+  maxCpa: number;
+  minRoas: number;
+  minCtr: number;
+  maxFrequency: number;
+  cpmIncreasePct: number;
+};
+
+const DEFAULT_PARAMS: MetaParams = {
+  targetRoas: 0.8,
+  targetCpa: 1800,
+  scalePct: 10,
+  killPct: 15,
+  minSpend: 10000,
+  minPurchases: 3,
+  maxCpa: 2200,
+  minRoas: 0.7,
+  minCtr: 0.8,
+  maxFrequency: 2.5,
+  cpmIncreasePct: 20,
+};
+
+const formatCurrency = (value: number = 0) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const formatNumber = (value: number = 0, digits = 2) =>
+  new Intl.NumberFormat('en-IN', { maximumFractionDigits: digits }).format(Number(value || 0));
+
+const pctChange = (current: number, previous: number) => {
+  if (!previous || previous === 0) return 0;
+  return ((Number(current || 0) - Number(previous || 0)) / Number(previous || 0)) * 100;
+};
+
+const safeDivide = (a: any, b: any) => {
+  const numerator = Number(a || 0);
+  const denominator = Number(b || 0);
+  if (!denominator) return 0;
+  return numerator / denominator;
+};
+
+const sum = (rows: Row[], key: string) => rows.reduce((acc, row) => acc + Number(row[key] || 0), 0);
+
+export default function Dashboard() {
+  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+
+  const setPreset = (preset: "yesterday" | "l7" | "l14" | "l30" | "mtd" | "lastMonth") => {
+    const today = new Date();
+
+    let currentStart = new Date();
+    let currentEnd = new Date();
+
+    if (preset === "yesterday") {
+      const y = new Date(today);
+      y.setDate(today.getDate() - 1);
+
+      currentStart = y;
+      currentEnd = y;
+    }
+
+    if (preset === "l7") {
+      currentEnd = today;
+      currentStart = new Date(today);
+      currentStart.setDate(today.getDate() - 6);
+    }
+
+    if (preset === "l14") {
+      currentEnd = today;
+      currentStart = new Date(today);
+      currentStart.setDate(today.getDate() - 13);
+    }
+
+    if (preset === "l30") {
+      currentEnd = today;
+      currentStart = new Date(today);
+      currentStart.setDate(today.getDate() - 29);
+    }
+
+    if (preset === "mtd") {
+      currentEnd = today;
+      currentStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    }
+
+    if (preset === "lastMonth") {
+      currentStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      currentEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    }
+
+    const days =
+      Math.round(
+        (currentEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+
+    const compareEndDate = new Date(currentStart);
+    compareEndDate.setDate(currentStart.getDate() - 1);
+
+    const compareStartDate = new Date(compareEndDate);
+    compareStartDate.setDate(compareEndDate.getDate() - days + 1);
+
+    setStart(formatDate(currentStart));
+    setEnd(formatDate(currentEnd));
+    setCompareStart(formatDate(compareStartDate));
+    setCompareEnd(formatDate(compareEndDate));
+  };
+
+  const [activeTab, setActiveTab] = useState('CEO Summary');
+  const [topTabs, setTopTabs] = useState<React.ReactNode>(null);
+  const [activeMetaTab, setActiveMetaTab] = useState('Settings');
+  const today = new Date();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const format = (d: Date) => d.toISOString().split("T")[0];
+
+  // current period (last 30 days)
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - 29);
+
+  // compare period (previous 30 days)
+  const compareEndDate = new Date(startDate);
+  compareEndDate.setDate(startDate.getDate() - 1);
+
+  const compareStartDate = new Date(compareEndDate);
+  compareStartDate.setDate(compareEndDate.getDate() - 29);
+
+  const [start, setStart] = useState(format(startDate));
+  const [end, setEnd] = useState(format(endDate));
+  const [compareStart, setCompareStart] = useState(format(compareStartDate));
+  const [compareEnd, setCompareEnd] = useState(format(compareEndDate));
+
+  const [data, setData] = useState<Row[]>([]);
+  const [compareData, setCompareData] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const currentRes = await fetch(`/api/ceo-summary?start=${start}&end=${end}`);
+      const currentJson = await currentRes.json();
+
+      const compareRes = await fetch(`/api/ceo-summary?start=${compareStart}&end=${compareEnd}`);
+      const compareJson = await compareRes.json();
+
+      setData(Array.isArray(currentJson) ? currentJson : []);
+      setCompareData(Array.isArray(compareJson) ? compareJson : []);
+    } catch (error) {
+      console.error('Dashboard fetch error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const metrics = useMemo(() => {
+    const revenue = sum(data, 'revenue');
+    const spend = sum(data, 'total_spend');
+    const metaSpend = sum(data, 'meta_spend');
+    const googleSpend = sum(data, 'google_spend');
+    const metaRevenue = sum(data, 'meta_revenue');
+    const googleRevenue = sum(data, 'google_revenue');
+    const orders = sum(data, 'orders');
+    const customers = sum(data, 'customers');
+    const newCustomers = sum(data, 'new_customers');
+    const repeatCustomers = sum(data, 'repeat_customers');
+    const newRevenue = sum(data, 'new_customer_revenue');
+    const repeatRevenue = sum(data, 'repeat_customer_revenue');
+
+    const cRevenue = sum(compareData, 'revenue');
+    const cSpend = sum(compareData, 'total_spend');
+    const cNewCustomers = sum(compareData, 'new_customers');
+    const roas = safeDivide(revenue, spend);
+    const cRoas = safeDivide(cRevenue, cSpend);
+    const newCac = safeDivide(spend, newCustomers);
+    const cNewCac = safeDivide(cSpend, cNewCustomers);
+
+    return {
+      revenue,
+      spend,
+      contribution: revenue - spend,
+      roas,
+      roi: safeDivide(revenue - spend, spend),
+      cac: safeDivide(spend, customers),
+      newCac,
+      aov: safeDivide(revenue, orders),
+      orders,
+      customers,
+      newCustomers,
+      repeatCustomers,
+      newRevenue,
+      repeatRevenue,
+      metaSpend,
+      googleSpend,
+      metaRevenue,
+      googleRevenue,
+      organicRevenue: Math.max(revenue - metaRevenue - googleRevenue, 0),
+      revenueDelta: pctChange(revenue, cRevenue),
+      spendDelta: pctChange(spend, cSpend),
+      roasDelta: pctChange(roas, cRoas),
+      newCacDelta: pctChange(newCac, cNewCac),
+      repeatRevenuePct: safeDivide(repeatRevenue, revenue) * 100,
+      newRevenuePct: safeDivide(newRevenue, revenue) * 100,
+    };
+  }, [data, compareData]);
+
+  const tabs = ['CEO Summary', 'Meta OS', 'Google OS', 'Retention OS', 'Product OS'];
+
+  return (
+    <main className="min-h-screen bg-[#090d16] text-slate-100">
+      <div className="flex min-h-screen">
+        <aside
+          className={`sticky top-0 h-screen shrink-0 border-r border-slate-800 bg-slate-950 text-white transition-all duration-300 ${sidebarOpen ? 'w-[230px]' : 'w-[72px]'
+            }`}
+        >
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="absolute -right-3 top-6 z-50 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-950 text-xs font-black text-white shadow-lg"
+          >
+            {sidebarOpen ? '‹' : '›'}
+          </button>
+
+          <div className="flex h-full flex-col p-4">
+            {/* LOGO */}
+            <div className="mb-8 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-sm font-black text-slate-950">
+                GO
+              </div>
+
+              {sidebarOpen && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.28em] text-cyan-300">
+                    GrowthOS
+                  </p>
+
+                  <h1 className="mt-1 text-lg font-black tracking-[-0.04em]">
+                    Command Center
+                  </h1>
+                </div>
+              )}
+            </div>
+
+            {/* DESCRIPTION */}
+            {sidebarOpen && (
+              <p className="mb-6 text-xs leading-5 text-slate-400">
+                CEO-grade operating system for revenue, media,
+                customers and inventory decisions.
+              </p>
+            )}
+
+            {/* TABS */}
+            <nav className="space-y-2">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  title={tab}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-sm font-black transition ${activeTab === tab
+                      ? 'bg-white text-slate-950'
+                      : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                    }`}
+                >
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${activeTab === tab
+                        ? 'bg-emerald-500'
+                        : 'bg-slate-600'
+                      }`}
+                  />
+
+                  {sidebarOpen && <span>{tab}</span>}
+                </button>
+              ))}
+            </nav>
+
+            {/* STATUS */}
+            <div className="mt-auto rounded-2xl border border-slate-800 bg-white/5 p-3">
+              {sidebarOpen ? (
+                <>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Status
+                  </p>
+
+                  <p className="mt-2 text-sm font-black text-white">
+                    <span className="mr-2 inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                    Live data
+                  </p>
+                </>
+              ) : (
+                <div className="mx-auto h-2 w-2 rounded-full bg-emerald-400" />
+              )}
+            </div>
+          </div>
+        </aside>
+        
+        <section className="flex-1 overflow-visible bg-slate-100">
+          <div className="mx-auto max-w-[1600px] p-4 md:p-8">
+            <div className="sticky top-0 z-[9999] mb-4">
+              <header className="rounded-3xl border border-slate-200 bg-white px-4 py-3 shadow-md">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+                      {activeTab}
+                    </p>
+
+                    <h2 className="mt-0.5 text-xl font-black tracking-[-0.04em] text-slate-950">
+                      {activeTab === 'Google OS'
+                        ? 'Intent Intelligence System'
+                        : activeTab === 'Meta OS'
+                          ? 'Meta Growth Intelligence'
+                          : activeTab === 'Product OS'
+                            ? 'Product Intelligence System'
+                            : activeTab === 'Retention OS'
+                              ? 'Customer Retention System'
+                              : 'GrowthOS Dashboard'}
+                    </h2>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <DateControl
+                      start={start}
+                      end={end}
+                      compareStart={compareStart}
+                      compareEnd={compareEnd}
+                      setStart={setStart}
+                      setEnd={setEnd}
+                      setCompareStart={setCompareStart}
+                      setCompareEnd={setCompareEnd}
+                      onApply={fetchData}
+                      loading={loading}
+                      setPreset={setPreset}
+                    />
+                  </div>
+                </div>
+
+                {topTabs && <div className="mt-2">{topTabs}</div>}
+              </header>
+            </div>
+
+            <div className="text-slate-950">
+              {activeTab === 'CEO Summary' && <CeoSummary metrics={metrics} data={data} />}
+
+              {activeTab === 'Meta OS' && (
+                <MetaOS
+                  activeMetaTab={activeMetaTab}
+                  setActiveMetaTab={setActiveMetaTab}
+                  start={start}
+                  end={end}
+                  compareStart={compareStart}
+                  compareEnd={compareEnd}
+                  setTopTabs={setTopTabs}
+                />
+              )}
+
+              {activeTab === 'Google OS' && (
+                <GoogleOS
+                  startDate={start}
+                  endDate={end}
+                  compareStartDate={compareStart}
+                  compareEndDate={compareEnd}
+                  setTopTabs={setTopTabs}
+                />
+              )}
+
+              {activeTab === 'Product OS' && (
+                <ProductOS
+                  startDate={start}
+                  endDate={end}
+                  compareStartDate={compareStart}
+                  compareEndDate={compareEnd}
+                  setTopTabs={setTopTabs}
+                />
+              )}
+              
+              {activeTab === 'Retention OS' && (
+              <RetentionOS selectedDate={end} />
+)}
+
+              {activeTab !== 'CEO Summary' && activeTab !== 'Meta OS' && activeTab !== 'Google OS' && activeTab !== 'Product OS' && activeTab !== 'Retention OS' && (
+                <section className="rounded-[2rem] border border-white/70 bg-white/90 p-10 shadow-2xl shadow-slate-200/70 backdrop-blur-xl">
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-400">Coming Next</p>
+                  <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">{activeTab}</h2>
+                  <p className="mt-2 text-slate-500">This GrowthOS module will come next.</p>
+                </section>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function HeroPill({ label, value }: any) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right">
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+        {label}
+      </p>
+      <p className="text-sm font-black text-slate-950">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\app\layout.tsx
+============================================================
+
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col">{children}</body>
+    </html>
+  );
+}
+
+
+============================================================
+FILE: .\app\globals.css
+============================================================
+
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #f8fafc;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(37, 99, 235, 0.12), transparent 28%),
+    radial-gradient(circle at 90% 20%, rgba(16, 185, 129, 0.10), transparent 28%),
+    #f8fafc;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+
+============================================================
+FILE: .\app\components\DateControl.tsx
+============================================================
+
+type DateControlProps = {
+  start: string;
+  end: string;
+  compareStart: string;
+  compareEnd: string;
+  setStart: (value: string) => void;
+  setEnd: (value: string) => void;
+  setCompareStart: (value: string) => void;
+  setCompareEnd: (value: string) => void;
+  onApply: () => void;
+  loading: boolean;
+  setPreset: (
+    preset: "yesterday" | "l7" | "l14" | "l30" | "mtd" | "lastMonth"
+  ) => void;
+};
+
+export default function DateControl({
+  start,
+  end,
+  compareStart,
+  compareEnd,
+  setStart,
+  setEnd,
+  setCompareStart,
+  setCompareEnd,
+  onApply,
+  loading,
+  setPreset,
+}: DateControlProps) {
+  return (
+    <section className="flex flex-wrap items-center justify-end gap-2">
+      <select
+        onChange={(e) => setPreset(e.target.value as any)}
+        defaultValue=""
+        className="h-9 rounded-full border border-slate-200 bg-slate-100 px-3 text-xs font-black text-slate-800 outline-none"
+      >
+        <option value="" disabled>
+          Preset
+        </option>
+        <option value="yesterday">Yesterday</option>
+        <option value="l7">Last 7 Days</option>
+        <option value="l14">Last 14 Days</option>
+        <option value="l30">Last 30 Days</option>
+        <option value="mtd">This Month</option>
+        <option value="lastMonth">Last Month</option>
+      </select>
+
+      <DatePill
+        label="Period"
+        start={start}
+        end={end}
+        setStart={setStart}
+        setEnd={setEnd}
+      />
+
+      <DatePill
+        label="Compare"
+        start={compareStart}
+        end={compareEnd}
+        setStart={setCompareStart}
+        setEnd={setCompareEnd}
+      />
+
+      <button
+        onClick={onApply}
+        className="h-9 rounded-full bg-slate-950 px-5 text-xs font-black text-white"
+      >
+        {loading ? "Loading..." : "Apply"}
+      </button>
+    </section>
+  );
+}
+
+function DatePill({
+  label,
+  start,
+  end,
+  setStart,
+  setEnd,
+}: {
+  label: string;
+  start: string;
+  end: string;
+  setStart: (value: string) => void;
+  setEnd: (value: string) => void;
+}) {
+  return (
+    <div className="flex h-9 items-center gap-2 rounded-full border border-slate-200 bg-white px-3">
+      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+        {label}
+      </span>
+
+      <input
+        type="date"
+        value={start}
+        onChange={(e) => setStart(e.target.value)}
+        className="w-[125px] bg-transparent text-xs font-black text-slate-900 outline-none"
+      />
+
+      <span className="text-slate-300">→</span>
+
+      <input
+        type="date"
+        value={end}
+        onChange={(e) => setEnd(e.target.value)}
+        className="w-[125px] bg-transparent text-xs font-black text-slate-900 outline-none"
+      />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\app\components\DateFilters.tsx
+============================================================
+
+type Props = {
+  start: string;
+  end: string;
+  compareStart: string;
+  compareEnd: string;
+  setStart: (v: string) => void;
+  setEnd: (v: string) => void;
+  setCompareStart: (v: string) => void;
+  setCompareEnd: (v: string) => void;
+};
+
+export default function DateFilters({
+  start,
+  end,
+  compareStart,
+  compareEnd,
+  setStart,
+  setEnd,
+  setCompareStart,
+  setCompareEnd,
+}: Props) {
+  return (
+    <div className="flex gap-2">
+      <input
+        type="date"
+        value={start}
+        onChange={(e) => setStart(e.target.value)}
+        className="rounded border px-3 py-2"
+      />
+
+      <input
+        type="date"
+        value={end}
+        onChange={(e) => setEnd(e.target.value)}
+        className="rounded border px-3 py-2"
+      />
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\app\components\CeoSummary.tsx
+============================================================
+
+type CeoSummaryProps = {
+  metrics: any;
+  data: any[];
+};
+
+const formatCurrency = (value: number = 0) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const formatNumber = (value: number = 0, digits = 2) =>
+  new Intl.NumberFormat('en-IN', { maximumFractionDigits: digits }).format(Number(value || 0));
+
+const safeDivide = (a: any, b: any) => {
+  const numerator = Number(a || 0);
+  const denominator = Number(b || 0);
+  if (!denominator) return 0;
+  return numerator / denominator;
+};
+
+export default function CeoSummary({ metrics = {} }: any) {
+  return (
+    <div className="space-y-6">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-5">
+        <MetricCard title="Revenue" value={formatCurrency(metrics.revenue)} delta={metrics.revenueDelta} goodUp />
+        <MetricCard title="Total Spend" value={formatCurrency(metrics.spend)} delta={metrics.spendDelta} />
+        <MetricCard title="Contribution After Ads" value={formatCurrency(metrics.contribution)} delta={metrics.revenueDelta - metrics.spendDelta} goodUp />
+        <MetricCard title="Blended ROAS" value={formatNumber(metrics.roas)} delta={metrics.roasDelta} goodUp />
+        <MetricCard title="New CAC" value={formatCurrency(metrics.newCac)} delta={metrics.newCacDelta} />
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Channel Efficiency">
+          <ChannelRow name="Meta" spend={metrics.metaSpend} revenue={metrics.metaRevenue} total={metrics.spend} />
+          <ChannelRow name="Google" spend={metrics.googleSpend} revenue={metrics.googleRevenue} total={metrics.spend} />
+          <ChannelRow name="Organic / Direct" spend={0} revenue={metrics.organicRevenue} total={metrics.spend} />
+        </Panel>
+        <Panel title="Customer Economics">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <DataTile label="New Customers" value={formatNumber(metrics.newCustomers, 0)} />
+            <DataTile label="Repeat Customers" value={formatNumber(metrics.repeatCustomers, 0)} />
+            <DataTile label="New Revenue" value={formatCurrency(metrics.newRevenue)} />
+            <DataTile label="Repeat Revenue" value={formatCurrency(metrics.repeatRevenue)} />
+            <DataTile label="New Revenue %" value={`${formatNumber(metrics.newRevenuePct)}%`} />
+            <DataTile label="Repeat Revenue %" value={`${formatNumber(metrics.repeatRevenuePct)}%`} />
+          </div>
+        </Panel>
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Profitability Snapshot">
+          <div className="space-y-3">
+            <ProfitLine label="Revenue" value={formatCurrency(metrics.revenue)} />
+            <ProfitLine label="Ad Spend" value={`- ${formatCurrency(metrics.spend)}`} />
+            <div className="flex justify-between rounded-2xl bg-slate-950 p-4 text-white">
+              <span className="font-bold text-slate-300">Contribution After Ads</span>
+              <strong>{formatCurrency(metrics.contribution)}</strong>
+            </div>
+          </div>
+        </Panel>
+        <Panel title="CEO Alerts">
+          <AlertBox tone={metrics.contribution < 0 ? 'red' : 'green'} title={metrics.contribution < 0 ? 'Negative after ads' : 'Positive after ads'} text={`Contribution after ads is ${formatCurrency(metrics.contribution)}.`} />
+          <AlertBox tone={metrics.roas < 1 ? 'red' : metrics.roas < 2 ? 'amber' : 'green'} title={metrics.roas < 1 ? 'ROAS below 1.0' : metrics.roas < 2 ? 'ROAS needs monitoring' : 'ROAS healthy'} text={`Current blended ROAS is ${formatNumber(metrics.roas)}.`} />
+          <AlertBox tone={metrics.newCac > metrics.aov ? 'amber' : 'green'} title={metrics.newCac > metrics.aov ? 'CAC above AOV' : 'CAC quality acceptable'} text={`New CAC is ${formatCurrency(metrics.newCac)} vs AOV ${formatCurrency(metrics.aov)}.`} />
+        </Panel>
+      </section>
+    </div>
+  );
+}
+
+function MetricCard({ title, value, delta, goodUp = false, status }: any) {
+  const isGood = goodUp ? delta >= 0 : delta <= 0;
+  return (
+    <div className="group relative overflow-hidden rounded-[2rem] border border-white/70 bg-white p-5 shadow-2xl shadow-slate-200/70 transition hover:-translate-y-1 hover:shadow-slate-300/70">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-blue-600 to-emerald-400" />
+      <p className="text-xs font-black uppercase tracking-wider text-slate-500">{title}</p>
+      <h3 className="mt-2 text-2xl font-black tracking-tight">{value}</h3>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <p className={isGood ? 'text-sm font-black text-emerald-600' : 'text-sm font-black text-red-600'}>
+          {delta >= 0 ? '▲' : '▼'} {Math.abs(delta || 0).toFixed(2)}%
+        </p>
+        {status && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">{status}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Panel({ title, children }: any) {
+  return (
+    <section className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-2xl shadow-slate-200/70">
+      <h3 className="mb-4 text-lg font-black tracking-tight">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function DataTile({ label, value }: any) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 text-xl font-black tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+function ChannelRow({ name, spend, revenue, total }: any) {
+  const share = safeDivide(spend, total) * 100;
+  const roas = safeDivide(revenue, spend);
+  return (
+    <div className="border-b border-slate-100 py-4 last:border-0">
+      <div className="mb-2 flex justify-between">
+        <strong>{name}</strong>
+        <strong>{formatCurrency(spend)}</strong>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-gradient-to-r from-slate-950 to-blue-600" style={{ width: `${Math.min(share, 100)}%` }} />
+      </div>
+      <div className="mt-2 flex justify-between text-sm font-semibold text-slate-500">
+        <span>{formatNumber(share)}% spend share</span>
+        <span>Revenue {formatCurrency(revenue)} · ROAS {formatNumber(roas)}</span>
+      </div>
+    </div>
+  );
+}
+
+function AlertBox({ tone, title, text }: any) {
+  const cls = tone === 'red' ? 'border-red-200 bg-red-50 text-red-900' : tone === 'amber' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900';
+  return (
+    <div className={`rounded-2xl border p-4 ${cls}`}>
+      <h4 className="font-black">{title}</h4>
+      <p className="mt-1 text-sm opacity-80">{text}</p>
+    </div>
+  );
+}
+
+function ProfitLine({ label, value }: any) {
+  return <div className="flex justify-between rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm"><span className="font-bold text-slate-500">{label}</span><strong>{value}</strong></div>;
+}
+
+
+============================================================
+FILE: .\lib\bigquery.ts
+============================================================
+
+import { BigQuery } from "@google-cloud/bigquery";
+
+export const bigquery = new BigQuery({
+  projectId: process.env.GCP_PROJECT_ID,
+  credentials: {
+    client_email: process.env.GCP_CLIENT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  },
+});
+
+
+============================================================
+FILE: .\app\api\google-os\overview\route.ts
+============================================================
+
+import { NextResponse } from "next/server";
+import { BigQuery } from "@google-cloud/bigquery";
+
+const bigquery = new BigQuery({
+  projectId: process.env.GCP_PROJECT_ID,
+  credentials: {
+    client_email: process.env.GCP_CLIENT_EMAIL,
+    private_key: process.env.GCP_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  },
+});
+
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    if (!start || !end) {
+      return NextResponse.json(
+        { error: "Missing start or end date" },
+        { status: 400 }
+      );
+    }
+
+    const query = `
+      WITH base AS (
+        SELECT
+          date,
+          campaign_name,
+          channel_type,
+          COALESCE(impressions, 0) AS impressions,
+          COALESCE(clicks, 0) AS clicks,
+          COALESCE(cost, 0) AS spend,
+          COALESCE(conversions, 0) AS conversions,
+          COALESCE(conversion_value, 0) AS revenue
+        FROM \`shopify-colab.brillare_shopify.google_campaign_daily_raw\`
+        WHERE date BETWEEN @start AND @end
+      ),
+
+      totals AS (
+        SELECT
+          SUM(impressions) AS impressions,
+          SUM(clicks) AS clicks,
+          SUM(spend) AS spend,
+          SUM(conversions) AS conversions,
+          SUM(revenue) AS revenue
+        FROM base
+      ),
+
+      channel_mix AS (
+        SELECT
+          channel_type,
+          SUM(impressions) AS impressions,
+          SUM(clicks) AS clicks,
+          SUM(spend) AS spend,
+          SUM(conversions) AS conversions,
+          SUM(revenue) AS revenue
+        FROM base
+        GROUP BY channel_type
+      ),
+
+      campaign_snapshot AS (
+        SELECT
+          campaign_name,
+          channel_type,
+          SUM(impressions) AS impressions,
+          SUM(clicks) AS clicks,
+          SUM(spend) AS spend,
+          SUM(conversions) AS conversions,
+          SUM(revenue) AS revenue
+        FROM base
+        GROUP BY campaign_name, channel_type
+        ORDER BY spend DESC
+        LIMIT 5
+      )
+
+      SELECT
+        (SELECT AS STRUCT * FROM totals) AS totals,
+
+        ARRAY(
+          SELECT AS STRUCT
+            channel_type,
+            impressions,
+            clicks,
+            spend,
+            revenue,
+            conversions,
+            SAFE_DIVIDE(revenue, spend) AS roas,
+            SAFE_DIVIDE(spend, conversions) AS cpa,
+            SAFE_DIVIDE(clicks, impressions) AS ctr,
+            SAFE_DIVIDE(conversions, clicks) AS cvr,
+            SAFE_DIVIDE(revenue, clicks) AS rpc,
+            SAFE_DIVIDE(spend, (SELECT spend FROM totals)) AS spend_share,
+            SAFE_DIVIDE(revenue, (SELECT revenue FROM totals)) AS revenue_share,
+            (SAFE_DIVIDE(revenue, (SELECT revenue FROM totals))
+              - SAFE_DIVIDE(spend, (SELECT spend FROM totals))) AS efficiency_gap  
+          FROM channel_mix
+          ORDER BY spend DESC
+        ) AS channel_mix,
+
+        ARRAY(
+          SELECT AS STRUCT
+            campaign_name,
+            channel_type,
+            impressions,
+            clicks,
+            spend,
+            revenue,
+            conversions,
+            SAFE_DIVIDE(revenue, spend) AS roas,
+            SAFE_DIVIDE(spend, conversions) AS cpa,
+            SAFE_DIVIDE(clicks, impressions) AS ctr,
+            SAFE_DIVIDE(conversions, clicks) AS cvr,
+            SAFE_DIVIDE(revenue, clicks) AS rpc
+          FROM campaign_snapshot
+          ORDER BY spend DESC
+        ) AS campaigns
+    `;
+
+    const [rows] = await bigquery.query({
+      query,
+      params: { start, end },
+    });
+
+    const data = rows[0] || {};
+    const totals = data.totals || {};
+
+    return NextResponse.json({
+      totals: {
+        spend: totals.spend || 0,
+        revenue: totals.revenue || 0,
+        conversions: totals.conversions || 0,
+        impressions: totals.impressions || 0,
+        clicks: totals.clicks || 0,
+        roas: totals.spend ? totals.revenue / totals.spend : 0,
+        cpa: totals.conversions ? totals.spend / totals.conversions : 0,
+        rpc: totals.clicks ? totals.revenue / totals.clicks : 0,
+        cvr: totals.clicks ? totals.conversions / totals.clicks : 0,
+        ctr: totals.impressions ? totals.clicks / totals.impressions : 0,
+      },
+      channel_mix: data.channel_mix || [],
+      campaigns: data.campaigns || [],
+    });
+  } catch (error: any) {
+    console.error("Google Overview API Error:", error);
+
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+
+============================================================
+FILE: .\app\components\GoogleOS.tsx
+============================================================
+
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+
+import GoogleSettings, {
+  defaultSettings,
+  GoogleSettingsState,
+} from './google/GoogleSettings';
+
+import GoogleOverview from './google/GoogleOverview';
+import GoogleChannelMix from './google/GoogleChannelMix';
+import GoogleCampaign from './google/GoogleCampaign';
+import GoogleAdGroup from './google/GoogleAdGroup';
+import GoogleSearchTerms from './google/GoogleSearchTerms';
+import GoogleKeywords from './google/GoogleKeywords';
+import GoogleFunnel from './google/GoogleFunnel';
+import GoogleAlerts from './google/GoogleAlerts';
+
+type Props = {
+  startDate: string;
+  endDate: string;
+  compareStartDate?: string;
+  compareEndDate?: string;
+  setTopTabs?: (tabs: ReactNode) => void;
+};
+
+export default function GoogleOS({
+  startDate,
+  endDate,
+  compareStartDate,
+  compareEndDate,
+  setTopTabs,
+}: Props) {
+  const [activeGoogleTab, setActiveGoogleTab] = useState('Settings');
+
+  const [googleSettings, setGoogleSettings] =
+    useState<GoogleSettingsState>(defaultSettings);
+
+  const googleTabs = [
+    'Settings',
+    'Overview',
+    'Channel Mix',
+    'Campaign',
+    'Ad Group',
+    'Search Terms',
+    'Keywords',
+    'Funnel',
+    'Alerts',
+  ];
+
+  useEffect(() => {
+    if (!setTopTabs) return;
+
+    setTopTabs(
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-2">
+        {googleTabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveGoogleTab(tab)}
+            className={
+              activeGoogleTab === tab
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:bg-white hover:text-slate-950'
+            }
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+    );
+
+    return () => setTopTabs(null);
+  }, [activeGoogleTab, setTopTabs]);
+
+  return (
+    <section className="space-y-6">
+      {activeGoogleTab === 'Settings' && (
+        <GoogleSettings
+          settings={googleSettings}
+          setSettings={setGoogleSettings}
+        />
+      )}
+
+      {activeGoogleTab === 'Overview' && (
+        <GoogleOverview startDate={startDate} endDate={endDate} />
+      )}
+
+      {activeGoogleTab === 'Channel Mix' && (
+        <GoogleChannelMix startDate={startDate} endDate={endDate} />
+      )}
+
+      {activeGoogleTab === 'Campaign' && (
+        <GoogleCampaign startDate={startDate} endDate={endDate} />
+      )}
+
+      {activeGoogleTab === 'Ad Group' && (
+        <GoogleAdGroup startDate={startDate} endDate={endDate} />
+      )}
+
+      {activeGoogleTab === 'Search Terms' && (
+        <GoogleSearchTerms
+          startDate={startDate}
+          endDate={endDate}
+          settings={googleSettings}
+        />
+      )}
+
+      {activeGoogleTab === 'Keywords' && (
+        <GoogleKeywords startDate={startDate} endDate={endDate} />
+      )}
+
+      {activeGoogleTab === 'Funnel' && (
+        <GoogleFunnel startDate={startDate} endDate={endDate} />
+      )}
+
+      {activeGoogleTab === 'Alerts' && (
+        <GoogleAlerts startDate={startDate} endDate={endDate} />
+      )}
+    </section>
+  );
+}
+
+
+============================================================
+FILE: .\app\components\MetaOS.tsx
+============================================================
+
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+
+import MetaSettings from './meta/MetaSettings';
+import MetaOverview from './meta/MetaOverview';
+import MetaCampaignAnalysis from './meta/MetaCampaignAnalysis';
+import MetaAdSetAnalysis from './meta/MetaAdSetAnalysis';
+import MetaCreativeAnalysis from './meta/MetaCreativeAnalysis';
+import MetaFunnelAnalysis from './meta/MetaFunnelAnalysis';
+import MetaAlertsRecommendations from './meta/MetaAlertsRecommendations';
+
+type MetaParams = {
+  targetRoas: number;
+  targetCpa: number;
+  scalePct: number;
+  killPct: number;
+  minSpend: number;
+  minPurchases: number;
+  maxCpa: number;
+  minRoas: number;
+  minCtr: number;
+  maxFrequency: number;
+  cpmIncreasePct: number;
+};
+
+const DEFAULT_PARAMS: MetaParams = {
+  targetRoas: 0.8,
+  targetCpa: 1800,
+  scalePct: 10,
+  killPct: 15,
+  minSpend: 10000,
+  minPurchases: 3,
+  maxCpa: 2200,
+  minRoas: 0.7,
+  minCtr: 0.8,
+  maxFrequency: 2.5,
+  cpmIncreasePct: 20,
+};
+
+export default function MetaOS({
+  activeMetaTab,
+  setActiveMetaTab,
+  start,
+  end,
+  compareStart,
+  compareEnd,
+  setTopTabs,
+}: any & { setTopTabs?: (tabs: ReactNode | null) => void }) {
+  const [params, setParams] = useState<MetaParams>(DEFAULT_PARAMS);
+  const [campaigns, setCampaigns] = useState<string[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState('');
+
+  const metaTabs = [
+    'Settings',
+    'Overview',
+    'Campaign Analysis',
+    'Ad Set Analysis',
+    'Creative Analysis',
+    'Funnel Analysis',
+    'Alerts & Recommendations',
+  ];
+
+  useEffect(() => {
+    async function fetchCampaigns() {
+      try {
+        const res = await fetch(
+          `/api/meta-os?tab=campaign-list&start=${start}&end=${end}`
+        );
+        const json = await res.json();
+
+        const names = Array.isArray(json)
+          ? json.map((x: any) => x.campaign_name).filter(Boolean)
+          : [];
+
+        setCampaigns(names);
+        setSelectedCampaign((prev) =>
+          names.length > 0 && !names.includes(prev) ? names[0] : prev
+        );
+      } catch (error) {
+        console.error('Campaign list error', error);
+      }
+    }
+
+    fetchCampaigns();
+  }, [start, end]);
+
+  useEffect(() => {
+    if (!setTopTabs) return;
+
+    setTopTabs(
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-2">
+        {metaTabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveMetaTab(tab)}
+            className={
+              activeMetaTab === tab
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:bg-white hover:text-slate-950'
+            }
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+    );
+
+    return () => setTopTabs(null);
+  }, [activeMetaTab, setActiveMetaTab, setTopTabs]);
+
+  return (
+    <section className="space-y-6">
+      {activeMetaTab === 'Settings' && (
+        <MetaSettings params={params} setParams={setParams} />
+      )}
+
+      {activeMetaTab === 'Overview' && (
+        <MetaOverview
+          start={start}
+          end={end}
+          compareStart={compareStart}
+          compareEnd={compareEnd}
+          params={params}
+        />
+      )}
+
+      {activeMetaTab === 'Campaign Analysis' && (
+        <MetaCampaignAnalysis start={start} end={end} params={params} />
+      )}
+
+      {activeMetaTab === 'Ad Set Analysis' && (
+        <MetaAdSetAnalysis
+          start={start}
+          end={end}
+          params={params}
+          campaigns={campaigns}
+          selectedCampaign={selectedCampaign}
+          setSelectedCampaign={setSelectedCampaign}
+        />
+      )}
+
+      {activeMetaTab === 'Creative Analysis' && (
+        <MetaCreativeAnalysis
+          start={start}
+          end={end}
+          params={params}
+          campaigns={campaigns}
+          selectedCampaign={selectedCampaign}
+          setSelectedCampaign={setSelectedCampaign}
+        />
+      )}
+
+      {activeMetaTab === 'Funnel Analysis' && (
+        <MetaFunnelAnalysis
+          start={start}
+          end={end}
+          compareStart={compareStart}
+          compareEnd={compareEnd}
+          campaigns={campaigns}
+          selectedCampaign={selectedCampaign}
+          setSelectedCampaign={setSelectedCampaign}
+        />
+      )}
+
+      {activeMetaTab === 'Alerts & Recommendations' && (
+        <MetaAlertsRecommendations
+          start={start}
+          end={end}
+          compareStart={compareStart}
+          compareEnd={compareEnd}
+          params={params}
+        />
+      )}
+    </section>
+  );
+}
+
+
+============================================================
+FILE: .\app\components\ProductOS.tsx
+============================================================
+
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+
+// Import tab components
+import ProductOverview from './product/ProductOverview';
+import SkuPerformance from './product/SkuPerformance';
+import DemandTrends from './product/DemandTrends';
+import InventoryHealth from './product/InventoryHealth';
+import Forecasting from './product/Forecasting';
+import SeasonalityEngine from './product/SeasonalityEngine';
+import ProductInsights from './product/ProductInsights';
+import ProductSettings from './product/ProductSettings';
+
+type Props = {
+  startDate: string;
+  endDate: string;
+  compareStartDate?: string;
+  compareEndDate?: string;
+  setTopTabs?: (tabs: ReactNode | null) => void;
+};
+
+export default function ProductOS({
+  startDate,
+  endDate,
+  compareStartDate,
+  compareEndDate,
+  setTopTabs,
+}: Props) {
+  const [activeTab, setActiveTab] = useState('Overview');
+
+  const tabs = [
+    'Overview',
+    'SKU Performance',
+    'Demand Trends',
+    'Inventory Health',
+    'Forecasting',
+    'Seasonality',
+    'Insights',
+    'Settings',
+  ];
+
+  useEffect(() => {
+    if (!setTopTabs) return;
+
+    setTopTabs(
+      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={
+              activeTab === tab
+                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow'
+                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:bg-white hover:text-slate-950'
+            }
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+    );
+
+    return () => setTopTabs(null);
+  }, [activeTab, setTopTabs]);
+
+  return (
+    <div className="mt-6">
+      <div>
+        {activeTab === 'Overview' && (
+          <ProductOverview startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'SKU Performance' && (
+          <SkuPerformance startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'Demand Trends' && (
+          <DemandTrends startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'Inventory Health' && (
+          <InventoryHealth startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'Forecasting' && (
+          <Forecasting startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'Seasonality' && (
+          <SeasonalityEngine startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'Insights' && (
+          <ProductInsights startDate={startDate} endDate={endDate} />
+        )}
+
+        {activeTab === 'Settings' && <ProductSettings />}
+      </div>
+    </div>
+  );
+}
+
+
+============================================================
+FILE: .\app\components\RetentionOS.tsx
+============================================================
+
+'use client';
+
+import {
+  useState,
+} from 'react';
+
+import CommandCenter from './retention/CommandCenter';
+
+import Settings from './retention/Settings';
+
+import OpportunityBank from './retention/OpportunityBank';
+
+import PatternDiscovery from './retention/PatternDiscovery';
+
+import HypothesisLab from './retention/HypothesisLab';
+
+import ActionTracker from './retention/ActionTracker';
+
+import LearningLoop from './retention/LearningLoop';
+
+import CustomerJourney from './retention/CustomerJourney';
+
+import DailyPlanner from './retention/DailyPlanner';
+
+
+const tabs = [
+  'Mission Control',
+  'Command Center',
+  'Daily Planner',
+  'Opportunity Bank',
+  'Pattern Discovery',
+  'Hypothesis Lab',
+  'Action Tracker',
+  'Learning Loop',
+  'Settings',
+  'Customer Journey',
+];
+
+
+type RetentionOSProps = {
+  /**
+   * Universal dashboard period END date.
+   *
+   * Example:
+   * 2026-08-20
+   */
+  selectedDate?: string;
+};
+
+
+function Placeholder({
+  title,
+}: {
+  title: string;
+}) {
+
+  return (
+
+    <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl">
+
+
+      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+
+        Retention OS
+
+      </p>
+
+
+      <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">
+
+        {title}
+
+      </h2>
+
+
+      <p className="mt-2 text-sm text-slate-500">
+
+        This module will be built next.
+
+      </p>
+
+
+    </section>
+
+  );
+}
+
+
+export default function RetentionOS({
+  selectedDate,
+}: RetentionOSProps) {
+
+  const [
+    activeTab,
+    setActiveTab,
+  ] =
+    useState(
+      'Mission Control'
+    );
+
+
+  return (
+
+    <div className="space-y-5">
+
+
+      {/* =====================================================
+          RETENTION NAV
+      ===================================================== */}
+
+      <div className="rounded-[2rem] border border-slate-200 bg-white p-2 shadow-sm">
+
+
+        <div className="flex flex-wrap gap-2">
+
+
+          {tabs.map(
+            (
+              tab
+            ) => (
+
+              <button
+                key={
+                  tab
+                }
+
+                type="button"
+
+                onClick={() =>
+                  setActiveTab(
+                    tab
+                  )
+                }
+
+                className={`rounded-2xl px-4 py-2 text-xs font-black transition ${
+                  activeTab ===
+                  tab
+
+                    ? 'bg-slate-950 text-white'
+
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+
+                {tab}
+
+              </button>
+
+            )
+          )}
+
+
+        </div>
+
+
+      </div>
+
+
+      {/* =====================================================
+          COMMAND CENTER
+      ===================================================== */}
+
+      {(activeTab ===
+        'Mission Control' ||
+        activeTab ===
+          'Command Center') && (
+
+        <CommandCenter />
+
+      )}
+
+
+      {/* =====================================================
+          CUSTOMER JOURNEY
+      ===================================================== */}
+
+      {activeTab ===
+        'Customer Journey' && (
+
+        <CustomerJourney />
+
+      )}
+
+
+      {/* =====================================================
+          DAILY PLANNER
+      ===================================================== */}
+
+      {activeTab ===
+        'Daily Planner' && (
+
+        <DailyPlanner
+          selectedDate={
+            selectedDate
+          }
+        />
+
+      )}
+
+
+      {/* =====================================================
+          OPPORTUNITY BANK
+      ===================================================== */}
+
+      {activeTab ===
+        'Opportunity Bank' && (
+
+        <OpportunityBank />
+
+      )}
+
+
+      {/* =====================================================
+          PATTERN DISCOVERY
+      ===================================================== */}
+
+      {activeTab ===
+        'Pattern Discovery' && (
+
+        <PatternDiscovery />
+
+      )}
+
+
+      {/* =====================================================
+          HYPOTHESIS LAB
+      ===================================================== */}
+
+      {activeTab ===
+        'Hypothesis Lab' && (
+
+        <HypothesisLab />
+
+      )}
+
+
+      {/* =====================================================
+          SETTINGS
+      ===================================================== */}
+
+      {activeTab ===
+        'Settings' && (
+
+        <Settings />
+
+      )}
+
+
+      {/* =====================================================
+          LEARNING LOOP
+      ===================================================== */}
+
+      {activeTab ===
+        'Learning Loop' && (
+
+        <LearningLoop />
+
+      )}
+
+
+      {/* =====================================================
+          ACTION TRACKER
+      ===================================================== */}
+
+      {activeTab ===
+        'Action Tracker' && (
+
+        <ActionTracker />
+
+      )}
+
+
+      {/* =====================================================
+          PLACEHOLDER
+      ===================================================== */}
+
+      {activeTab !==
+        'Mission Control' &&
+
+        activeTab !==
+          'Command Center' &&
+
+        activeTab !==
+          'Daily Planner' &&
+
+        activeTab !==
+          'Customer Journey' &&
+
+        activeTab !==
+          'Opportunity Bank' &&
+
+        activeTab !==
+          'Pattern Discovery' &&
+
+        activeTab !==
+          'Hypothesis Lab' &&
+
+        activeTab !==
+          'Settings' &&
+
+        activeTab !==
+          'Learning Loop' &&
+
+        activeTab !==
+          'Action Tracker' && (
+
+          <Placeholder
+            title={
+              activeTab
+            }
+          />
+
+        )}
+
+
+    </div>
+
+  );
+}
