@@ -1,0 +1,2875 @@
+============================================================
+GROWTH OS - MULTI-TENANT AUTH AUDIT
+============================================================
+
+============================================================
+FILE: .\lib\auth\session.ts
+============================================================
+import 'server-only';
+
+import {
+  SignJWT,
+  jwtVerify,
+} from 'jose';
+
+import {
+  cookies,
+} from 'next/headers';
+
+import {
+  SESSION_AUDIENCE,
+  SESSION_COOKIE_NAME,
+  SESSION_ISSUER,
+  SESSION_TTL_SECONDS,
+  getSessionSecret,
+} from './config';
+
+
+// ============================================================
+// PUBLIC SESSION
+// ============================================================
+
+export type GrowthOsSession = {
+
+  userId: string;
+
+  email?: string;
+
+  tenantId: string;
+
+  authSource:
+    'public';
+
+};
+
+
+// ============================================================
+// KEY
+// ============================================================
+
+function signingKey() {
+
+  return new TextEncoder()
+    .encode(
+      getSessionSecret()
+    );
+
+}
+
+
+// ============================================================
+// CREATE JWT
+// ============================================================
+
+export async function createGrowthOsSession(
+  session: GrowthOsSession
+) {
+
+  const now =
+    Math.floor(
+      Date.now() / 1000
+    );
+
+
+  return new SignJWT(
+    {
+
+      email:
+        session.email || '',
+
+      tenantId:
+        session.tenantId,
+
+      authSource:
+        'public',
+
+    }
+  )
+
+    .setProtectedHeader(
+      {
+        alg:
+          'HS256',
+
+        typ:
+          'JWT',
+      }
+    )
+
+    .setSubject(
+      session.userId
+    )
+
+    .setIssuer(
+      SESSION_ISSUER
+    )
+
+    .setAudience(
+      SESSION_AUDIENCE
+    )
+
+    .setIssuedAt(
+      now
+    )
+
+    .setNotBefore(
+      now
+    )
+
+    .setExpirationTime(
+      now +
+      SESSION_TTL_SECONDS
+    )
+
+    .sign(
+      signingKey()
+    );
+
+}
+
+
+// ============================================================
+// VERIFY JWT
+// ============================================================
+
+export async function verifyGrowthOsSession(
+  token: string
+):
+
+  Promise<
+    GrowthOsSession
+  > {
+
+  const {
+    payload,
+  } =
+    await jwtVerify(
+
+      token,
+
+      signingKey(),
+
+      {
+
+        algorithms: [
+          'HS256',
+        ],
+
+        issuer:
+          SESSION_ISSUER,
+
+        audience:
+          SESSION_AUDIENCE,
+
+        clockTolerance:
+          5,
+
+      }
+
+    );
+
+
+  const userId =
+    String(
+      payload.sub || ''
+    );
+
+
+  const tenantId =
+    String(
+      payload.tenantId || ''
+    );
+
+
+  const authSource =
+    String(
+      payload.authSource || ''
+    );
+
+
+  if (
+    !userId ||
+    !tenantId ||
+    authSource !==
+      'public'
+  ) {
+
+    throw new Error(
+      'Invalid Growth OS session'
+    );
+
+  }
+
+
+  return {
+
+    userId,
+
+    email:
+      payload.email
+        ? String(
+            payload.email
+          )
+        : undefined,
+
+    tenantId,
+
+    authSource:
+      'public',
+
+  };
+
+}
+
+
+// ============================================================
+// WRITE COOKIE
+// ============================================================
+
+export async function setGrowthOsSessionCookie(
+  session: GrowthOsSession
+) {
+
+  const token =
+    await createGrowthOsSession(
+      session
+    );
+
+
+  const store =
+    await cookies();
+
+
+  store.set(
+
+    SESSION_COOKIE_NAME,
+
+    token,
+
+    {
+
+      httpOnly:
+        true,
+
+      secure:
+        process.env.NODE_ENV ===
+        'production',
+
+      sameSite:
+        'lax',
+
+      path:
+        '/',
+
+      maxAge:
+        SESSION_TTL_SECONDS,
+
+    }
+
+  );
+
+}
+
+
+// ============================================================
+// READ COOKIE
+// ============================================================
+
+export async function readGrowthOsSessionCookie():
+
+  Promise<
+    GrowthOsSession | null
+  > {
+
+  try {
+
+    const store =
+      await cookies();
+
+
+    const token =
+      store.get(
+        SESSION_COOKIE_NAME
+      )?.value;
+
+
+    if (!token) {
+
+      return null;
+
+    }
+
+
+    return await verifyGrowthOsSession(
+      token
+    );
+
+
+  } catch {
+
+    return null;
+
+  }
+
+}
+
+
+// ============================================================
+// CLEAR COOKIE
+// ============================================================
+
+export async function clearGrowthOsSessionCookie() {
+
+  const store =
+    await cookies();
+
+
+  store.set(
+
+    SESSION_COOKIE_NAME,
+
+    '',
+
+    {
+
+      httpOnly:
+        true,
+
+      secure:
+        process.env.NODE_ENV ===
+        'production',
+
+      sameSite:
+        'lax',
+
+      path:
+        '/',
+
+      maxAge:
+        0,
+
+    }
+
+  );
+
+}
+
+============================================================
+FILE: .\lib\auth\request-auth.ts
+============================================================
+import 'server-only';
+
+import type {
+  NextRequest,
+} from 'next/server';
+
+import {
+  SESSION_COOKIE_NAME,
+} from './config';
+
+import {
+  verifyGrowthOsSession,
+} from './session';
+
+import {
+  getBearerToken,
+  verifyShopifyIdToken,
+} from './shopify';
+
+
+// ============================================================
+// AUTH IDENTITY
+// ============================================================
+
+export type AuthIdentity = {
+
+  authSource:
+    'shopify'
+    |
+    'public';
+
+  userId: string;
+
+  tenantId: string;
+
+  email?: string;
+
+  shopId?: string;
+
+  shopDomain?: string;
+
+  sessionId?: string;
+
+};
+
+
+// ============================================================
+// AUTHENTICATE
+//
+// Priority:
+//
+// Shopify Bearer token
+//        ↓
+// Public signed cookie
+// ============================================================
+
+export async function authenticateRequest(
+  request: NextRequest
+):
+
+  Promise<
+    AuthIdentity | null
+  > {
+
+
+  // ==========================================================
+  // SHOPIFY EMBEDDED AUTH
+  // ==========================================================
+
+  const bearerToken =
+    getBearerToken(
+      request.headers.get(
+        'authorization'
+      )
+    );
+
+
+  if (bearerToken) {
+
+    try {
+
+      const identity =
+        await verifyShopifyIdToken(
+          bearerToken
+        );
+
+
+      return {
+
+        authSource:
+          'shopify',
+
+        userId:
+          identity.userId,
+
+        tenantId:
+          identity.tenantId,
+
+        shopId:
+          identity.shopId,
+
+        shopDomain:
+          identity.shopDomain,
+
+        sessionId:
+          identity.sessionId,
+
+      };
+
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        'SHOPIFY_REQUEST_AUTH_FAILED',
+        error
+      );
+
+
+      return null;
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // PUBLIC GROWTH OS LOGIN
+  // ==========================================================
+
+  const sessionToken =
+    request.cookies.get(
+      SESSION_COOKIE_NAME
+    )?.value;
+
+
+  if (!sessionToken) {
+
+    return null;
+
+  }
+
+
+  try {
+
+    const session =
+      await verifyGrowthOsSession(
+        sessionToken
+      );
+
+
+    return {
+
+      authSource:
+        'public',
+
+      userId:
+        session.userId,
+
+      tenantId:
+        session.tenantId,
+
+      email:
+        session.email,
+
+    };
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      'PUBLIC_REQUEST_AUTH_FAILED',
+      error
+    );
+
+
+    return null;
+
+  }
+
+}
+
+
+// ============================================================
+// REQUIRE AUTH
+// ============================================================
+
+export async function requireRequestAuth(
+  request: NextRequest
+):
+
+  Promise<
+    AuthIdentity
+  > {
+
+  const identity =
+    await authenticateRequest(
+      request
+    );
+
+
+  if (!identity) {
+
+    throw new Error(
+      'UNAUTHENTICATED'
+    );
+
+  }
+
+
+  return identity;
+
+}
+
+============================================================
+FILE: .\app\api\auth\login\route.ts
+============================================================
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+
+import bcrypt from 'bcryptjs';
+
+import {
+  getPublicAdminEmail,
+  getPublicAdminPasswordHash,
+  getPublicAdminTenantId,
+} from '@/lib/auth/config';
+
+import {
+  setGrowthOsSessionCookie,
+} from '@/lib/auth/session';
+
+
+export const dynamic =
+  'force-dynamic';
+
+export const runtime =
+  'nodejs';
+
+
+// ============================================================
+// PUBLIC GROWTH OS LOGIN
+// ============================================================
+
+export async function POST(
+  request: NextRequest
+) {
+
+  try {
+
+    // ========================================================
+    // 1. READ BODY
+    // ========================================================
+
+    let body:
+      any;
+
+
+    try {
+
+      body =
+        await request.json();
+
+    } catch {
+
+      return NextResponse.json(
+        {
+          ok:
+            false,
+
+          error:
+            'Invalid request body',
+        },
+        {
+          status:
+            400,
+        }
+      );
+
+    }
+
+
+    const email =
+      String(
+        body?.email || ''
+      )
+        .trim()
+        .toLowerCase();
+
+
+    const password =
+      String(
+        body?.password || ''
+      );
+
+
+    if (
+      !email ||
+      !password
+    ) {
+
+      return NextResponse.json(
+        {
+          ok:
+            false,
+
+          error:
+            'Email and password are required',
+        },
+        {
+          status:
+            400,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 2. LOAD CONFIGURED ADMIN
+    // ========================================================
+
+    const expectedEmail =
+      getPublicAdminEmail();
+
+
+    const passwordHash =
+      getPublicAdminPasswordHash();
+
+
+    // ========================================================
+    // 3. VERIFY PASSWORD
+    //
+    // Always run bcrypt comparison even if email is wrong.
+    // This avoids making the email check unnecessarily obvious
+    // through response timing.
+    // ========================================================
+
+    const passwordValid =
+      await bcrypt.compare(
+        password,
+        passwordHash
+      );
+
+
+    const emailValid =
+      email ===
+      expectedEmail;
+
+
+    if (
+      !emailValid ||
+      !passwordValid
+    ) {
+
+      return NextResponse.json(
+        {
+          ok:
+            false,
+
+          error:
+            'Invalid email or password',
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 4. CREATE GROWTH OS SESSION
+    // ========================================================
+
+    const tenantId =
+      getPublicAdminTenantId();
+
+
+    await setGrowthOsSessionCookie(
+      {
+        userId:
+          `public:${email}`,
+
+        email,
+
+        tenantId,
+
+        authSource:
+          'public',
+      }
+    );
+
+
+    // ========================================================
+    // 5. SUCCESS
+    // ========================================================
+
+    return NextResponse.json(
+      {
+        ok:
+          true,
+
+        user: {
+          email,
+          tenantId,
+          authSource:
+            'public',
+        },
+      }
+    );
+
+
+  } catch (
+    error: any
+  ) {
+
+    console.error(
+      'GROWTHOS_LOGIN_ERROR',
+      error
+    );
+
+
+    return NextResponse.json(
+      {
+        ok:
+          false,
+
+        error:
+          'Login failed',
+      },
+      {
+        status:
+          500,
+      }
+    );
+
+  }
+
+}
+
+============================================================
+FILE: .\app\api\auth\logout\route.ts
+============================================================
+import {
+  NextResponse,
+} from 'next/server';
+
+import {
+  clearGrowthOsSessionCookie,
+} from '@/lib/auth/session';
+
+
+export const dynamic =
+  'force-dynamic';
+
+
+// ============================================================
+// LOGOUT
+// ============================================================
+
+export async function POST() {
+
+  try {
+
+    await clearGrowthOsSessionCookie();
+
+
+    return NextResponse.json(
+      {
+        ok:
+          true,
+      }
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      'GROWTHOS_LOGOUT_ERROR',
+      error
+    );
+
+
+    return NextResponse.json(
+      {
+        ok:
+          false,
+
+        error:
+          'Logout failed',
+      },
+      {
+        status:
+          500,
+      }
+    );
+
+  }
+
+}
+
+============================================================
+FILE: .\app\api\auth\me\route.ts
+============================================================
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+
+import {
+  authenticateRequest,
+} from '@/lib/auth/request-auth';
+
+
+export const dynamic =
+  'force-dynamic';
+
+
+// ============================================================
+// CURRENT AUTHENTICATED USER
+// ============================================================
+
+export async function GET(
+  request: NextRequest
+) {
+
+  try {
+
+    const identity =
+      await authenticateRequest(
+        request
+      );
+
+
+    if (!identity) {
+
+      return NextResponse.json(
+        {
+          ok:
+            false,
+
+          authenticated:
+            false,
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    return NextResponse.json(
+      {
+        ok:
+          true,
+
+        authenticated:
+          true,
+
+        identity: {
+
+          authSource:
+            identity.authSource,
+
+          userId:
+            identity.userId,
+
+          tenantId:
+            identity.tenantId,
+
+          email:
+            identity.email || null,
+
+          shopId:
+            identity.shopId || null,
+
+          shopDomain:
+            identity.shopDomain || null,
+
+        },
+      }
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      'GROWTHOS_ME_ERROR',
+      error
+    );
+
+
+    return NextResponse.json(
+      {
+        ok:
+          false,
+
+        authenticated:
+          false,
+
+        error:
+          'Authentication check failed',
+      },
+      {
+        status:
+          500,
+      }
+    );
+
+  }
+
+}
+
+============================================================
+FILE: .\proxy.ts
+============================================================
+import {
+  NextRequest,
+  NextResponse,
+} from 'next/server';
+
+import {
+  authenticateRequest,
+} from './lib/auth/request-auth';
+
+
+// ============================================================
+// PUBLIC PAGES
+//
+// These pages must load before authentication.
+//
+// /login
+//   Public/direct Growth OS authentication.
+//
+// /shopify
+//   Embedded Shopify bootstrap.
+//   Shopify authentication happens through App Bridge +
+//   authenticated backend fetch requests.
+// ============================================================
+
+const PUBLIC_PAGES = new Set([
+  '/login',
+  '/shopify',
+]);
+
+
+// ============================================================
+// PUBLIC AUTH APIs
+//
+// These endpoints must remain reachable before authentication.
+//
+// NOTE:
+// /api/auth/shopify/resolve-shop performs its OWN Shopify
+// ID-token verification and is intentionally excluded from
+// normal tenant authentication until the canonical Shop ID
+// has been discovered.
+// ============================================================
+
+const PUBLIC_API_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/me',
+  '/api/auth/shopify/resolve-shop',
+  '/api/auth/shopify/bootstrap',
+  '/api/integrations/shopify/install',
+  '/api/integrations/shopify/callback',
+]);
+
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function isPublicPage(
+  pathname: string
+) {
+
+  return PUBLIC_PAGES.has(
+    pathname
+  );
+
+}
+
+
+function isPublicApi(
+  pathname: string
+) {
+
+  return PUBLIC_API_PATHS.has(
+    pathname
+  );
+
+}
+
+
+function isApiRequest(
+  pathname: string
+) {
+
+  return pathname.startsWith(
+    '/api/'
+  );
+
+}
+
+
+// ============================================================
+// PROXY
+//
+// Authentication sources:
+//
+// 1. Shopify Admin ID token
+//    Authorization: Bearer <jwt>
+//
+// 2. Growth OS public session
+//    growthos_session HttpOnly cookie
+//
+// Both are resolved through authenticateRequest().
+// ============================================================
+
+export default async function proxy(
+  request: NextRequest
+) {
+
+  const {
+    pathname,
+    search,
+  } =
+    request.nextUrl;
+
+
+  // ==========================================================
+  // 1. PUBLIC ROUTES
+  // ==========================================================
+
+  if (
+    isPublicPage(
+      pathname
+    )
+    ||
+    isPublicApi(
+      pathname
+    )
+  ) {
+
+    return NextResponse.next();
+
+  }
+
+
+  // ==========================================================
+  // 2. AUTHENTICATE REQUEST
+  // ==========================================================
+
+  const identity =
+    await authenticateRequest(
+      request
+    );
+
+
+  // ==========================================================
+  // 3. AUTHENTICATED
+  // ==========================================================
+
+  if (identity) {
+
+    /*
+     * Pass trusted identity information downstream.
+     *
+     * IMPORTANT:
+     * These headers are set by our server-side proxy,
+     * not trusted directly from the browser.
+     *
+     * Later API routes can read them if required.
+     */
+
+    const requestHeaders =
+      new Headers(
+        request.headers
+      );
+
+
+    requestHeaders.set(
+      'x-growthos-auth-source',
+      identity.authSource
+    );
+
+
+    requestHeaders.set(
+      'x-growthos-user-id',
+      identity.userId
+    );
+
+
+    requestHeaders.set(
+      'x-growthos-tenant-id',
+      identity.tenantId
+    );
+
+
+    if (
+      identity.shopId
+    ) {
+
+      requestHeaders.set(
+        'x-growthos-shop-id',
+        identity.shopId
+      );
+
+    }
+
+
+    if (
+      identity.shopDomain
+    ) {
+
+      requestHeaders.set(
+        'x-growthos-shop-domain',
+        identity.shopDomain
+      );
+
+    }
+
+
+    return NextResponse.next(
+      {
+
+        request: {
+          headers:
+            requestHeaders,
+        },
+
+      }
+    );
+
+  }
+
+
+  // ==========================================================
+  // 4. UNAUTHENTICATED API REQUEST
+  //
+  // APIs MUST return JSON.
+  //
+  // Never redirect an API to /login because frontend fetch()
+  // would receive HTML and then produce:
+  //
+  // Unexpected token '<' ...
+  //
+  // which we already encountered elsewhere.
+  // ==========================================================
+
+  if (
+    isApiRequest(
+      pathname
+    )
+  ) {
+
+    return NextResponse.json(
+      {
+
+        ok:
+          false,
+
+        authenticated:
+          false,
+
+        error:
+          'UNAUTHENTICATED',
+
+      },
+      {
+        status:
+          401,
+      }
+    );
+
+  }
+
+
+  // ==========================================================
+  // 5. UNAUTHENTICATED PAGE REQUEST
+  //
+  // Public/direct browser:
+  //
+  // / → /login
+  //
+  // Preserve requested page so we can support deep-link
+  // restoration later.
+  // ==========================================================
+
+  const loginUrl =
+    new URL(
+      '/login',
+      request.url
+    );
+
+
+  const requestedPath =
+    `${pathname}${search}`;
+
+
+  if (
+    requestedPath !==
+    '/'
+  ) {
+
+    loginUrl.searchParams.set(
+      'next',
+      requestedPath
+    );
+
+  }
+
+
+  return NextResponse.redirect(
+    loginUrl
+  );
+
+}
+
+
+// ============================================================
+// MATCHER
+//
+// Run on application routes and APIs.
+//
+// Skip:
+// - Next.js static assets
+// - image optimizer
+// - favicon
+// - common public assets
+// ============================================================
+
+export const config = {
+
+  matcher: [
+
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|woff|woff2|ttf)$).*)',
+
+  ],
+
+};
+
+============================================================
+FILE: .\lib\auth\tenant-registry.ts
+============================================================
+import 'server-only';
+
+import {
+  getPrimaryShopifyShopDomain,
+  getPrimaryShopifyShopId,
+  getPrimaryShopifyTenantId,
+  normalizeShopDomain,
+} from './config';
+
+
+// ============================================================
+// TENANT
+// ============================================================
+
+export type GrowthOsTenant = {
+
+  tenantId: string;
+
+  provider:
+    'shopify';
+
+  shopId: string;
+
+  shopDomain: string;
+
+};
+
+
+// ============================================================
+// CURRENT TENANT REGISTRY
+//
+// V1:
+// environment-backed single tenant.
+//
+// Future:
+// BigQuery / Postgres tenant registry.
+//
+// IMPORTANT:
+// Shopify Shop ID is the canonical external identity.
+// Domain is used to locate the tenant from Shopify's
+// verified ID-token "dest" claim.
+// ============================================================
+
+export function getShopifyTenants():
+
+  GrowthOsTenant[] {
+
+  const shopDomain =
+    getPrimaryShopifyShopDomain();
+
+
+  const shopId =
+    getPrimaryShopifyShopId();
+
+
+  return [
+
+    {
+
+      tenantId:
+        getPrimaryShopifyTenantId(),
+
+      provider:
+        'shopify',
+
+      shopId,
+
+      shopDomain,
+
+    },
+
+  ];
+
+}
+
+
+// ============================================================
+// LOOKUP BY VERIFIED SHOP DOMAIN
+// ============================================================
+
+export function findTenantByShopDomain(
+  shopDomain: string
+):
+
+  GrowthOsTenant | null {
+
+  const normalized =
+    normalizeShopDomain(
+      shopDomain
+    );
+
+
+  if (!normalized) {
+
+    return null;
+
+  }
+
+
+  return (
+    getShopifyTenants()
+      .find(
+        tenant =>
+          tenant.shopDomain ===
+          normalized
+      )
+    ||
+    null
+  );
+
+}
+
+
+// ============================================================
+// LOOKUP BY CANONICAL SHOP ID
+// ============================================================
+
+export function findTenantByShopId(
+  shopId: string
+):
+
+  GrowthOsTenant | null {
+
+  const normalized =
+    String(
+      shopId || ''
+    ).trim();
+
+
+  if (!normalized) {
+
+    return null;
+
+  }
+
+
+  return (
+    getShopifyTenants()
+      .find(
+        tenant =>
+          tenant.shopId ===
+          normalized
+      )
+    ||
+    null
+  );
+
+}
+
+
+// ============================================================
+// REQUIRE FULL TENANT CONFIGURATION
+// ============================================================
+
+export function requireConfiguredShopifyTenant(
+  shopDomain: string
+):
+
+  GrowthOsTenant {
+
+  const tenant =
+    findTenantByShopDomain(
+      shopDomain
+    );
+
+
+  if (!tenant) {
+
+    throw new Error(
+      `Shopify shop is not registered: ${shopDomain}`
+    );
+
+  }
+
+
+  if (!tenant.shopId) {
+
+    throw new Error(
+      'SHOPIFY_PRIMARY_SHOP_ID is not configured'
+    );
+
+  }
+
+
+  return tenant;
+
+}
+
+============================================================
+FILE: .\lib\tenancy\types.ts
+============================================================
+// ============================================================
+// GROWTH OS TENANCY TYPES
+// ============================================================
+
+
+export type WorkspaceStatus =
+  | 'active'
+  | 'inactive'
+  | 'suspended';
+
+
+export type BrandStatus =
+  | 'active'
+  | 'inactive'
+  | 'archived';
+
+
+export type Workspace = {
+
+  workspaceId: string;
+
+  workspaceName: string;
+
+  workspaceSlug: string;
+
+  status: WorkspaceStatus;
+
+};
+
+
+export type Brand = {
+
+  brandId: string;
+
+  workspaceId: string;
+
+  brandName: string;
+
+  brandSlug: string;
+
+  status: BrandStatus;
+
+  currency: string;
+
+  timezone: string;
+
+};
+
+
+export type TenantContext = {
+
+  workspaceId: string;
+
+  workspaceName: string;
+
+  workspaceSlug: string;
+
+  brandId: string;
+
+  brandName: string;
+
+  brandSlug: string;
+
+  currency: string;
+
+  timezone: string;
+
+};
+
+============================================================
+FILE: .\lib\tenancy\control-plane.ts
+============================================================
+import {
+  bigquery,
+} from '@/lib/bigquery';
+
+
+// ============================================================
+// CONFIG
+// ============================================================
+
+const PROJECT_ID =
+  process.env.GCP_PROJECT_ID
+  ||
+  process.env.BQ_PROJECT_ID
+  ||
+  '';
+
+
+const DATASET_ID =
+  process.env.GROWTHOS_CONTROL_DATASET
+  ||
+  'growthos_control';
+
+
+const LOCATION =
+  process.env.GCP_BQ_LOCATION
+  ||
+  'asia-south1';
+
+
+// ============================================================
+// TYPES
+// ============================================================
+
+export type UpsertGrowthOSTenantInput = {
+
+  workspaceId: string;
+
+  workspaceName: string;
+
+  workspaceSlug: string;
+
+  brandId: string;
+
+  brandName: string;
+
+  brandSlug: string;
+
+  currency?: string;
+
+  timezone?: string;
+
+};
+
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function requireProjectId() {
+
+  if (!PROJECT_ID) {
+
+    throw new Error(
+      'Growth OS control plane requires GCP_PROJECT_ID or BQ_PROJECT_ID'
+    );
+
+  }
+
+
+  return PROJECT_ID;
+
+}
+
+
+// ============================================================
+// ENSURE CONTROL DATASET
+// ============================================================
+
+async function ensureControlDataset() {
+
+  requireProjectId();
+
+
+  try {
+
+    await bigquery.createDataset(
+      DATASET_ID,
+      {
+        location:
+          LOCATION,
+      }
+    );
+
+  } catch (
+    error: any
+  ) {
+
+    const message =
+      String(
+        error?.message ||
+        ''
+      )
+        .toLowerCase();
+
+
+    const alreadyExists =
+      error?.code === 409
+      ||
+      message.includes(
+        'already exists'
+      );
+
+
+    if (!alreadyExists) {
+
+      throw error;
+
+    }
+
+  }
+
+}
+
+
+// ============================================================
+// WORKSPACES
+// ============================================================
+
+async function ensureWorkspacesTable() {
+
+  const projectId =
+    requireProjectId();
+
+
+  const query = `
+
+    CREATE TABLE IF NOT EXISTS
+      \`${projectId}.${DATASET_ID}.workspaces\`
+    (
+
+      workspace_id STRING,
+
+      workspace_name STRING,
+
+      workspace_slug STRING,
+
+      status STRING,
+
+      created_at TIMESTAMP,
+
+      updated_at TIMESTAMP
+
+    )
+
+    CLUSTER BY
+      workspace_id,
+      status
+
+  `;
+
+
+  await bigquery.query({
+
+    query,
+
+    location:
+      LOCATION,
+
+  });
+
+}
+
+
+// ============================================================
+// BRANDS
+// ============================================================
+
+async function ensureBrandsTable() {
+
+  const projectId =
+    requireProjectId();
+
+
+  const query = `
+
+    CREATE TABLE IF NOT EXISTS
+      \`${projectId}.${DATASET_ID}.brands\`
+    (
+
+      brand_id STRING,
+
+      workspace_id STRING,
+
+      brand_name STRING,
+
+      brand_slug STRING,
+
+      status STRING,
+
+      currency STRING,
+
+      timezone STRING,
+
+      created_at TIMESTAMP,
+
+      updated_at TIMESTAMP
+
+    )
+
+    CLUSTER BY
+      workspace_id,
+      brand_id,
+      status
+
+  `;
+
+
+  await bigquery.query({
+
+    query,
+
+    location:
+      LOCATION,
+
+  });
+
+}
+
+
+// ============================================================
+// CONTROL PLANE BOOTSTRAP
+//
+// Idempotent.
+// Safe to call repeatedly.
+// ============================================================
+
+export async function ensureGrowthOSControlPlane() {
+
+  await ensureControlDataset();
+
+  await ensureWorkspacesTable();
+
+  await ensureBrandsTable();
+
+}
+
+
+// ============================================================
+// GENERIC TENANT UPSERT
+//
+// CANONICAL SAAS TENANT PROVISIONING FUNCTION.
+//
+// Used by:
+//
+// development bootstrap
+// Shopify installation
+// future manual onboarding
+// future admin provisioning
+//
+// This function contains NO provider-specific logic.
+// ============================================================
+
+export async function upsertGrowthOSTenant(
+  input: UpsertGrowthOSTenantInput
+) {
+
+  await ensureGrowthOSControlPlane();
+
+
+  const workspaceId =
+    String(
+      input.workspaceId || ''
+    ).trim();
+
+
+  const workspaceName =
+    String(
+      input.workspaceName || ''
+    ).trim();
+
+
+  const workspaceSlug =
+    String(
+      input.workspaceSlug || ''
+    ).trim();
+
+
+  const brandId =
+    String(
+      input.brandId || ''
+    ).trim();
+
+
+  const brandName =
+    String(
+      input.brandName || ''
+    ).trim();
+
+
+  const brandSlug =
+    String(
+      input.brandSlug || ''
+    ).trim();
+
+
+  const currency =
+    String(
+      input.currency
+      ||
+      'INR'
+    )
+      .trim()
+      .toUpperCase();
+
+
+  const timezone =
+    String(
+      input.timezone
+      ||
+      'Asia/Kolkata'
+    ).trim();
+
+
+  // ==========================================================
+  // VALIDATION
+  // ==========================================================
+
+  if (
+    !workspaceId
+    ||
+    !workspaceName
+    ||
+    !workspaceSlug
+    ||
+    !brandId
+    ||
+    !brandName
+    ||
+    !brandSlug
+  ) {
+
+    throw new Error(
+      'Growth OS tenant provisioning requires workspace and brand identity'
+    );
+
+  }
+
+
+  const projectId =
+    requireProjectId();
+
+
+  // ==========================================================
+  // UPSERT WORKSPACE
+  // ==========================================================
+
+  const workspaceQuery = `
+
+    MERGE
+      \`${projectId}.${DATASET_ID}.workspaces\`
+      AS target
+
+    USING
+    (
+      SELECT
+
+        @workspace_id
+          AS workspace_id,
+
+        @workspace_name
+          AS workspace_name,
+
+        @workspace_slug
+          AS workspace_slug
+
+    )
+    AS source
+
+
+    ON
+      target.workspace_id =
+      source.workspace_id
+
+
+    WHEN MATCHED THEN
+
+      UPDATE SET
+
+        workspace_name =
+          source.workspace_name,
+
+        workspace_slug =
+          source.workspace_slug,
+
+        status =
+          'active',
+
+        updated_at =
+          CURRENT_TIMESTAMP()
+
+
+    WHEN NOT MATCHED THEN
+
+      INSERT
+      (
+
+        workspace_id,
+
+        workspace_name,
+
+        workspace_slug,
+
+        status,
+
+        created_at,
+
+        updated_at
+
+      )
+
+      VALUES
+      (
+
+        source.workspace_id,
+
+        source.workspace_name,
+
+        source.workspace_slug,
+
+        'active',
+
+        CURRENT_TIMESTAMP(),
+
+        CURRENT_TIMESTAMP()
+
+      )
+
+  `;
+
+
+  await bigquery.query({
+
+    query:
+      workspaceQuery,
+
+    location:
+      LOCATION,
+
+    params: {
+
+      workspace_id:
+        workspaceId,
+
+      workspace_name:
+        workspaceName,
+
+      workspace_slug:
+        workspaceSlug,
+
+    },
+
+  });
+
+
+  // ==========================================================
+  // UPSERT BRAND
+  // ==========================================================
+
+  const brandQuery = `
+
+    MERGE
+      \`${projectId}.${DATASET_ID}.brands\`
+      AS target
+
+    USING
+    (
+      SELECT
+
+        @brand_id
+          AS brand_id,
+
+        @workspace_id
+          AS workspace_id,
+
+        @brand_name
+          AS brand_name,
+
+        @brand_slug
+          AS brand_slug,
+
+        @currency
+          AS currency,
+
+        @timezone
+          AS timezone
+
+    )
+    AS source
+
+
+    ON
+      target.workspace_id =
+      source.workspace_id
+
+      AND target.brand_id =
+      source.brand_id
+
+
+    WHEN MATCHED THEN
+
+      UPDATE SET
+
+        brand_name =
+          source.brand_name,
+
+        brand_slug =
+          source.brand_slug,
+
+        currency =
+          source.currency,
+
+        timezone =
+          source.timezone,
+
+        status =
+          'active',
+
+        updated_at =
+          CURRENT_TIMESTAMP()
+
+
+    WHEN NOT MATCHED THEN
+
+      INSERT
+      (
+
+        brand_id,
+
+        workspace_id,
+
+        brand_name,
+
+        brand_slug,
+
+        status,
+
+        currency,
+
+        timezone,
+
+        created_at,
+
+        updated_at
+
+      )
+
+      VALUES
+      (
+
+        source.brand_id,
+
+        source.workspace_id,
+
+        source.brand_name,
+
+        source.brand_slug,
+
+        'active',
+
+        source.currency,
+
+        source.timezone,
+
+        CURRENT_TIMESTAMP(),
+
+        CURRENT_TIMESTAMP()
+
+      )
+
+  `;
+
+
+  await bigquery.query({
+
+    query:
+      brandQuery,
+
+    location:
+      LOCATION,
+
+    params: {
+
+      brand_id:
+        brandId,
+
+      workspace_id:
+        workspaceId,
+
+      brand_name:
+        brandName,
+
+      brand_slug:
+        brandSlug,
+
+      currency,
+
+      timezone,
+
+    },
+
+  });
+
+
+  return {
+
+    workspaceId,
+
+    workspaceName,
+
+    workspaceSlug,
+
+    brandId,
+
+    brandName,
+
+    brandSlug,
+
+    currency,
+
+    timezone,
+
+  };
+
+}
+
+
+// ============================================================
+// DEVELOPMENT TENANT
+//
+// DEVELOPMENT COMPATIBILITY ONLY.
+//
+// Brillare currently comes from environment configuration.
+//
+// The actual database provisioning is delegated to the same
+// generic function future Shopify installations will use.
+// ============================================================
+
+export async function bootstrapDevelopmentTenant() {
+
+  const workspaceId =
+    process.env.GROWTHOS_DEFAULT_WORKSPACE_ID;
+
+
+  const workspaceName =
+    process.env.GROWTHOS_DEFAULT_WORKSPACE_NAME;
+
+
+  const brandId =
+    process.env.GROWTHOS_DEFAULT_BRAND_ID;
+
+
+  const brandName =
+    process.env.GROWTHOS_DEFAULT_BRAND_NAME;
+
+
+  const currency =
+    process.env.GROWTHOS_DEFAULT_CURRENCY
+    ||
+    'INR';
+
+
+  const timezone =
+    process.env.GROWTHOS_DEFAULT_TIMEZONE
+    ||
+    'Asia/Kolkata';
+
+
+  if (
+    !workspaceId
+    ||
+    !workspaceName
+    ||
+    !brandId
+    ||
+    !brandName
+  ) {
+
+    throw new Error(
+      'Growth OS development workspace configuration is incomplete'
+    );
+
+  }
+
+
+  return upsertGrowthOSTenant({
+
+    workspaceId,
+
+    workspaceName,
+
+    workspaceSlug:
+      workspaceId,
+
+    brandId,
+
+    brandName,
+
+    brandSlug:
+      brandId,
+
+    currency,
+
+    timezone,
+
+  });
+
+}
+
+============================================================
+FILE: .\lib\tenancy\context.ts
+============================================================
+import {
+  bigquery,
+} from '@/lib/bigquery';
+
+import type {
+  TenantContext,
+} from './types';
+
+
+// ============================================================
+// CONFIG
+// ============================================================
+
+const PROJECT_ID =
+  process.env.GCP_PROJECT_ID
+  ||
+  process.env.BQ_PROJECT_ID
+  ||
+  '';
+
+
+const DATASET_ID =
+  process.env.GROWTHOS_CONTROL_DATASET
+  ||
+  'growthos_control';
+
+
+// ============================================================
+// INTERNAL VALIDATION
+// ============================================================
+
+function requireProjectId() {
+
+  if (!PROJECT_ID) {
+
+    throw new Error(
+      'Tenant context requires GCP_PROJECT_ID or BQ_PROJECT_ID'
+    );
+
+  }
+
+
+  return PROJECT_ID;
+
+}
+
+
+// ============================================================
+// RESOLVE TENANT BY IDS
+//
+// Canonical resolver when workspace + brand identity is
+// already known.
+//
+// Used by:
+//
+// authenticated Growth OS users
+// Shopify installation mapping
+// future Google / Meta account mapping
+// admin workflows
+// ============================================================
+
+export async function resolveTenantContextById(
+  workspaceId: string,
+  brandId: string
+):
+  Promise<TenantContext> {
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedWorkspaceId =
+    String(
+      workspaceId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedBrandId =
+    String(
+      brandId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !normalizedWorkspaceId
+    ||
+    !normalizedBrandId
+  ) {
+
+    throw new Error(
+      'Workspace and brand identity are required'
+    );
+
+  }
+
+
+  const query = `
+
+    SELECT
+
+      w.workspace_id,
+      w.workspace_name,
+      w.workspace_slug,
+
+      b.brand_id,
+      b.brand_name,
+      b.brand_slug,
+
+      b.currency,
+      b.timezone
+
+    FROM
+      \`${projectId}.${DATASET_ID}.workspaces\`
+      AS w
+
+    JOIN
+      \`${projectId}.${DATASET_ID}.brands\`
+      AS b
+
+      ON
+        b.workspace_id =
+        w.workspace_id
+
+    WHERE
+
+      w.workspace_id =
+        @workspace_id
+
+      AND b.brand_id =
+        @brand_id
+
+      AND w.status =
+        'active'
+
+      AND b.status =
+        'active'
+
+    LIMIT 1
+
+  `;
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query,
+
+      params: {
+
+        workspace_id:
+          normalizedWorkspaceId,
+
+        brand_id:
+          normalizedBrandId,
+
+      },
+
+    });
+
+
+  const row =
+    rows?.[0];
+
+
+  if (!row) {
+
+    throw new Error(
+      `Growth OS tenant could not be resolved: ${normalizedWorkspaceId}/${normalizedBrandId}`
+    );
+
+  }
+
+
+  return {
+
+    workspaceId:
+      String(
+        row.workspace_id
+      ),
+
+    workspaceName:
+      String(
+        row.workspace_name
+      ),
+
+    workspaceSlug:
+      String(
+        row.workspace_slug
+      ),
+
+    brandId:
+      String(
+        row.brand_id
+      ),
+
+    brandName:
+      String(
+        row.brand_name
+      ),
+
+    brandSlug:
+      String(
+        row.brand_slug
+      ),
+
+    currency:
+      String(
+        row.currency
+        ||
+        'INR'
+      ),
+
+    timezone:
+      String(
+        row.timezone
+        ||
+        'Asia/Kolkata'
+      ),
+
+  };
+
+}
+
+
+// ============================================================
+// CURRENT TENANT CONTEXT
+//
+// CURRENT DEVELOPMENT:
+//
+// environment defaults
+//        ↓
+// resolveTenantContextById()
+//
+// FUTURE:
+//
+// authenticated user
+//        ↓
+// workspace membership
+//        ↓
+// selected workspace + brand
+//
+// API consumers should not need to know where tenant identity
+// came from.
+// ============================================================
+
+export async function resolveTenantContext():
+  Promise<TenantContext> {
+
+  requireProjectId();
+
+
+  const workspaceId =
+    String(
+      process.env.GROWTHOS_DEFAULT_WORKSPACE_ID
+      ||
+      ''
+    ).trim();
+
+
+  const brandId =
+    String(
+      process.env.GROWTHOS_DEFAULT_BRAND_ID
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !workspaceId
+    ||
+    !brandId
+  ) {
+
+    throw new Error(
+      'Default Growth OS tenant is not configured'
+    );
+
+  }
+
+
+  return resolveTenantContextById(
+    workspaceId,
+    brandId
+  );
+
+}
+
+============================================================
+USER / MEMBERSHIP REFERENCES
+============================================================
+
+  app\api\auth\shopify\resolve-shop\route.ts:211:
+  app\api\auth\shopify\resolve-shop\route.ts:212:        providerUserId:
+> app\api\auth\shopify\resolve-shop\route.ts:213:          connection.provider_user_id
+  app\api\auth\shopify\resolve-shop\route.ts:214:          ??
+  app\api\auth\shopify\resolve-shop\route.ts:215:          null,
+  app\api\auth\shopify\resolve-shop\route.ts:216:
+  app\api\auth\shopify\resolve-shop\route.ts:217:        providerUserName:
+  app\api\auth\shopify\resolve-shop\route.ts:218:          connection.provider_user_name
+  app\api\auth\shopify\resolve-shop\route.ts:219:          ??
+  app\api\integrations\meta\callback\route.ts:331:            longToken.expiresIn,
+  app\api\integrations\meta\callback\route.ts:332:
+> app\api\integrations\meta\callback\route.ts:333:          meta_user_id:
+  app\api\integrations\meta\callback\route.ts:334:            metaUser.id,
+  app\api\integrations\meta\callback\route.ts:335:
+  app\api\integrations\meta\callback\route.ts:336:          meta_user_name:
+  app\api\integrations\meta\callback\route.ts:337:            metaUser.name,
+  app\api\integrations\meta\callback\route.ts:338:
+  app\api\integrations\meta\callback\route.ts:339:          issued_at:
+  app\api\integrations\meta\select-account\route.ts:232:
+  app\api\integrations\meta\select-account\route.ts:233:        providerUserId:
+> app\api\integrations\meta\select-account\route.ts:234:          connection.provider_user_id
+  app\api\integrations\meta\select-account\route.ts:235:          ??
+  app\api\integrations\meta\select-account\route.ts:236:          null,
+  app\api\integrations\meta\select-account\route.ts:237:
+  app\api\integrations\meta\select-account\route.ts:238:        providerUserName:
+  app\api\integrations\meta\select-account\route.ts:239:          connection.provider_user_name
+  app\api\integrations\meta\select-account\route.ts:240:          ??
+  app\components\settings\GrowthSettings.tsx:17:  ShieldCheck,
+  app\components\settings\GrowthSettings.tsx:18:  SlidersHorizontal,
+> app\components\settings\GrowthSettings.tsx:19:  Users,
+  app\components\settings\GrowthSettings.tsx:20:} from 'lucide-react';
+  app\components\settings\GrowthSettings.tsx:21:
+  app\components\settings\GrowthSettings.tsx:22:
+  app\components\settings\GrowthSettings.tsx:23:/* ============================================================
+  app\components\settings\GrowthSettings.tsx:24:   TYPES
+  app\components\settings\GrowthSettings.tsx:25:============================================================ */
+  app\components\settings\GrowthSettings.tsx:31:  | 'Business Rules'
+  app\components\settings\GrowthSettings.tsx:32:  | 'Data & Sync'
+> app\components\settings\GrowthSettings.tsx:33:  | 'Users & Access'
+  app\components\settings\GrowthSettings.tsx:34:  | 'Plans & Usage';
+  app\components\settings\GrowthSettings.tsx:35:
+  app\components\settings\GrowthSettings.tsx:36:
+  app\components\settings\GrowthSettings.tsx:37:type Plan =
+  app\components\settings\GrowthSettings.tsx:38:  | 'starter'
+  app\components\settings\GrowthSettings.tsx:39:  | 'pro'
+  app\components\settings\GrowthSettings.tsx:580:  {
+  app\components\settings\GrowthSettings.tsx:581:    name:
+> app\components\settings\GrowthSettings.tsx:582:      'Users & Access',
+  app\components\settings\GrowthSettings.tsx:583:
+  app\components\settings\GrowthSettings.tsx:584:    icon:
+> app\components\settings\GrowthSettings.tsx:585:      Users,
+  app\components\settings\GrowthSettings.tsx:586:  },
+  app\components\settings\GrowthSettings.tsx:587:
+  app\components\settings\GrowthSettings.tsx:588:  {
+  app\components\settings\GrowthSettings.tsx:589:    name:
+  app\components\settings\GrowthSettings.tsx:590:      'Plans & Usage',
+  app\components\settings\GrowthSettings.tsx:591:
+  app\components\settings\GrowthSettings.tsx:2275:
+  app\components\settings\GrowthSettings.tsx:2276:          {/* =================================================
+> app\components\settings\GrowthSettings.tsx:2277:              USERS & ACCESS
+  app\components\settings\GrowthSettings.tsx:2278:          ================================================= */}
+  app\components\settings\GrowthSettings.tsx:2279:
+  app\components\settings\GrowthSettings.tsx:2280:          {activeTab ===
+> app\components\settings\GrowthSettings.tsx:2281:            'Users & Access' && (
+  app\components\settings\GrowthSettings.tsx:2282:
+  app\components\settings\GrowthSettings.tsx:2283:            <SettingsPanel
+> app\components\settings\GrowthSettings.tsx:2284:              title="Users & Access"
+  app\components\settings\GrowthSettings.tsx:2285:              description="Role-based access control for Growth OS."
+  app\components\settings\GrowthSettings.tsx:2286:            >
+  app\components\settings\GrowthSettings.tsx:2287:
+  app\components\settings\GrowthSettings.tsx:2288:              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+  app\components\settings\GrowthSettings.tsx:2289:
+  app\components\settings\GrowthSettings.tsx:2290:                <RoleCard
+  app\components\settings\GrowthSettings.tsx:2635:
+  app\components\settings\GrowthSettings.tsx:2636:                <UsageCard
+> app\components\settings\GrowthSettings.tsx:2637:                  label="Users"
+  app\components\settings\GrowthSettings.tsx:2638:                  value="Not connected"
+  app\components\settings\GrowthSettings.tsx:2639:                />
+  app\components\settings\GrowthSettings.tsx:2640:
+  app\components\settings\GrowthSettings.tsx:2641:              </div>
+  app\components\settings\GrowthSettings.tsx:2642:
+  app\components\settings\GrowthSettings.tsx:2643:            </SettingsPanel>
+  app\components\settings\GrowthSettings.tsx:3076:      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+  app\components\settings\GrowthSettings.tsx:3077:
+> app\components\settings\GrowthSettings.tsx:3078:        <Users
+  app\components\settings\GrowthSettings.tsx:3079:          size={16}
+  app\components\settings\GrowthSettings.tsx:3080:        />
+  app\components\settings\GrowthSettings.tsx:3081:
+  app\components\settings\GrowthSettings.tsx:3082:      </div>
+  app\components\settings\GrowthSettings.tsx:3083:
+  app\components\settings\GrowthSettings.tsx:3084:
+  app\login\page.tsx:531:
+  app\login\page.tsx:532:        <p className="mt-5 text-center text-[11px] leading-5 text-slate-400">
+> app\login\page.tsx:533:          Shopify users should open Growth OS through the installed Shopify app.
+  app\login\page.tsx:534:        </p>
+  app\login\page.tsx:535:
+  app\login\page.tsx:536:
+  app\login\page.tsx:537:      </section>
+  app\login\page.tsx:538:
+  app\login\page.tsx:539:    </main>
+  lib\auth\config.ts:43:
+  lib\auth\config.ts:44:export const SESSION_COOKIE_NAME =
+> lib\auth\config.ts:45:  'growthos_session';
+  lib\auth\config.ts:46:
+  lib\auth\config.ts:47:export const SESSION_ISSUER =
+  lib\auth\config.ts:48:  'growthos';
+  lib\auth\config.ts:49:
+  lib\auth\config.ts:50:export const SESSION_AUDIENCE =
+  lib\auth\config.ts:51:  'growthos-web';
+  lib\auth\config.ts:63:  const secret =
+  lib\auth\config.ts:64:    requiredEnv(
+> lib\auth\config.ts:65:      'GROWTHOS_SESSION_SECRET'
+  lib\auth\config.ts:66:    );
+  lib\auth\config.ts:67:
+  lib\auth\config.ts:68:
+  lib\auth\config.ts:69:  if (
+  lib\auth\config.ts:70:    secret.length < 32
+  lib\auth\config.ts:71:  ) {
+  lib\auth\config.ts:72:
+  lib\auth\config.ts:73:    throw new Error(
+> lib\auth\config.ts:74:      'GROWTHOS_SESSION_SECRET must be at least 32 characters'
+  lib\auth\config.ts:75:    );
+  lib\auth\config.ts:76:
+  lib\auth\config.ts:77:  }
+  lib\auth\config.ts:78:
+  lib\auth\config.ts:79:
+  lib\auth\config.ts:80:  return secret;
+  lib\auth\config.ts:90:
+  lib\auth\config.ts:91:  return requiredEnv(
+> lib\auth\config.ts:92:    'GROWTHOS_ADMIN_EMAIL'
+  lib\auth\config.ts:93:  )
+  lib\auth\config.ts:94:    .toLowerCase();
+  lib\auth\config.ts:95:
+  lib\auth\config.ts:96:}
+  lib\auth\config.ts:97:
+  lib\auth\config.ts:98:
+  lib\auth\config.ts:100:
+  lib\auth\config.ts:101:  return requiredEnv(
+> lib\auth\config.ts:102:    'GROWTHOS_ADMIN_PASSWORD_HASH'
+  lib\auth\config.ts:103:  );
+  lib\auth\config.ts:104:
+  lib\auth\config.ts:105:}
+  lib\auth\config.ts:106:
+  lib\auth\config.ts:107:
+  lib\auth\config.ts:108:export function getPublicAdminTenantId() {
+  lib\auth\config.ts:110:  return (
+  lib\auth\config.ts:111:    env(
+> lib\auth\config.ts:112:      'GROWTHOS_ADMIN_TENANT_ID'
+  lib\auth\config.ts:113:    )
+  lib\auth\config.ts:114:    ||
+  lib\auth\config.ts:115:    'brillare'
+  lib\auth\config.ts:116:  );
+  lib\auth\config.ts:117:
+  lib\auth\config.ts:118:}
+  lib\integrations\control-plane.ts:147:      status STRING NOT NULL,
+  lib\integrations\control-plane.ts:148:
+> lib\integrations\control-plane.ts:149:      provider_user_id STRING,
+  lib\integrations\control-plane.ts:150:
+  lib\integrations\control-plane.ts:151:      provider_user_name STRING,
+  lib\integrations\control-plane.ts:152:
+  lib\integrations\control-plane.ts:153:      provider_account_id STRING,
+  lib\integrations\control-plane.ts:154:
+  lib\integrations\control-plane.ts:155:      provider_account_name STRING,
+  lib\integrations\store.ts:28:  status: string;
+  lib\integrations\store.ts:29:
+> lib\integrations\store.ts:30:  provider_user_id?: string | null;
+  lib\integrations\store.ts:31:
+  lib\integrations\store.ts:32:  provider_user_name?: string | null;
+  lib\integrations\store.ts:33:
+  lib\integrations\store.ts:34:  provider_account_id?: string | null;
+  lib\integrations\store.ts:35:
+  lib\integrations\store.ts:36:  provider_account_name?: string | null;
+  lib\integrations\store.ts:289:            status STRING NOT NULL,
+  lib\integrations\store.ts:290:
+> lib\integrations\store.ts:291:            provider_user_id STRING,
+  lib\integrations\store.ts:292:
+  lib\integrations\store.ts:293:            provider_user_name STRING,
+  lib\integrations\store.ts:294:
+  lib\integrations\store.ts:295:            provider_account_id STRING,
+  lib\integrations\store.ts:296:
+  lib\integrations\store.ts:297:            provider_account_name STRING,
+  lib\integrations\store.ts:646:          AS status,
+  lib\integrations\store.ts:647:
+> lib\integrations\store.ts:648:        @provider_user_id
+> lib\integrations\store.ts:649:          AS provider_user_id,
+  lib\integrations\store.ts:650:
+  lib\integrations\store.ts:651:        @provider_user_name
+  lib\integrations\store.ts:652:          AS provider_user_name,
+  lib\integrations\store.ts:653:
+  lib\integrations\store.ts:654:        @provider_account_id
+  lib\integrations\store.ts:655:          AS provider_account_id,
+  lib\integrations\store.ts:695:          source.status,
+  lib\integrations\store.ts:696:
+> lib\integrations\store.ts:697:        provider_user_id =
+> lib\integrations\store.ts:698:          source.provider_user_id,
+  lib\integrations\store.ts:699:
+  lib\integrations\store.ts:700:        provider_user_name =
+  lib\integrations\store.ts:701:          source.provider_user_name,
+  lib\integrations\store.ts:702:
+  lib\integrations\store.ts:703:        provider_account_id =
+  lib\integrations\store.ts:704:          source.provider_account_id,
+  lib\integrations\store.ts:739:        status,
+  lib\integrations\store.ts:740:
+> lib\integrations\store.ts:741:        provider_user_id,
+  lib\integrations\store.ts:742:
+  lib\integrations\store.ts:743:        provider_user_name,
+  lib\integrations\store.ts:744:
+  lib\integrations\store.ts:745:        provider_account_id,
+  lib\integrations\store.ts:746:
+  lib\integrations\store.ts:747:        provider_account_name,
+  lib\integrations\store.ts:776:        source.status,
+  lib\integrations\store.ts:777:
+> lib\integrations\store.ts:778:        source.provider_user_id,
+  lib\integrations\store.ts:779:
+  lib\integrations\store.ts:780:        source.provider_user_name,
+  lib\integrations\store.ts:781:
+  lib\integrations\store.ts:782:        source.provider_account_id,
+  lib\integrations\store.ts:783:
+  lib\integrations\store.ts:784:        source.provider_account_name,
+  lib\integrations\store.ts:829:        input.status,
+  lib\integrations\store.ts:830:
+> lib\integrations\store.ts:831:      provider_user_id:
+  lib\integrations\store.ts:832:        input.providerUserId
+  lib\integrations\store.ts:833:        ??
+  lib\integrations\store.ts:834:        null,
+  lib\integrations\store.ts:835:
+  lib\integrations\store.ts:836:      provider_user_name:
+  lib\integrations\store.ts:837:        input.providerUserName
+  lib\integrations\store.ts:884:        'STRING',
+  lib\integrations\store.ts:885:
+> lib\integrations\store.ts:886:      provider_user_id:
+  lib\integrations\store.ts:887:        'STRING',
+  lib\integrations\store.ts:888:
+  lib\integrations\store.ts:889:      provider_user_name:
+  lib\integrations\store.ts:890:        'STRING',
+  lib\integrations\store.ts:891:
+  lib\integrations\store.ts:892:      provider_account_id:
+  lib\integrations\store.ts:1334:      status,
+  lib\integrations\store.ts:1335:
+> lib\integrations\store.ts:1336:      provider_user_id,
+  lib\integrations\store.ts:1337:
+  lib\integrations\store.ts:1338:      provider_user_name,
+  lib\integrations\store.ts:1339:
+  lib\integrations\store.ts:1340:      provider_account_id,
+  lib\integrations\store.ts:1341:
+  lib\integrations\store.ts:1342:      provider_account_name,
+  lib\integrations\store.ts:1471:      status,
+  lib\integrations\store.ts:1472:
+> lib\integrations\store.ts:1473:      provider_user_id,
+  lib\integrations\store.ts:1474:
+  lib\integrations\store.ts:1475:      provider_user_name,
+  lib\integrations\store.ts:1476:
+  lib\integrations\store.ts:1477:      provider_account_id,
+  lib\integrations\store.ts:1478:
+  lib\integrations\store.ts:1479:      provider_account_name,
+  lib\tenancy\context.ts:54:// Used by:
+  lib\tenancy\context.ts:55://
+> lib\tenancy\context.ts:56:// authenticated Growth OS users
+  lib\tenancy\context.ts:57:// Shopify installation mapping
+  lib\tenancy\context.ts:58:// future Google / Meta account mapping
+  lib\tenancy\context.ts:59:// admin workflows
+  lib\tenancy\context.ts:60:// ============================================================
+  lib\tenancy\context.ts:61:
+  lib\tenancy\context.ts:62:export async function resolveTenantContextById(
+  proxy.ts:98://
+  proxy.ts:99:// 2. Growth OS public session
+> proxy.ts:100://    growthos_session HttpOnly cookie
+  proxy.ts:101://
+  proxy.ts:102:// Both are resolved through authenticateRequest().
+  proxy.ts:103:// ============================================================
+  proxy.ts:104:
+  proxy.ts:105:export default async function proxy(
+  proxy.ts:106:  request: NextRequest
+
+
+

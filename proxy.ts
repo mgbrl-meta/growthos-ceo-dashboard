@@ -44,6 +44,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/me',
+  '/api/auth/shopify/launch',
   '/api/auth/shopify/resolve-shop',
   '/api/auth/shopify/bootstrap',
   '/api/integrations/shopify/install',
@@ -180,6 +181,53 @@ export default async function proxy(
       'x-growthos-tenant-id',
       identity.tenantId
     );
+
+    if (
+  identity.workspaceId
+) {
+
+  requestHeaders.set(
+    'x-growthos-workspace-id',
+    identity.workspaceId
+  );
+
+}
+
+
+if (
+  identity.brandId
+) {
+
+  requestHeaders.set(
+    'x-growthos-brand-id',
+    identity.brandId
+  );
+
+}
+
+
+if (
+  identity.role
+) {
+
+  requestHeaders.set(
+    'x-growthos-role',
+    identity.role
+  );
+
+}
+
+
+if (
+  identity.authMethod
+) {
+
+  requestHeaders.set(
+    'x-growthos-auth-method',
+    identity.authMethod
+  );
+
+}
 
 
     if (

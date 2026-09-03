@@ -10,6 +10,8 @@ import {
 
 import {
   verifyGrowthOsSession,
+  type GrowthOsSessionRole,
+  type GrowthOsSessionAuthMethod,
 } from './session';
 
 import {
@@ -20,6 +22,19 @@ import {
 
 // ============================================================
 // AUTH IDENTITY
+//
+// Canonical request identity.
+//
+// Public/password sessions now carry:
+//
+// workspaceId
+// brandId
+// role
+// authMethod
+//
+// Shopify bearer authentication remains supported while we
+// migrate it to dynamic integration-account resolution in
+// AUTH 5.
 // ============================================================
 
 export type AuthIdentity = {
@@ -29,17 +44,47 @@ export type AuthIdentity = {
     |
     'public';
 
-  userId: string;
+  userId:
+    string;
 
-  tenantId: string;
+  email?:
+    string;
 
-  email?: string;
+  // ----------------------------------------------------------
+  // CURRENT ACTIVE GROWTH OS CONTEXT
+  // ----------------------------------------------------------
 
-  shopId?: string;
+  workspaceId?:
+    string;
 
-  shopDomain?: string;
+  brandId?:
+    string;
 
-  sessionId?: string;
+  role?:
+    GrowthOsSessionRole;
+
+  authMethod?:
+    GrowthOsSessionAuthMethod;
+
+  // ----------------------------------------------------------
+  // TEMPORARY LEGACY COMPATIBILITY
+  // ----------------------------------------------------------
+
+  tenantId:
+    string;
+
+  // ----------------------------------------------------------
+  // SHOPIFY IDENTITY
+  // ----------------------------------------------------------
+
+  shopId?:
+    string;
+
+  shopDomain?:
+    string;
+
+  sessionId?:
+    string;
 
 };
 
@@ -51,7 +96,7 @@ export type AuthIdentity = {
 //
 // Shopify Bearer token
 //        ↓
-// Public signed cookie
+// Growth OS signed session cookie
 // ============================================================
 
 export async function authenticateRequest(
@@ -64,7 +109,10 @@ export async function authenticateRequest(
 
 
   // ==========================================================
-  // SHOPIFY EMBEDDED AUTH
+  // 1. SHOPIFY ADMIN AUTH
+  //
+  // AUTH 5 will replace its remaining legacy tenant lookup
+  // with integration_accounts.
   // ==========================================================
 
   const bearerToken =
@@ -96,6 +144,9 @@ export async function authenticateRequest(
         tenantId:
           identity.tenantId,
 
+        authMethod:
+          'shopify',
+
         shopId:
           identity.shopId,
 
@@ -106,7 +157,6 @@ export async function authenticateRequest(
           identity.sessionId,
 
       };
-
 
     } catch (
       error
@@ -126,13 +176,16 @@ export async function authenticateRequest(
 
 
   // ==========================================================
-  // PUBLIC GROWTH OS LOGIN
+  // 2. GROWTH OS SESSION COOKIE
   // ==========================================================
 
   const sessionToken =
-    request.cookies.get(
-      SESSION_COOKIE_NAME
-    )?.value;
+    request
+      .cookies
+      .get(
+        SESSION_COOKIE_NAME
+      )
+      ?.value;
 
 
   if (!sessionToken) {
@@ -158,14 +211,25 @@ export async function authenticateRequest(
       userId:
         session.userId,
 
-      tenantId:
-        session.tenantId,
-
       email:
         session.email,
 
-    };
+      workspaceId:
+        session.workspaceId,
 
+      brandId:
+        session.brandId,
+
+      role:
+        session.role,
+
+      authMethod:
+        session.authMethod,
+
+      tenantId:
+        session.tenantId,
+
+    };
 
   } catch (
     error

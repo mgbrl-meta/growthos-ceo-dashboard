@@ -6,10 +6,11 @@ import {
 import bcrypt from 'bcryptjs';
 
 import {
-  getPublicAdminEmail,
-  getPublicAdminPasswordHash,
-  getPublicAdminTenantId,
-} from '@/lib/auth/config';
+  getDefaultBrandMembership,
+  getGrowthOSUserByEmail,
+  listActiveBrandMemberships,
+  touchGrowthOSUserLogin,
+} from '@/lib/auth/user-store';
 
 import {
   setGrowthOsSessionCookie,
@@ -24,7 +25,40 @@ export const runtime =
 
 
 // ============================================================
-// PUBLIC GROWTH OS LOGIN
+// DUMMY BCRYPT HASH
+//
+// Used when the email does not exist.
+//
+// We still execute bcrypt.compare() so invalid-email and
+// invalid-password requests follow approximately the same
+// expensive password verification path.
+//
+// This hash is not used for authentication.
+// ============================================================
+
+const DUMMY_BCRYPT_HASH =
+  '$2b$12$C6UzMDM.H6dfI/f/IKcEe.5HFc5VcYm3ENQRZuaDNIai1kyRCnpwC';
+
+
+// ============================================================
+// DATABASE-BACKED GROWTH OS LOGIN
+//
+// External Growth OS:
+//
+// email + password
+//       ↓
+// growthos_control.users
+//       ↓
+// bcrypt verification
+//       ↓
+// brand_memberships
+//       ↓
+// default / active brand
+//       ↓
+// Growth OS V2 session
+//
+// Shopify users do NOT use this route.
+// Shopify automatic authentication is AUTH 5.
 // ============================================================
 
 export async function POST(
@@ -34,7 +68,7 @@ export async function POST(
   try {
 
     // ========================================================
-    // 1. READ BODY
+    // 1. READ REQUEST
     // ========================================================
 
     let body:
@@ -50,11 +84,13 @@ export async function POST(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'Invalid request body',
+
         },
         {
           status:
@@ -67,7 +103,9 @@ export async function POST(
 
     const email =
       String(
-        body?.email || ''
+        body?.email
+        ||
+        ''
       )
         .trim()
         .toLowerCase();
@@ -75,22 +113,27 @@ export async function POST(
 
     const password =
       String(
-        body?.password || ''
+        body?.password
+        ||
+        ''
       );
 
 
     if (
-      !email ||
+      !email
+      ||
       !password
     ) {
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'Email and password are required',
+
         },
         {
           status:
@@ -102,24 +145,29 @@ export async function POST(
 
 
     // ========================================================
-    // 2. LOAD CONFIGURED ADMIN
+    // 2. LOAD DATABASE USER
     // ========================================================
 
-    const expectedEmail =
-      getPublicAdminEmail();
+    const user =
+      await getGrowthOSUserByEmail(
+        email
+      );
 
+
+    // ========================================================
+    // 3. PASSWORD VERIFICATION
+    //
+    // Always execute bcrypt.compare().
+    //
+    // If user doesn't exist or has no password:
+    // compare against dummy bcrypt hash instead.
+    // ========================================================
 
     const passwordHash =
-      getPublicAdminPasswordHash();
+      user?.password_hash
+      ||
+      DUMMY_BCRYPT_HASH;
 
-
-    // ========================================================
-    // 3. VERIFY PASSWORD
-    //
-    // Always run bcrypt comparison even if email is wrong.
-    // This avoids making the email check unnecessarily obvious
-    // through response timing.
-    // ========================================================
 
     const passwordValid =
       await bcrypt.compare(
@@ -128,23 +176,30 @@ export async function POST(
       );
 
 
-    const emailValid =
-      email ===
-      expectedEmail;
-
+    // ========================================================
+    // 4. AUTHENTICATION VALIDATION
+    // ========================================================
 
     if (
-      !emailValid ||
+      !user
+      ||
+      user.status !==
+        'active'
+      ||
+      !user.password_hash
+      ||
       !passwordValid
     ) {
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'Invalid email or password',
+
         },
         {
           status:
@@ -156,64 +211,238 @@ export async function POST(
 
 
     // ========================================================
-    // 4. CREATE GROWTH OS SESSION
+    // 5. LOAD ACTIVE BRAND ACCESS
+    //
+    // A Growth OS user can belong to:
+    //
+    // one brand
+    //
+    // or
+    //
+    // many brands across one/multiple workspaces.
     // ========================================================
 
-    const tenantId =
-      getPublicAdminTenantId();
+    const memberships =
+      await listActiveBrandMemberships(
+        user.user_id
+      );
 
 
-    await setGrowthOsSessionCookie(
-      {
-        userId:
-          `public:${email}`,
+    if (
+      memberships.length ===
+      0
+    ) {
 
-        email,
+      return NextResponse.json(
+        {
 
-        tenantId,
+          ok:
+            false,
 
-        authSource:
-          'public',
-      }
-    );
+          error:
+            'No active Growth OS brand access is assigned to this user',
 
-
-    // ========================================================
-    // 5. SUCCESS
-    // ========================================================
-
-    return NextResponse.json(
-      {
-        ok:
-          true,
-
-        user: {
-          email,
-          tenantId,
-          authSource:
-            'public',
         },
-      }
-    );
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. SELECT DEFAULT BRAND
+    //
+    // Current behavior:
+    //
+    // explicitly default membership
+    //        ↓
+    // otherwise first active membership
+    //
+    // AUTH 6 will provide the brand selector / switching UI.
+    // ========================================================
+
+    const membership =
+      await getDefaultBrandMembership(
+        user.user_id
+      );
+
+
+    if (!membership) {
+
+      throw new Error(
+        'DEFAULT_BRAND_MEMBERSHIP_NOT_FOUND'
+      );
+
+    }
+
+
+    // ========================================================
+    // 7. CREATE BRAND-AWARE V2 SESSION
+    //
+    // This is the critical change.
+    //
+    // No tenant is taken from ENV.
+    //
+    // Session context comes entirely from:
+    //
+    // users
+    // +
+    // brand_memberships
+    // ========================================================
+
+    await setGrowthOsSessionCookie({
+
+      userId:
+        user.user_id,
+
+      email:
+        user.email,
+
+      workspaceId:
+        membership.workspace_id,
+
+      brandId:
+        membership.brand_id,
+
+      role:
+        membership.role,
+
+      authMethod:
+        'password',
+
+      authSource:
+        'public',
+
+    });
+
+
+    // ========================================================
+    // 8. UPDATE LAST LOGIN
+    //
+    // Non-critical.
+    //
+    // Login should not fail merely because last-login metadata
+    // couldn't be updated.
+    // ========================================================
+
+    try {
+
+      await touchGrowthOSUserLogin(
+        user.user_id
+      );
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        'GROWTHOS_LAST_LOGIN_UPDATE_FAILED',
+        {
+          userId:
+            user.user_id,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 9. SAFE RESPONSE
+    //
+    // NEVER return:
+    //
+    // password
+    // password hash
+    // JWT
+    // session secret
+    // ========================================================
+
+    return NextResponse.json({
+
+      ok:
+        true,
+
+      user: {
+
+        userId:
+          user.user_id,
+
+        email:
+          user.email,
+
+        fullName:
+          user.full_name
+          ??
+          null,
+
+      },
+
+      activeContext: {
+
+        workspaceId:
+          membership.workspace_id,
+
+        brandId:
+          membership.brand_id,
+
+        role:
+          membership.role,
+
+      },
+
+      access: {
+
+        brandCount:
+          memberships.length,
+
+        hasMultipleBrands:
+          memberships.length >
+          1,
+
+      },
+
+      auth: {
+
+        method:
+          'password',
+
+      },
+
+    });
 
 
   } catch (
     error: any
   ) {
 
+    const message =
+      String(
+        error?.message
+        ||
+        'Growth OS login failed'
+      );
+
+
     console.error(
       'GROWTHOS_LOGIN_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
     return NextResponse.json(
       {
+
         ok:
           false,
 
         error:
           'Login failed',
+
       },
       {
         status:

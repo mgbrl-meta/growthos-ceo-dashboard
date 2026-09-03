@@ -1879,3 +1879,189 @@ export async function getSelectedIntegrationAccount(
     | null;
 
 }
+
+// ============================================================
+// FIND SHOPIFY INTEGRATION ACCOUNT BY SHOP DOMAIN
+//
+// Used when Shopify launches Growth OS as a standalone app.
+//
+// Shopify Admin
+//       ↓
+// verified shop domain
+//       ↓
+// integration_accounts.metadata.shop_domain
+//       ↓
+// workspace_id + brand_id
+//
+// Supports both:
+//
+// shop_domain
+//   canonical current metadata
+//
+// shopDomain
+//   older compatibility metadata
+//
+// No tenant ENV configuration is used.
+// ============================================================
+
+export async function getShopifyIntegrationAccountByDomain(
+  shopDomain: string
+) {
+
+  await ensureIntegrationStore();
+
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedShopDomain =
+    String(
+      shopDomain
+      ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    !normalizedShopDomain
+  ) {
+
+    throw new Error(
+      'Shopify shop domain is required'
+    );
+
+  }
+
+
+  const query = `
+
+    SELECT
+
+      integration_account_id,
+
+      workspace_id,
+
+      brand_id,
+
+      connection_id,
+
+      provider,
+
+      provider_account_id,
+
+      provider_account_name,
+
+      account_type,
+
+      is_selected,
+
+      currency,
+
+      timezone,
+
+      metadata,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        discovered_at
+      )
+        AS discovered_at,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        selected_at
+      )
+        AS selected_at,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        updated_at
+      )
+        AS updated_at
+
+    FROM
+      \`${projectId}.${DATASET_ID}.integration_accounts\`
+
+    WHERE
+
+      provider =
+        'shopify'
+
+      AND
+      (
+
+        LOWER(
+          COALESCE(
+            JSON_VALUE(
+              metadata,
+              '$.shop_domain'
+            ),
+            ''
+          )
+        )
+          =
+          @shop_domain
+
+        OR
+
+        LOWER(
+          COALESCE(
+            JSON_VALUE(
+              metadata,
+              '$.shopDomain'
+            ),
+            ''
+          )
+        )
+          =
+          @shop_domain
+
+      )
+
+    ORDER BY
+      updated_at DESC
+
+    LIMIT 1
+
+  `;
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        shop_domain:
+          normalizedShopDomain,
+
+      },
+
+      types: {
+
+        shop_domain:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows?.[0]
+    ??
+    null
+  ) as
+    StoredIntegrationAccount
+    | null;
+
+}

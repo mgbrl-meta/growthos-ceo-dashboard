@@ -11,9 +11,12 @@ import {
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
+
 
 // ============================================================
-// CURRENT AUTHENTICATED USER
+// CURRENT AUTHENTICATED IDENTITY
 // ============================================================
 
 export async function GET(
@@ -32,11 +35,13 @@ export async function GET(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           authenticated:
             false,
+
         },
         {
           status:
@@ -47,38 +52,71 @@ export async function GET(
     }
 
 
-    return NextResponse.json(
-      {
-        ok:
-          true,
+    return NextResponse.json({
 
-        authenticated:
-          true,
+      ok:
+        true,
 
-        identity: {
+      authenticated:
+        true,
 
-          authSource:
-            identity.authSource,
+      identity: {
 
-          userId:
-            identity.userId,
+        authSource:
+          identity.authSource,
 
-          tenantId:
-            identity.tenantId,
+        authMethod:
+          identity.authMethod
+          ??
+          null,
 
-          email:
-            identity.email || null,
+        userId:
+          identity.userId,
 
-          shopId:
-            identity.shopId || null,
+        email:
+          identity.email
+          ??
+          null,
 
-          shopDomain:
-            identity.shopDomain || null,
+        workspaceId:
+          identity.workspaceId
+          ??
+          null,
 
-        },
-      }
-    );
+        brandId:
+          identity.brandId
+          ??
+          null,
 
+        role:
+          identity.role
+          ??
+          null,
+
+        // ----------------------------------------------------
+        // TEMPORARY COMPATIBILITY
+        // ----------------------------------------------------
+
+        tenantId:
+          identity.tenantId,
+
+        // ----------------------------------------------------
+        // SHOPIFY CONTEXT
+        // ----------------------------------------------------
+
+        shopId:
+          identity.shopId
+          ??
+          null,
+
+        shopDomain:
+          identity.shopDomain
+          ??
+          null,
+
+      },
+
+    });
 
   } catch (
     error
@@ -92,6 +130,7 @@ export async function GET(
 
     return NextResponse.json(
       {
+
         ok:
           false,
 
@@ -100,6 +139,7 @@ export async function GET(
 
         error:
           'Authentication check failed',
+
       },
       {
         status:
