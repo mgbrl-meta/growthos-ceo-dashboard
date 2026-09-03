@@ -25,13 +25,14 @@ import {
 } from 'lucide-react';
 
 
-/* ============================================================
-   TYPES
-============================================================ */
+// ============================================================
+// TYPES
+// ============================================================
 
 type Props = {
 
-  activeTab: string;
+  activeTab:
+    string;
 
   activeSubTabs:
     Record<
@@ -39,20 +40,24 @@ type Props = {
       string
     >;
 
-  setActiveTab: (
-    tab: string
-  ) => void;
+  setActiveTab:
+    (
+      tab: string
+    ) => void;
 
-  setActiveSubTab: (
-    module: string,
-    subTab: string
-  ) => void;
+  setActiveSubTab:
+    (
+      module: string,
+      subTab: string
+    ) => void;
 
-  sidebarOpen: boolean;
+  sidebarOpen:
+    boolean;
 
-  setSidebarOpen: (
-    open: boolean
-  ) => void;
+  setSidebarOpen:
+    (
+      open: boolean
+    ) => void;
 
 };
 
@@ -66,11 +71,14 @@ type Plan =
 
 type ToolSetting = {
 
-  id: string;
+  id:
+    string;
 
-  name: string;
+  name:
+    string;
 
-  enabled: boolean;
+  enabled:
+    boolean;
 
   requiredPlan:
     Plan;
@@ -93,17 +101,17 @@ type PlatformSettings = {
 };
 
 
-/* ============================================================
-   SETTINGS STORAGE
-============================================================ */
+// ============================================================
+// SETTINGS STORAGE
+// ============================================================
 
 const STORAGE_KEY =
   'growth_os_global_settings_v1';
 
 
-/* ============================================================
-   PLAN HIERARCHY
-============================================================ */
+// ============================================================
+// PLAN HIERARCHY
+// ============================================================
 
 const PLAN_ORDER:
   Record<
@@ -111,42 +119,87 @@ const PLAN_ORDER:
     number
   > = {
 
-  starter:
-    1,
+    starter:
+      1,
 
-  pro:
-    2,
+    pro:
+      2,
 
-  advanced:
-    3,
+    advanced:
+      3,
 
-  enterprise:
-    4,
+    enterprise:
+      4,
+
+  };
+
+
+// ============================================================
+// NAVIGATION TYPES
+// ============================================================
+
+type NavigationItem = {
+
+  name:
+    string;
+
+  label:
+    string;
+
+  icon:
+    typeof CircleGauge;
+
+  toolId:
+    string | null;
+
+  children:
+    string[];
 
 };
 
 
-/* ============================================================
-   NAVIGATION CONFIGURATION
+type NavigationGroup = {
 
-   toolId:
-   - null = always available
-   - string = controlled from Global Settings
-============================================================ */
+  label:
+    string;
 
-const groups = [
+  items:
+    NavigationItem[];
 
-  /* ==========================================================
-     WORKSPACE
-  ========================================================== */
+};
+
+
+// ============================================================
+// NAVIGATION CONFIGURATION
+//
+// toolId:
+//
+// null
+//   = always available
+//
+// string
+//   = controlled from Global Settings
+//
+// Giving every navigation item the same explicit shape prevents
+// TypeScript from inferring incompatible unions.
+// ============================================================
+
+const groups:
+  NavigationGroup[] = [
+
+  // ==========================================================
+  // WORKSPACE
+  // ==========================================================
 
   {
+
     label:
       'Workspace',
 
     items: [
 
       {
+
         name:
           'CEO Summary',
 
@@ -161,23 +214,27 @@ const groups = [
 
         children:
           [],
+
       },
 
     ],
+
   },
 
 
-  /* ==========================================================
-     GROWTH
-  ========================================================== */
+  // ==========================================================
+  // GROWTH
+  // ==========================================================
 
   {
+
     label:
       'Growth',
 
     items: [
 
       {
+
         name:
           'Meta OS',
 
@@ -201,10 +258,12 @@ const groups = [
           'Settings',
 
         ],
+
       },
 
 
       {
+
         name:
           'Google OS',
 
@@ -230,10 +289,12 @@ const groups = [
           'Settings',
 
         ],
+
       },
 
 
       {
+
         name:
           'Attribution OS',
 
@@ -258,23 +319,27 @@ const groups = [
           'Data Quality',
 
         ],
+
       },
 
     ],
+
   },
 
 
-  /* ==========================================================
-     CUSTOMERS
-  ========================================================== */
+  // ==========================================================
+  // CUSTOMERS
+  // ==========================================================
 
   {
+
     label:
       'Customers',
 
     items: [
 
       {
+
         name:
           'Retention OS',
 
@@ -300,23 +365,27 @@ const groups = [
           'Settings',
 
         ],
+
       },
 
     ],
+
   },
 
 
-  /* ==========================================================
-     COMMERCE
-  ========================================================== */
+  // ==========================================================
+  // COMMERCE
+  // ==========================================================
 
   {
+
     label:
       'Commerce',
 
     items: [
 
       {
+
         name:
           'Product OS',
 
@@ -341,26 +410,31 @@ const groups = [
           'Settings',
 
         ],
+
       },
 
     ],
+
   },
 
 
-  /* ==========================================================
-     DATA SOURCES
-
-     These are platform-level pages.
-     They are NOT controlled by plan/tool settings.
-  ========================================================== */
+  // ==========================================================
+  // DATA SOURCES
+  //
+  // Platform-level pages.
+  //
+  // These are not controlled by plan/tool settings.
+  // ==========================================================
 
   {
+
     label:
       'Data Sources',
 
     items: [
 
       {
+
         name:
           'App Integrations',
 
@@ -375,10 +449,12 @@ const groups = [
 
         children:
           [],
+
       },
 
 
       {
+
         name:
           'Data Health',
 
@@ -393,10 +469,12 @@ const groups = [
 
         children:
           [],
+
       },
 
 
       {
+
         name:
           'Sync History',
 
@@ -411,31 +489,64 @@ const groups = [
 
         children:
           [],
+
       },
 
     ],
+
   },
 
+
+  // ==========================================================
+  // SYSTEM
+  // ==========================================================
+
   {
-  label: 'System',
 
-  items: [
-    {
-      name: 'Warehouse Audit',
-      label: 'Warehouse',
-      icon: Database,
+    label:
+      'System',
 
-      children: [],
-    },
-  ],
-},
+    items: [
+
+      {
+
+        name:
+          'Warehouse Audit',
+
+        label:
+          'Warehouse',
+
+        icon:
+          Database,
+
+        // ------------------------------------------------------
+        // IMPORTANT:
+        //
+        // This was previously missing.
+        //
+        // Every navigation item must have toolId so TypeScript
+        // doesn't create a union where toolId exists only on
+        // some item types.
+        // ------------------------------------------------------
+
+        toolId:
+          null,
+
+        children:
+          [],
+
+      },
+
+    ],
+
+  },
 
 ];
 
 
-/* ============================================================
-   MAIN COMPONENT
-============================================================ */
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
 
 export default function AppSidebar({
 
@@ -454,15 +565,17 @@ export default function AppSidebar({
 }: Props) {
 
 
-  /* ==========================================================
-     SETTINGS STATE
-
-     V1:
-     Read from localStorage.
-
-     Later:
-     Replace this with global settings API/provider.
-  ========================================================== */
+  // ==========================================================
+  // SETTINGS STATE
+  //
+  // V1:
+  //
+  // Read from localStorage.
+  //
+  // Later:
+  //
+  // Replace with global settings API/provider.
+  // ==========================================================
 
   const [
     platformSettings,
@@ -485,37 +598,43 @@ export default function AppSidebar({
     });
 
 
-  /* ==========================================================
-     READ SAVED SETTINGS
-  ========================================================== */
+  // ==========================================================
+  // READ SAVED SETTINGS
+  // ==========================================================
 
   function readSettings() {
 
     try {
 
       const raw =
-        window.localStorage.getItem(
-          STORAGE_KEY
-        );
+        window
+          .localStorage
+          .getItem(
+            STORAGE_KEY
+          );
 
 
-      /*
-       * No saved settings yet:
-       * preserve existing Growth OS behaviour.
-       */
+      // -------------------------------------------------------
+      // No saved settings yet.
+      //
+      // Preserve existing Growth OS behaviour.
+      // -------------------------------------------------------
+
       if (!raw) {
 
-        setPlatformSettings(
-          {
-            tools:
-              [],
+        setPlatformSettings({
 
-            plan: {
-              currentPlan:
-                'advanced',
-            },
-          }
-        );
+          tools:
+            [],
+
+          plan: {
+
+            currentPlan:
+              'advanced',
+
+          },
+
+        });
 
 
         return;
@@ -533,7 +652,6 @@ export default function AppSidebar({
         parsed
       );
 
-
     } catch (
       error
     ) {
@@ -548,11 +666,11 @@ export default function AppSidebar({
   }
 
 
-  /* ==========================================================
-     INITIAL SETTINGS LOAD
-     +
-     LIVE SETTINGS UPDATE EVENTS
-  ========================================================== */
+  // ==========================================================
+  // INITIAL SETTINGS LOAD
+  // +
+  // LIVE SETTINGS UPDATE EVENTS
+  // ==========================================================
 
   useEffect(
     () => {
@@ -560,20 +678,21 @@ export default function AppSidebar({
       readSettings();
 
 
-      /*
-       * Same-tab updates.
-       *
-       * GrowthSettings dispatches this event
-       * after Save Changes.
-       */
+      // -------------------------------------------------------
+      // SAME-TAB UPDATES
+      //
+      // GrowthSettings dispatches this event after Save Changes.
+      // -------------------------------------------------------
+
       function handleSettingsUpdate(
         event: Event
       ) {
 
         const customEvent =
-          event as CustomEvent<
-            PlatformSettings
-          >;
+          event as
+            CustomEvent<
+              PlatformSettings
+            >;
 
 
         if (
@@ -594,9 +713,10 @@ export default function AppSidebar({
       }
 
 
-      /*
-       * Cross-tab / cross-window localStorage update.
-       */
+      // -------------------------------------------------------
+      // CROSS-TAB / CROSS-WINDOW STORAGE UPDATE
+      // -------------------------------------------------------
+
       function handleStorage() {
 
         readSettings();
@@ -636,9 +756,9 @@ export default function AppSidebar({
   );
 
 
-  /* ==========================================================
-     CURRENT PLAN
-  ========================================================== */
+  // ==========================================================
+  // CURRENT PLAN
+  // ==========================================================
 
   const currentPlan =
     (
@@ -650,9 +770,9 @@ export default function AppSidebar({
     ) as Plan;
 
 
-  /* ==========================================================
-     TOOL LOOKUP MAP
-  ========================================================== */
+  // ==========================================================
+  // TOOL LOOKUP MAP
+  // ==========================================================
 
   const toolMap =
     useMemo(
@@ -667,7 +787,8 @@ export default function AppSidebar({
 
         for (
           const tool
-          of platformSettings.tools ||
+          of platformSettings.tools
+          ||
           []
         ) {
 
@@ -688,15 +809,19 @@ export default function AppSidebar({
     );
 
 
-  /* ==========================================================
-     TOOL ACCESS
-
-     visible:
-       false = tool disabled by workspace admin
-
-     allowed:
-       false = tool enabled but current plan too low
-  ========================================================== */
+  // ==========================================================
+  // TOOL ACCESS
+  //
+  // visible:
+  //
+  // false
+  //   = tool disabled by workspace admin
+  //
+  // allowed:
+  //
+  // false
+  //   = tool enabled but current plan too low
+  // ==========================================================
 
   function getToolState(
     toolId:
@@ -704,9 +829,10 @@ export default function AppSidebar({
       null
   ) {
 
-    /*
-     * Platform pages are always available.
-     */
+    // --------------------------------------------------------
+    // Platform pages are always available.
+    // --------------------------------------------------------
+
     if (!toolId) {
 
       return {
@@ -731,11 +857,12 @@ export default function AppSidebar({
       );
 
 
-    /*
-     * No saved configuration for this tool yet.
-     *
-     * Preserve existing app behaviour.
-     */
+    // --------------------------------------------------------
+    // No saved configuration for this tool yet.
+    //
+    // Preserve existing app behaviour.
+    // --------------------------------------------------------
+
     if (!tool) {
 
       return {
@@ -754,10 +881,12 @@ export default function AppSidebar({
     }
 
 
-    /*
-     * Disabled tool:
-     * remove from navigation entirely.
-     */
+    // --------------------------------------------------------
+    // Disabled tool:
+    //
+    // Remove from navigation entirely.
+    // --------------------------------------------------------
+
     if (!tool.enabled) {
 
       return {
@@ -805,15 +934,17 @@ export default function AppSidebar({
   }
 
 
-  /* ==========================================================
-     SAFETY GUARD
-
-     Example:
-     User is currently inside Google OS.
-     Then admin disables Google OS in Settings.
-
-     We must not leave hidden Google UI mounted.
-  ========================================================== */
+  // ==========================================================
+  // SAFETY GUARD
+  //
+  // Example:
+  //
+  // User is currently inside Google OS.
+  //
+  // Then admin disables Google OS in Settings.
+  //
+  // We must not leave hidden Google UI mounted.
+  // ==========================================================
 
   useEffect(
     () => {
@@ -838,16 +969,27 @@ export default function AppSidebar({
           }
 
 
+          // ---------------------------------------------------
+          // IMPORTANT:
+          //
+          // getToolState always returns an access object.
+          //
+          // null toolId is intentionally supported and means
+          // "platform page / always available".
+          // ---------------------------------------------------
+
           const access =
             getToolState(
               item.toolId
             );
 
 
-          /*
-           * Disabled module:
-           * return to Command Center.
-           */
+          // ---------------------------------------------------
+          // DISABLED MODULE
+          //
+          // Return to Command Center.
+          // ---------------------------------------------------
+
           if (
             !access.visible
           ) {
@@ -861,10 +1003,12 @@ export default function AppSidebar({
           }
 
 
-          /*
-           * Enabled but plan locked:
-           * send to global settings.
-           */
+          // ---------------------------------------------------
+          // ENABLED BUT PLAN LOCKED
+          //
+          // Send to global settings.
+          // ---------------------------------------------------
+
           if (
             !access.allowed
           ) {
@@ -890,9 +1034,9 @@ export default function AppSidebar({
   );
 
 
-  /* ==========================================================
-     SELECT MODULE
-  ========================================================== */
+  // ==========================================================
+  // SELECT MODULE
+  // ==========================================================
 
   function selectModule(
 
@@ -911,10 +1055,11 @@ export default function AppSidebar({
       );
 
 
-    /*
-     * Disabled modules shouldn't normally
-     * render at all, but keep this guard.
-     */
+    // --------------------------------------------------------
+    // Disabled modules shouldn't normally render at all,
+    // but keep this defensive guard.
+    // --------------------------------------------------------
+
     if (
       !access.visible
     ) {
@@ -924,10 +1069,10 @@ export default function AppSidebar({
     }
 
 
-    /*
-     * Tool exists but current plan
-     * does not permit access.
-     */
+    // --------------------------------------------------------
+    // Tool exists but current plan does not permit access.
+    // --------------------------------------------------------
+
     if (
       !access.allowed
     ) {
@@ -956,11 +1101,11 @@ export default function AppSidebar({
     );
 
 
-    /*
-     * When sidebar is collapsed,
-     * reopen it so child navigation
-     * becomes visible.
-     */
+    // --------------------------------------------------------
+    // When sidebar is collapsed, reopen it so child navigation
+    // becomes visible.
+    // --------------------------------------------------------
+
     if (!sidebarOpen) {
 
       setSidebarOpen(
@@ -972,9 +1117,9 @@ export default function AppSidebar({
   }
 
 
-  /* ==========================================================
-     UI
-  ========================================================== */
+  // ==========================================================
+  // UI
+  // ==========================================================
 
   return (
 
@@ -1160,9 +1305,10 @@ export default function AppSidebar({
             group => {
 
 
-              /*
-               * Remove disabled tools before rendering.
-               */
+              // ------------------------------------------------
+              // Remove disabled tools before rendering.
+              // ------------------------------------------------
+
               const visibleItems =
                 group.items.filter(
                   item =>
@@ -1172,9 +1318,10 @@ export default function AppSidebar({
                 );
 
 
-              /*
-               * Don't render an empty group heading.
-               */
+              // ------------------------------------------------
+              // Don't render an empty group heading.
+              // ------------------------------------------------
+
               if (
                 visibleItems.length ===
                 0
@@ -1293,15 +1440,11 @@ export default function AppSidebar({
                                 transition-all
                                 duration-200
 
-
                                 ${
                                   sidebarOpen
-
                                     ? 'gap-3 px-3 py-2.5'
-
                                     : 'justify-center py-2.5'
                                 }
-
 
                                 ${
                                   active
@@ -1364,7 +1507,7 @@ export default function AppSidebar({
                                   ) : (
 
                                     item.children.length >
-                                    0 && (
+                                      0 && (
 
                                       <ChevronDown
                                         size={14}
@@ -1460,7 +1603,6 @@ export default function AppSidebar({
                                             text-[11px]
 
                                             transition
-
 
                                             ${
                                               selected
@@ -1577,17 +1719,15 @@ export default function AppSidebar({
 
               transition
 
-
               ${
                 sidebarOpen
                   ? 'gap-3 px-3 py-2.5'
                   : 'justify-center py-2.5'
               }
 
-
               ${
                 activeTab ===
-                'Settings'
+                  'Settings'
 
                   ? `
                     bg-white
@@ -1610,7 +1750,7 @@ export default function AppSidebar({
 
               strokeWidth={
                 activeTab ===
-                'Settings'
+                  'Settings'
                   ? 2.4
                   : 1.8
               }
@@ -1724,9 +1864,9 @@ export default function AppSidebar({
 }
 
 
-/* ============================================================
-   HELPERS
-============================================================ */
+// ============================================================
+// HELPERS
+// ============================================================
 
 function prettyPlan(
   value:

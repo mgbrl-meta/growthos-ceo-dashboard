@@ -11,8 +11,12 @@ import {
 } from '@/lib/integrations/secrets';
 
 import {
+  resolveTenantContext,
+} from '@/lib/tenancy/context';
+
+import {
   getIntegrationConnection,
-  getWorkspaceId,
+  upsertIntegrationAccount,
   upsertIntegrationConnection,
 } from '@/lib/integrations/store';
 
@@ -20,12 +24,38 @@ import {
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
+
+
+// ============================================================
+// SELECT META AD ACCOUNT
+//
+// OAuth authorization gives Growth OS access to Meta.
+//
+// This route lets the current Growth OS brand select which
+// Meta ad account belongs to it.
+//
+// Meta user
+//      ↓
+// available ad accounts
+//      ↓
+// selected account
+//      ↓
+// integration_connection
+//      +
+// integration_account
+// ============================================================
 
 export async function POST(
   req: Request
 ) {
 
   try {
+
+    // ========================================================
+    // REQUEST
+    // ========================================================
 
     const body =
       await req.json();
@@ -43,11 +73,13 @@ export async function POST(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'account_id is required',
+
         },
         {
           status:
@@ -58,19 +90,34 @@ export async function POST(
     }
 
 
-    const workspaceId =
-      getWorkspaceId();
+    // ========================================================
+    // TENANT
+    // ========================================================
 
+    const tenant =
+      await resolveTenantContext();
+
+
+    // ========================================================
+    // CURRENT META CONNECTION
+    // ========================================================
 
     const connection =
       await getIntegrationConnection(
-        workspaceId,
+
+        tenant.workspaceId,
+
+        tenant.brandId,
+
         'meta_ads'
+
       );
 
 
     if (
-      !connection?.secret_name
+      !connection
+      ||
+      !connection.secret_name
     ) {
 
       throw new Error(
@@ -80,13 +127,35 @@ export async function POST(
     }
 
 
+    // ========================================================
+    // READ META CREDENTIAL
+    // ========================================================
+
     const secret =
       await readIntegrationSecret<{
-        access_token: string;
+
+        access_token:
+          string;
+
       }>(
         connection.secret_name
       );
 
+
+    if (
+      !secret.access_token
+    ) {
+
+      throw new Error(
+        'Meta credential contains no access token'
+      );
+
+    }
+
+
+    // ========================================================
+    // VERIFY ACCOUNT BELONGS TO AUTHORIZED META USER
+    // ========================================================
 
     const accounts =
       await getMetaAdAccounts(
@@ -96,11 +165,20 @@ export async function POST(
 
     const selected =
       accounts.find(
-        (account: any) =>
+        account =>
+
           String(
             account.id
           ) ===
           accountId
+
+          ||
+
+          String(
+            account.account_id
+          ) ===
+          accountId
+
       );
 
 
@@ -108,11 +186,13 @@ export async function POST(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'Selected Meta account is not available to this user',
+
         },
         {
           status:
@@ -123,73 +203,205 @@ export async function POST(
     }
 
 
-    await upsertIntegrationConnection({
+    // ========================================================
+    // UPDATE CONNECTION
+    //
+    // OAuth + account selection are now complete.
+    // ========================================================
 
-      workspaceId,
+    const connectionId =
+      await upsertIntegrationConnection({
 
-      provider:
-        'meta_ads',
+        workspaceId:
+          tenant.workspaceId,
 
-      status:
-        'connected',
+        brandId:
+          tenant.brandId,
 
-      providerUserId:
-        connection.provider_user_id,
+        provider:
+          'meta_ads',
 
-      providerUserName:
-        connection.provider_user_name,
+        connectionMode:
+          'oauth',
 
-      providerAccountId:
-        selected.id,
+        ingestionAdapter:
+          'meta_graph_api',
 
-      providerAccountName:
-        selected.name
-        ||
-        selected.account_id
-        ||
-        selected.id,
+        status:
+          'connected',
 
-      secretName:
-        connection.secret_name,
+        providerUserId:
+          connection.provider_user_id
+          ??
+          null,
 
-      error:
-        null,
+        providerUserName:
+          connection.provider_user_name
+          ??
+          null,
 
-    });
+        providerAccountId:
+          selected.id,
+
+        providerAccountName:
+          selected.name
+          ||
+          selected.account_id
+          ||
+          selected.id,
+
+        secretName:
+          connection.secret_name,
+
+        error:
+          null,
+
+      });
 
 
-    return NextResponse.json(
-      {
-        ok:
+    // ========================================================
+    // UPSERT PROVIDER ACCOUNT
+    //
+    // Same architecture now used by Shopify.
+    // ========================================================
+
+    const integrationAccountId =
+      await upsertIntegrationAccount({
+
+        workspaceId:
+          tenant.workspaceId,
+
+        brandId:
+          tenant.brandId,
+
+        connectionId,
+
+        provider:
+          'meta_ads',
+
+        providerAccountId:
+          selected.id,
+
+        providerAccountName:
+          selected.name
+          ||
+          selected.account_id
+          ||
+          selected.id,
+
+        accountType:
+          'ad_account',
+
+        isSelected:
           true,
 
-        data: {
-          account:
-            selected,
+        currency:
+          selected.currency
+          ??
+          null,
+
+        timezone:
+          selected.timezone_name
+          ??
+          null,
+
+        metadata: {
+
+          account_id:
+            selected.account_id,
+
+          account_status:
+            selected.account_status
+            ??
+            null,
+
+          selection_source:
+            'meta_oauth',
+
         },
-      }
-    );
+
+      });
+
+
+    // ========================================================
+    // SAFE RESPONSE
+    // ========================================================
+
+    return NextResponse.json({
+
+      ok:
+        true,
+
+      data: {
+
+        account: {
+
+          id:
+            selected.id,
+
+          accountId:
+            selected.account_id,
+
+          name:
+            selected.name,
+
+          currency:
+            selected.currency
+            ??
+            null,
+
+          timezone:
+            selected.timezone_name
+            ??
+            null,
+
+        },
+
+        integration: {
+
+          connectionId,
+
+          integrationAccountId,
+
+          status:
+            'connected',
+
+        },
+
+      },
+
+    });
 
 
   } catch (
     error: any
   ) {
 
+    const message =
+      String(
+        error?.message
+        ||
+        'Unable to select Meta account'
+      );
+
+
     console.error(
       'META_SELECT_ACCOUNT_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
     return NextResponse.json(
       {
+
         ok:
           false,
 
         error:
-          error?.message
-          ||
-          'Unable to select Meta account',
+          message,
+
       },
       {
         status:

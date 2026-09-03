@@ -11,42 +11,76 @@ import {
 } from '@/lib/integrations/secrets';
 
 import {
+  resolveTenantContext,
+} from '@/lib/tenancy/context';
+
+import {
   getIntegrationConnection,
-  getWorkspaceId,
 } from '@/lib/integrations/store';
 
 
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
+
+
+// ============================================================
+// META AD ACCOUNTS
+//
+// Current Growth OS tenant
+//        ↓
+// Meta connection
+//        ↓
+// Secret Manager token
+//        ↓
+// Meta /me/adaccounts
+// ============================================================
 
 export async function GET() {
 
   try {
 
-    const workspaceId =
-      getWorkspaceId();
+    // ========================================================
+    // TENANT
+    // ========================================================
 
+    const tenant =
+      await resolveTenantContext();
+
+
+    // ========================================================
+    // META CONNECTION
+    // ========================================================
 
     const connection =
       await getIntegrationConnection(
-        workspaceId,
+
+        tenant.workspaceId,
+
+        tenant.brandId,
+
         'meta_ads'
+
       );
 
 
     if (
-      !connection ||
+      !connection
+      ||
       !connection.secret_name
     ) {
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'Meta is not authorized',
+
         },
         {
           status:
@@ -57,13 +91,35 @@ export async function GET() {
     }
 
 
+    // ========================================================
+    // SECRET MANAGER
+    // ========================================================
+
     const secret =
       await readIntegrationSecret<{
-        access_token: string;
+
+        access_token:
+          string;
+
       }>(
         connection.secret_name
       );
 
+
+    if (
+      !secret.access_token
+    ) {
+
+      throw new Error(
+        'Meta credential contains no access token'
+      );
+
+    }
+
+
+    // ========================================================
+    // META AD ACCOUNTS
+    // ========================================================
 
     const accounts =
       await getMetaAdAccounts(
@@ -71,37 +127,49 @@ export async function GET() {
       );
 
 
-    return NextResponse.json(
-      {
-        ok:
-          true,
+    return NextResponse.json({
 
-        data: {
-          accounts,
-        },
-      }
-    );
+      ok:
+        true,
+
+      data: {
+
+        accounts,
+
+      },
+
+    });
 
 
   } catch (
     error: any
   ) {
 
+    const message =
+      String(
+        error?.message
+        ||
+        'Unable to load Meta accounts'
+      );
+
+
     console.error(
       'META_ACCOUNTS_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
     return NextResponse.json(
       {
+
         ok:
           false,
 
         error:
-          error?.message
-          ||
-          'Unable to load Meta accounts',
+          message,
+
       },
       {
         status:

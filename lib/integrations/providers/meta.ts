@@ -426,3 +426,239 @@ export async function fetchMetaUser(
   };
 
 }
+
+// ============================================================
+// META AD ACCOUNT
+// ============================================================
+
+export type MetaAdAccount = {
+
+  id: string;
+
+  account_id: string;
+
+  name: string;
+
+  currency?: string | null;
+
+  timezone_name?: string | null;
+
+  account_status?: number | null;
+
+};
+
+
+// ============================================================
+// GET META AD ACCOUNTS
+//
+// Returns every ad account available to the authorized
+// Meta user.
+//
+// Handles Graph API pagination automatically.
+//
+// Token remains server-side.
+// ============================================================
+
+export async function getMetaAdAccounts(
+  accessToken: string
+):
+  Promise<MetaAdAccount[]> {
+
+  validateMetaConfig();
+
+
+  if (!accessToken) {
+
+    throw new Error(
+      'Meta access token is required'
+    );
+
+  }
+
+
+  const accounts:
+    MetaAdAccount[] = [];
+
+
+  const params =
+    new URLSearchParams({
+
+      fields:
+        [
+          'id',
+          'account_id',
+          'name',
+          'currency',
+          'timezone_name',
+          'account_status',
+        ].join(','),
+
+      limit:
+        '100',
+
+      access_token:
+        accessToken,
+
+    });
+
+
+  let nextUrl:
+    string | null =
+      (
+        `https://graph.facebook.com/` +
+        `${META_API_VERSION}/me/adaccounts?` +
+        params.toString()
+      );
+
+
+  // ==========================================================
+  // PAGINATION
+  // ==========================================================
+
+  while (nextUrl) {
+
+    const response =
+      await fetch(
+        nextUrl,
+        {
+          cache:
+            'no-store',
+        }
+      );
+
+
+    let json:
+      any;
+
+
+    try {
+
+      json =
+        await response.json();
+
+    } catch {
+
+      throw new Error(
+        `Meta ad accounts returned ${response.status} instead of JSON`
+      );
+
+    }
+
+
+    if (
+      !response.ok
+      ||
+      json?.error
+    ) {
+
+      throw new Error(
+        json?.error?.message
+        ||
+        'Unable to load Meta ad accounts'
+      );
+
+    }
+
+
+    const rows =
+      Array.isArray(
+        json?.data
+      )
+        ? json.data
+        : [];
+
+
+    for (
+      const row of rows
+    ) {
+
+      const id =
+        String(
+          row?.id
+          ||
+          ''
+        ).trim();
+
+
+      const accountId =
+        String(
+          row?.account_id
+          ||
+          ''
+        ).trim();
+
+
+      if (
+        !id
+        ||
+        !accountId
+      ) {
+
+        continue;
+
+      }
+
+
+      accounts.push({
+
+        id,
+
+        account_id:
+          accountId,
+
+        name:
+          String(
+            row?.name
+            ||
+            accountId
+          ),
+
+        currency:
+          row?.currency
+            ? String(
+                row.currency
+              )
+            : null,
+
+        timezone_name:
+          row?.timezone_name
+            ? String(
+                row.timezone_name
+              )
+            : null,
+
+        account_status:
+          Number.isFinite(
+            Number(
+              row?.account_status
+            )
+          )
+            ? Number(
+                row.account_status
+              )
+            : null,
+
+      });
+
+    }
+
+
+    const next =
+      String(
+        json?.paging?.next
+        ||
+        ''
+      ).trim();
+
+
+    nextUrl =
+      next
+        ? next
+        : null;
+
+  }
+
+
+  return accounts;
+
+}
