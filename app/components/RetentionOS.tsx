@@ -1,43 +1,49 @@
 'use client';
 
-import {
-  useState,
-} from 'react';
+import CommandCenter
+  from './retention/CommandCenter';
 
-import CommandCenter from './retention/CommandCenter';
+import Settings
+  from './retention/Settings';
 
-import Settings from './retention/Settings';
+import OpportunityBank
+  from './retention/OpportunityBank';
 
-import OpportunityBank from './retention/OpportunityBank';
+import PatternDiscovery
+  from './retention/PatternDiscovery';
 
-import PatternDiscovery from './retention/PatternDiscovery';
+import HypothesisLab
+  from './retention/HypothesisLab';
 
-import HypothesisLab from './retention/HypothesisLab';
+import ActionTracker
+  from './retention/ActionTracker';
 
-import ActionTracker from './retention/ActionTracker';
+import LearningLoop
+  from './retention/LearningLoop';
 
-import LearningLoop from './retention/LearningLoop';
+import CustomerJourney
+  from './retention/CustomerJourney';
 
-import CustomerJourney from './retention/CustomerJourney';
+import DailyPlanner
+  from './retention/DailyPlanner';
 
-import DailyPlanner from './retention/DailyPlanner';
 
-
-const tabs = [
-  'Mission Control',
-  'Command Center',
-  'Daily Planner',
-  'Opportunity Bank',
-  'Pattern Discovery',
-  'Hypothesis Lab',
-  'Action Tracker',
-  'Learning Loop',
-  'Settings',
-  'Customer Journey',
-];
-
+// ============================================================
+// PROPS
+//
+// Retention navigation is controlled by:
+//
+// AppSidebar
+//    ↓
+// GrowthOSDashboard
+//    ↓
+// activeTab
+//    ↓
+// RetentionOS
+// ============================================================
 
 type RetentionOSProps = {
+
   /**
    * Universal dashboard period END date.
    *
@@ -45,8 +51,22 @@ type RetentionOSProps = {
    * 2026-08-20
    */
   selectedDate?: string;
+
+  /**
+   * Current Retention OS screen selected
+   * from the global Growth OS sidebar.
+   */
+  activeTab: string;
+
 };
 
+
+// ============================================================
+// PLACEHOLDER
+//
+// Used only if a future sidebar item exists before its
+// Retention screen has been implemented.
+// ============================================================
 
 function Placeholder({
   title,
@@ -56,48 +76,71 @@ function Placeholder({
 
   return (
 
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl">
+    <section
+      className="
+        rounded-[2rem]
+        border
+        border-slate-200
+        bg-white
+        p-8
+        shadow-xl
+      "
+    >
 
-
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
-
+      <p
+        className="
+          text-xs
+          font-black
+          uppercase
+          tracking-[0.22em]
+          text-blue-600
+        "
+      >
         Retention OS
-
       </p>
 
 
-      <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">
-
+      <h2
+        className="
+          mt-2
+          text-2xl
+          font-black
+          tracking-[-0.04em]
+          text-slate-950
+        "
+      >
         {title}
-
       </h2>
 
 
-      <p className="mt-2 text-sm text-slate-500">
-
+      <p
+        className="
+          mt-2
+          text-sm
+          text-slate-500
+        "
+      >
         This module will be built next.
-
       </p>
-
 
     </section>
 
   );
+
 }
 
 
+// ============================================================
+// RETENTION OS
+// ============================================================
+
 export default function RetentionOS({
+
   selectedDate,
+
+  activeTab,
+
 }: RetentionOSProps) {
-
-  const [
-    activeTab,
-    setActiveTab,
-  ] =
-    useState(
-      'Mission Control'
-    );
-
 
   return (
 
@@ -105,79 +148,20 @@ export default function RetentionOS({
 
 
       {/* =====================================================
-          RETENTION NAV
+          MISSION CONTROL / COMMAND CENTER
       ===================================================== */}
 
-      <div className="rounded-[2rem] border border-slate-200 bg-white p-2 shadow-sm">
-
-
-        <div className="flex flex-wrap gap-2">
-
-
-          {tabs.map(
-            (
-              tab
-            ) => (
-
-              <button
-                key={
-                  tab
-                }
-
-                type="button"
-
-                onClick={() =>
-                  setActiveTab(
-                    tab
-                  )
-                }
-
-                className={`rounded-2xl px-4 py-2 text-xs font-black transition ${
-                  activeTab ===
-                  tab
-
-                    ? 'bg-slate-950 text-white'
-
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-              >
-
-                {tab}
-
-              </button>
-
-            )
-          )}
-
-
-        </div>
-
-
-      </div>
-
-
-      {/* =====================================================
-          COMMAND CENTER
-      ===================================================== */}
-
-      {(activeTab ===
-        'Mission Control' ||
+      {(
         activeTab ===
-          'Command Center') && (
+          'Mission Control'
+
+        ||
+
+        activeTab ===
+          'Command Center'
+      ) && (
 
         <CommandCenter />
-
-      )}
-
-
-      {/* =====================================================
-          CUSTOMER JOURNEY
-      ===================================================== */}
-
-      {activeTab ===
-        'Customer Journey' && (
-
-        <CustomerJourney />
 
       )}
 
@@ -190,9 +174,11 @@ export default function RetentionOS({
         'Daily Planner' && (
 
         <DailyPlanner
+
           selectedDate={
             selectedDate
           }
+
         />
 
       )}
@@ -235,13 +221,13 @@ export default function RetentionOS({
 
 
       {/* =====================================================
-          SETTINGS
+          ACTION TRACKER
       ===================================================== */}
 
       {activeTab ===
-        'Settings' && (
+        'Action Tracker' && (
 
-        <Settings />
+        <ActionTracker />
 
       )}
 
@@ -259,19 +245,31 @@ export default function RetentionOS({
 
 
       {/* =====================================================
-          ACTION TRACKER
+          CUSTOMER JOURNEY
       ===================================================== */}
 
       {activeTab ===
-        'Action Tracker' && (
+        'Customer Journey' && (
 
-        <ActionTracker />
+        <CustomerJourney />
 
       )}
 
 
       {/* =====================================================
-          PLACEHOLDER
+          SETTINGS
+      ===================================================== */}
+
+      {activeTab ===
+        'Settings' && (
+
+        <Settings />
+
+      )}
+
+
+      {/* =====================================================
+          UNKNOWN / FUTURE TAB
       ===================================================== */}
 
       {activeTab !==
@@ -284,9 +282,6 @@ export default function RetentionOS({
           'Daily Planner' &&
 
         activeTab !==
-          'Customer Journey' &&
-
-        activeTab !==
           'Opportunity Bank' &&
 
         activeTab !==
@@ -296,13 +291,16 @@ export default function RetentionOS({
           'Hypothesis Lab' &&
 
         activeTab !==
-          'Settings' &&
+          'Action Tracker' &&
 
         activeTab !==
           'Learning Loop' &&
 
         activeTab !==
-          'Action Tracker' && (
+          'Customer Journey' &&
+
+        activeTab !==
+          'Settings' && (
 
           <Placeholder
             title={
@@ -316,4 +314,5 @@ export default function RetentionOS({
     </div>
 
   );
+
 }

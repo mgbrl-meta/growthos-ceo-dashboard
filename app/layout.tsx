@@ -26,7 +26,21 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    > 
+      <head>
+
+  <meta
+    name="shopify-api-key"
+    content={
+      process.env.SHOPIFY_CLIENT_ID || ''
+    }
+  />
+
+  <script
+    src="https://cdn.shopify.com/shopifycloud/app-bridge.js"
+  />
+
+</head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

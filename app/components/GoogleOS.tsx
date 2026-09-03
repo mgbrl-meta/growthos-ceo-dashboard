@@ -1,122 +1,315 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import {
+  useState,
+} from 'react';
 
 import GoogleSettings, {
   defaultSettings,
   GoogleSettingsState,
 } from './google/GoogleSettings';
 
-import GoogleOverview from './google/GoogleOverview';
-import GoogleChannelMix from './google/GoogleChannelMix';
-import GoogleCampaign from './google/GoogleCampaign';
-import GoogleAdGroup from './google/GoogleAdGroup';
-import GoogleSearchTerms from './google/GoogleSearchTerms';
-import GoogleKeywords from './google/GoogleKeywords';
-import GoogleFunnel from './google/GoogleFunnel';
-import GoogleAlerts from './google/GoogleAlerts';
+import GoogleOverview
+  from './google/GoogleOverview';
+
+import GoogleChannelMix
+  from './google/GoogleChannelMix';
+
+import GoogleCampaign
+  from './google/GoogleCampaign';
+
+import GoogleAdGroup
+  from './google/GoogleAdGroup';
+
+import GoogleSearchTerms
+  from './google/GoogleSearchTerms';
+
+import GoogleKeywords
+  from './google/GoogleKeywords';
+
+import GoogleFunnel
+  from './google/GoogleFunnel';
+
+import GoogleAlerts
+  from './google/GoogleAlerts';
+
+
+// ============================================================
+// PROPS
+//
+// Navigation is controlled by:
+//
+// AppSidebar
+//    ↓
+// GrowthOSDashboard
+//    ↓
+// activeGoogleTab
+//    ↓
+// GoogleOS
+// ============================================================
 
 type Props = {
+
   startDate: string;
+
   endDate: string;
+
   compareStartDate?: string;
+
   compareEndDate?: string;
-  setTopTabs?: (tabs: ReactNode) => void;
+
+  activeGoogleTab: string;
+
 };
 
+
+// ============================================================
+// GOOGLE OS
+// ============================================================
+
 export default function GoogleOS({
+
   startDate,
+
   endDate,
+
   compareStartDate,
+
   compareEndDate,
-  setTopTabs,
+
+  activeGoogleTab,
+
 }: Props) {
-  const [activeGoogleTab, setActiveGoogleTab] = useState('Settings');
 
-  const [googleSettings, setGoogleSettings] =
-    useState<GoogleSettingsState>(defaultSettings);
 
-  const googleTabs = [
-    'Settings',
-    'Overview',
-    'Channel Mix',
-    'Campaign',
-    'Ad Group',
-    'Search Terms',
-    'Keywords',
-    'Funnel',
-    'Alerts',
-  ];
+  // ==========================================================
+  // GOOGLE SETTINGS
+  // ==========================================================
 
-  useEffect(() => {
-    if (!setTopTabs) return;
-
-    setTopTabs(
-      <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-slate-100 p-2">
-        {googleTabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveGoogleTab(tab)}
-            className={
-              activeGoogleTab === tab
-                ? 'whitespace-nowrap rounded-xl bg-white px-4 py-2 text-sm font-black text-slate-950 shadow'
-                : 'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold text-slate-500 hover:bg-white hover:text-slate-950'
-            }
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+  const [
+    googleSettings,
+    setGoogleSettings,
+  ] =
+    useState<GoogleSettingsState>(
+      defaultSettings
     );
 
-    return () => setTopTabs(null);
-  }, [activeGoogleTab, setTopTabs]);
+
+  // ==========================================================
+  // RENDER
+  //
+  // Only the currently selected Google module is mounted.
+  // ==========================================================
 
   return (
+
     <section className="space-y-6">
-      {activeGoogleTab === 'Settings' && (
+
+
+      {/* =====================================================
+          SETTINGS
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Settings' && (
+
         <GoogleSettings
-          settings={googleSettings}
-          setSettings={setGoogleSettings}
+
+          settings={
+            googleSettings
+          }
+
+          setSettings={
+            setGoogleSettings
+          }
+
         />
+
       )}
 
-      {activeGoogleTab === 'Overview' && (
-        <GoogleOverview startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          OVERVIEW
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Overview' && (
+
+        <GoogleOverview
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
 
-      {activeGoogleTab === 'Channel Mix' && (
-        <GoogleChannelMix startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          CHANNEL MIX
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Channel Mix' && (
+
+        <GoogleChannelMix
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
 
-      {activeGoogleTab === 'Campaign' && (
-        <GoogleCampaign startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          CAMPAIGN
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Campaign' && (
+
+        <GoogleCampaign
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
 
-      {activeGoogleTab === 'Ad Group' && (
-        <GoogleAdGroup startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          AD GROUP
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Ad Group' && (
+
+        <GoogleAdGroup
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
 
-      {activeGoogleTab === 'Search Terms' && (
+
+      {/* =====================================================
+          SEARCH TERMS
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Search Terms' && (
+
         <GoogleSearchTerms
-          startDate={startDate}
-          endDate={endDate}
-          settings={googleSettings}
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+          settings={
+            googleSettings
+          }
+
         />
+
       )}
 
-      {activeGoogleTab === 'Keywords' && (
-        <GoogleKeywords startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          KEYWORDS
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Keywords' && (
+
+        <GoogleKeywords
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
 
-      {activeGoogleTab === 'Funnel' && (
-        <GoogleFunnel startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          FUNNEL
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Funnel' && (
+
+        <GoogleFunnel
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
 
-      {activeGoogleTab === 'Alerts' && (
-        <GoogleAlerts startDate={startDate} endDate={endDate} />
+
+      {/* =====================================================
+          ALERTS
+      ===================================================== */}
+
+      {activeGoogleTab ===
+        'Alerts' && (
+
+        <GoogleAlerts
+
+          startDate={
+            startDate
+          }
+
+          endDate={
+            endDate
+          }
+
+        />
+
       )}
+
+
     </section>
+
   );
+
 }
