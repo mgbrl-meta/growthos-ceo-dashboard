@@ -8,7 +8,12 @@ import {
 } from '@/lib/auth/shopify';
 
 import {
-  getIntegrationTenant,
+  resolveTenantContextById,
+} from '@/lib/tenancy/context';
+
+import {
+  getIntegrationAccountByProviderAccountId,
+  getShopifyIntegrationAccountByDomain,
   getIntegrationConnection,
   upsertIntegrationConnection,
   upsertIntegrationAccount,
@@ -26,18 +31,40 @@ export const runtime =
 // SHOPIFY SHOP IDENTITY RESOLUTION
 //
 // Shopify App Bridge
-//      ↓
+//       ↓
 // Shopify ID token
-//      ↓
-// Resolve real Shopify shop
-//      ↓
-// Update integration connection
-//      ↓
-// Create / update integration account
-//      ↓
-// Return Growth OS account identity
+//       ↓
+// verify authentic Shopify session
+//       ↓
+// canonical Shopify Shop identity
+//       ↓
+// integration_accounts lookup
+//       ↓
+// existing Growth OS workspace + brand
+//       ↓
+// verify / refresh integration identity
 //
-// No Shopify Admin access token is returned.
+//
+// IMPORTANT:
+//
+// This route NEVER uses environment/default tenant resolution.
+
+//
+// Shopify itself determines the tenant:
+//
+// canonical Shopify Shop ID
+//         ↓
+// integration_accounts
+//         ↓
+// workspace_id + brand_id
+//
+//
+// NEW SHOP:
+//
+// A Shopify store that has never been registered must complete
+// the Shopify installation/OAuth flow first.
+//
+// This route does NOT silently provision unknown stores.
 // ============================================================
 
 export async function GET(
@@ -47,7 +74,7 @@ export async function GET(
   try {
 
     // ========================================================
-    // SHOPIFY ID TOKEN
+    // 1. SHOPIFY ID TOKEN
     // ========================================================
 
     const authorization =
@@ -93,8 +120,45 @@ export async function GET(
         .trim();
 
 
+    if (!idToken) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'Missing Shopify ID token',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
     // ========================================================
-    // RESOLVE SHOPIFY SHOP
+    // 2. RESOLVE CANONICAL SHOPIFY IDENTITY
+    //
+    // Shopify ID token
+    //       ↓
+    // verified shop domain
+    //       ↓
+    // online Admin token exchange
+    //       ↓
+    // Shopify Admin API
+    //       ↓
+    // canonical Shop GID
+    //
+    // Returns:
+    //
+    // shopId
+    // shopDomain
+    // shopName
     // ========================================================
 
     const shop =
@@ -105,33 +169,160 @@ export async function GET(
 
     if (
       !shop?.shopId
+      ||
+      !shop?.shopDomain
     ) {
 
       throw new Error(
-        'Shopify shop identity did not return a Shop ID'
+        'SHOPIFY_CANONICAL_IDENTITY_INCOMPLETE'
       );
 
     }
 
 
     // ========================================================
-    // CURRENT GROWTH OS TENANT
+    // 3. FIND EXISTING SHOPIFY → GROWTH OS MAPPING
     //
-    // No Brillare hardcoding.
+    // Primary lookup:
     //
-    // Today:
-    // environment → Brillare
+    // canonical Shopify Shop GID
     //
-    // Future:
-    // authenticated SaaS user → workspace → brand
+    // This is the strongest external provider identity.
+    // ========================================================
+
+    let mappedAccount =
+      await getIntegrationAccountByProviderAccountId(
+
+        'shopify',
+
+        shop.shopId
+
+      );
+
+
+    // ========================================================
+    // 4. DOMAIN COMPATIBILITY LOOKUP
+    //
+    // Temporary compatibility path for existing installations
+    // that may have been registered by domain before canonical
+    // Shop GID mapping was fully established.
+    //
+    // This still uses Growth OS control-plane data.
+    //
+    // It does NOT use ENV tenant defaults.
+    // ========================================================
+
+    if (
+      !mappedAccount
+      &&
+      shop.shopDomain
+    ) {
+
+      mappedAccount =
+        await getShopifyIntegrationAccountByDomain(
+          shop.shopDomain
+        );
+
+    }
+
+
+    // ========================================================
+    // 5. UNKNOWN SHOP
+    //
+    // An unknown Shopify store should enter the canonical
+    // installation flow.
+    //
+    // We must NOT attach it to:
+    //
+    // Brillare
+    // current ENV tenant
+    // current browser tenant
+    // any arbitrary workspace
+    // ========================================================
+
+    if (!mappedAccount) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_INTEGRATION_NOT_REGISTERED',
+
+          installRequired:
+            true,
+
+          shop: {
+
+            id:
+              shop.shopId,
+
+            domain:
+              shop.shopDomain,
+
+            name:
+              shop.shopName,
+
+          },
+
+        },
+        {
+          status:
+            404,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. RESOLVE EXACT GROWTH OS TENANT
+    //
+    // integration_account is the authority:
+    //
+    // Shopify Shop
+    //       ↓
+    // workspace_id
+    // brand_id
+    //       ↓
+    // control plane
     // ========================================================
 
     const tenant =
-      await getIntegrationTenant();
+      await resolveTenantContextById(
+
+        mappedAccount.workspace_id,
+
+        mappedAccount.brand_id
+
+      );
 
 
     // ========================================================
-    // EXISTING SHOPIFY CONNECTION
+    // 7. DEFENCE-IN-DEPTH TENANT CHECK
+    // ========================================================
+
+    if (
+      tenant.workspaceId !==
+        mappedAccount.workspace_id
+      ||
+      tenant.brandId !==
+        mappedAccount.brand_id
+    ) {
+
+      throw new Error(
+        'SHOPIFY_TENANT_MAPPING_MISMATCH'
+      );
+
+    }
+
+
+    // ========================================================
+    // 8. LOAD SHOPIFY CONNECTION
+    //
+    // Strictly scoped to resolved tenant.
     // ========================================================
 
     const connection =
@@ -148,38 +339,61 @@ export async function GET(
 
     if (!connection) {
 
-      throw new Error(
-        'Shopify integration connection is not configured for the current brand'
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_CONNECTION_NOT_REGISTERED',
+
+          installRequired:
+            true,
+
+        },
+        {
+          status:
+            409,
+        }
       );
 
     }
 
 
+    // ========================================================
+    // 9. CANONICAL PROVIDER ACCOUNT IDENTITY
+    // ========================================================
+
     const providerAccountId =
       String(
         shop.shopId
-      );
+      ).trim();
 
 
     const providerAccountName =
-      shop.shopName
-      ||
-      shop.shopDomain
-      ||
-      providerAccountId;
+      String(
+        shop.shopName
+        ||
+        shop.shopDomain
+        ||
+        providerAccountId
+      ).trim();
 
 
     // ========================================================
-    // UPDATE CONNECTION WITH REAL SHOPIFY ACCOUNT IDENTITY
+    // 10. REFRESH SHOPIFY CONNECTION IDENTITY
     //
-    // IMPORTANT:
+    // Preserve existing:
     //
-    // Preserve the current connection mode / ingestion adapter.
+    // connection mode
+    // ingestion adapter
+    // status
+    // credential pointer
     //
-    // We do NOT switch legacy → native here yet.
+    // This route verifies identity.
     //
-    // Native ingestion will be enabled separately once the new
-    // growthos_data writer is ready.
+    // It does NOT redesign or migrate ingestion architecture.
     // ========================================================
 
     const connectionId =
@@ -235,11 +449,27 @@ export async function GET(
 
 
     // ========================================================
-    // REGISTER SHOPIFY STORE AS INTEGRATION ACCOUNT
+    // 11. REFRESH INTEGRATION ACCOUNT
     //
-    // This is the identity that all new Shopify warehouse rows
-    // will carry.
+    // Preserve existing account metadata and enrich canonical
+    // Shopify identity.
+    //
+    // IMPORTANT:
+    //
+    // Do not wipe currency/timezone/account metadata that may
+    // already have been discovered.
     // ========================================================
+
+    const existingMetadata =
+      (
+        mappedAccount.metadata
+        &&
+        typeof mappedAccount.metadata ===
+          'object'
+      )
+        ? mappedAccount.metadata
+        : {};
+
 
     const integrationAccountId =
       await upsertIntegrationAccount({
@@ -260,42 +490,46 @@ export async function GET(
         providerAccountName,
 
         accountType:
-          'shop',
+          mappedAccount.account_type
+          ||
+          'store',
 
         isSelected:
+          mappedAccount.is_selected
+          ??
           true,
 
-
-        // ----------------------------------------------------
-        // Do not invent currency / timezone here.
-        //
-        // resolveShopifyShopIdentity currently gives:
-        //
-        // shopId
-        // shopDomain
-        // shopName
-        //
-        // We can populate currency/timezone later from Shopify
-        // Shop API metadata.
-        // ----------------------------------------------------
-
         currency:
+          mappedAccount.currency
+          ??
           null,
 
         timezone:
+          mappedAccount.timezone
+          ??
           null,
 
         metadata: {
 
-          shopDomain:
-            shop.shopDomain
-            ??
-            null,
+          ...existingMetadata,
 
-          shopName:
+          shop_domain:
+            shop.shopDomain,
+
+          shop_name:
             shop.shopName
             ??
             null,
+
+          canonical_shop_id:
+            shop.shopId,
+
+          identity_source:
+            'shopify_id_token',
+
+          identity_verified_at:
+            new Date()
+              .toISOString(),
 
         },
 
@@ -303,9 +537,9 @@ export async function GET(
 
 
     // ========================================================
-    // RESPONSE
+    // 12. SAFE RESPONSE
     //
-    // Never return Shopify Admin access tokens.
+    // Never return Shopify Admin credentials.
     // ========================================================
 
     return NextResponse.json(
@@ -356,17 +590,25 @@ export async function GET(
     error: any
   ) {
 
+    const message =
+      String(
+        error?.message
+        ||
+        'Failed to resolve Shopify Shop ID'
+      );
+
+
     console.error(
       'SHOPIFY_RESOLVE_SHOP_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
-    const message =
-      error?.message
-      ||
-      'Failed to resolve Shopify Shop ID';
-
+    // ========================================================
+    // AUTHENTICATION FAILURE
+    // ========================================================
 
     const looksLikeAuthenticationError =
 
@@ -376,6 +618,66 @@ export async function GET(
         );
 
 
+    if (
+      looksLikeAuthenticationError
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_AUTHENTICATION_FAILED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // TENANT MAPPING FAILURE
+    // ========================================================
+
+    if (
+      message.includes(
+        'TENANT_MAPPING'
+      )
+      ||
+      message.includes(
+        'Growth OS tenant could not be resolved'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_TENANT_CONTEXT_INVALID',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // INTERNAL FAILURE
+    // ========================================================
+
     return NextResponse.json(
       {
 
@@ -383,14 +685,12 @@ export async function GET(
           false,
 
         error:
-          message,
+          'Failed to resolve Shopify store',
 
       },
       {
         status:
-          looksLikeAuthenticationError
-            ? 401
-            : 500,
+          500,
       }
     );
 

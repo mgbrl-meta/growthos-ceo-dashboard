@@ -7,7 +7,7 @@ import {
 } from 'next/server';
 
 import {
-  resolveTenantContext,
+  resolveTenantContextById,
 } from '@/lib/tenancy/context';
 
 import {
@@ -35,14 +35,27 @@ export const runtime =
 // ============================================================
 // META OAUTH CALLBACK
 //
+// ARCHITECTURE:
+//
+// Meta connection is ALWAYS initiated from Growth OS.
+//
+// Authenticated Growth OS dashboard
+//        ↓
+// active workspace + brand
+//        ↓
+// /api/integrations/meta/connect
+//        ↓
+// freeze tenant in HttpOnly OAuth cookies
+//        ↓
 // Meta authorization
 //        ↓
-// callback
+// THIS CALLBACK
 //        ↓
 // verify OAuth state
-// verify Growth OS tenant
 //        ↓
-// authorization-code exchange
+// resolve EXACT frozen workspace + brand
+//        ↓
+// exchange authorization code
 //        ↓
 // long-lived Meta token
 //        ↓
@@ -50,17 +63,37 @@ export const runtime =
 //        ↓
 // Secret Manager
 //        ↓
-// Growth OS integration_connection
+// integration_connection
+//        ↓
+// return to Growth OS dashboard
+//
 //
 // IMPORTANT:
 //
+// Unlike Shopify:
+//
+// Meta does NOT create a tenant.
+//
+// Meta connects TO an already-authenticated Growth OS brand.
+//
+// The callback must NEVER use:
+//
+// GROWTHOS_DEFAULT_WORKSPACE_ID
+// GROWTHOS_DEFAULT_BRAND_ID
+// query-string workspace ID
+// query-string brand ID
+// current ENV tenant
+//
 // Shopify installation logic does NOT belong here.
-// Shopify has its own independent callback.
 // ============================================================
 
 export async function GET(
   req: Request
 ) {
+
+  // ==========================================================
+  // GROWTH OS APP URL
+  // ==========================================================
 
   const appUrl =
     String(
@@ -87,6 +120,12 @@ export async function GET(
 
     // ========================================================
     // 1. HANDLE META AUTHORIZATION ERROR
+    //
+    // Examples:
+    //
+    // user denied permission
+    // authorization cancelled
+    // Meta authorization failure
     // ========================================================
 
     const metaError =
@@ -141,7 +180,7 @@ export async function GET(
     ) {
 
       throw new Error(
-        'Meta callback is missing authorization code or state'
+        'META_OAUTH_CALLBACK_PARAMETERS_MISSING'
       );
 
     }
@@ -150,13 +189,18 @@ export async function GET(
     // ========================================================
     // 3. READ SECURE OAUTH COOKIES
     //
-    // These were created by the Meta connect route.
+    // Created by:
     //
-    // They bind authorization to:
+    // /api/integrations/meta/connect
+    //
+    // Before leaving Growth OS we freeze:
     //
     // OAuth state
     // workspace
     // brand
+    //
+    // These values become the authoritative tenant context
+    // for this OAuth transaction.
     // ========================================================
 
     const cookieStore =
@@ -194,9 +238,12 @@ export async function GET(
 
 
     // ========================================================
-    // 4. STATE VALIDATION
+    // 4. VERIFY OAUTH STATE
     //
-    // Protect against OAuth CSRF.
+    // Anti-CSRF protection.
+    //
+    // State returned by Meta must exactly match the secret
+    // state created before authorization began.
     // ========================================================
 
     if (
@@ -207,61 +254,92 @@ export async function GET(
     ) {
 
       throw new Error(
-        'Meta OAuth state validation failed'
+        'META_OAUTH_STATE_INVALID'
       );
 
     }
 
 
     // ========================================================
-    // 5. RESOLVE CURRENT GROWTH OS TENANT
+    // 5. REQUIRE FROZEN TENANT CONTEXT
     //
-    // Meta OAuth is initiated FROM an existing Growth OS
-    // workspace / brand.
-    //
-    // Unlike Shopify installation, Meta does not create a new
-    // tenant here.
-    // ========================================================
-
-    const tenant =
-      await resolveTenantContext();
-
-
-    // ========================================================
-    // 6. VERIFY TENANT DID NOT CHANGE DURING OAUTH
-    //
-    // Never trust workspace / brand IDs supplied through URL
-    // query parameters.
-    //
-    // Compare against secure HttpOnly cookies created before
-    // redirecting to Meta.
+    // Meta must always be attached to the Growth OS brand
+    // from which authorization started.
     // ========================================================
 
     if (
       !expectedWorkspace
       ||
       !expectedBrand
-      ||
-      expectedWorkspace !==
-        tenant.workspaceId
-      ||
-      expectedBrand !==
-        tenant.brandId
     ) {
 
       throw new Error(
-        'Meta OAuth tenant context changed during authorization'
+        'META_OAUTH_TENANT_CONTEXT_MISSING'
       );
 
     }
 
 
     // ========================================================
-    // 7. EXCHANGE AUTHORIZATION CODE
+    // 6. RESOLVE EXACT OAUTH TENANT
+    //
+    // IMPORTANT:
+    //
+    // This deliberately does NOT call:
+    //
+    // because that function may use development ENV defaults.
+    //
+    // Instead we resolve exactly:
+    //
+    // expectedWorkspace
+    // expectedBrand
+    //
+    // captured before leaving Growth OS.
+    // ========================================================
+
+    const tenant =
+      await resolveTenantContextById(
+
+        expectedWorkspace,
+
+        expectedBrand
+
+      );
+
+
+    // ========================================================
+    // 7. DEFENCE-IN-DEPTH TENANT CHECK
+    //
+    // resolveTenantContextById() should already guarantee
+    // this mapping.
+    //
+    // Keep explicit verification because OAuth tenant binding
+    // is security-sensitive.
+    // ========================================================
+
+    if (
+      tenant.workspaceId !==
+        expectedWorkspace
+      ||
+      tenant.brandId !==
+        expectedBrand
+    ) {
+
+      throw new Error(
+        'META_OAUTH_TENANT_CONTEXT_MISMATCH'
+      );
+
+    }
+
+
+    // ========================================================
+    // 8. EXCHANGE AUTHORIZATION CODE
     //
     // Meta authorization code
     //        ↓
-    // short-lived token
+    // short-lived user token
+    //
+    // Token never goes to the browser.
     // ========================================================
 
     const shortToken =
@@ -271,7 +349,7 @@ export async function GET(
 
 
     // ========================================================
-    // 8. EXCHANGE FOR LONG-LIVED TOKEN
+    // 9. EXCHANGE FOR LONG-LIVED TOKEN
     // ========================================================
 
     const longToken =
@@ -281,10 +359,13 @@ export async function GET(
 
 
     // ========================================================
-    // 9. VERIFY META USER
+    // 10. VERIFY META USER
     //
-    // Confirms the credential actually works and obtains the
-    // provider-native user identity.
+    // Confirms:
+    //
+    // credential works
+    // Meta API is reachable
+    // provider-native user identity
     // ========================================================
 
     const metaUser =
@@ -294,12 +375,22 @@ export async function GET(
 
 
     // ========================================================
-    // 10. SECURE SECRET STORAGE
+    // 11. STORE META CREDENTIAL SECURELY
     //
-    // Secret Manager stores the credential.
+    // Google Secret Manager stores credential material.
     //
-    // BigQuery never receives the access token.
+    // BigQuery stores only:
+    //
+    // secret pointer
+    // connection metadata
+    //
+    // NEVER the access token.
     // ========================================================
+
+    const now =
+      new Date()
+        .toISOString();
+
 
     const secretName =
       await storeIntegrationSecret({
@@ -337,12 +428,10 @@ export async function GET(
             metaUser.name,
 
           issued_at:
-            new Date()
-              .toISOString(),
+            now,
 
           updated_at:
-            new Date()
-              .toISOString(),
+            now,
 
         },
 
@@ -350,16 +439,28 @@ export async function GET(
 
 
     // ========================================================
-    // 11. UPSERT META CONNECTION
+    // 12. UPSERT META CONNECTION
     //
-    // OAuth itself is complete.
+    // OAuth is now complete.
     //
-    // Meta may expose multiple ad accounts, therefore the
-    // connection remains needs_attention until the merchant
-    // selects the account Growth OS should use.
+    // But Meta can expose multiple ad accounts.
     //
-    // This replaces the old Brillare legacy Google Sheets
-    // connection with the new OAuth / Graph API connection.
+    // Therefore connection remains:
+    //
+    // needs_attention
+    //
+    // until user selects the desired account from Growth OS.
+    //
+    //
+    // Growth OS dashboard
+    //       ↓
+    // GET /api/integrations/meta/accounts
+    //       ↓
+    // select account
+    //       ↓
+    // POST /api/integrations/meta/select-account
+    //       ↓
+    // connected
     // ========================================================
 
     await upsertIntegrationConnection({
@@ -403,13 +504,15 @@ export async function GET(
 
 
     // ========================================================
-    // 12. REDIRECT BACK TO GROWTH OS
+    // 13. RETURN TO GROWTH OS
     //
-    // Next UI step:
+    // Meta setup continues inside Growth OS.
     //
-    // GET /api/integrations/meta/accounts
-    //        ↓
-    // merchant selects Meta ad account
+    // We do NOT send the user to a Meta-hosted setup screen.
+    //
+    // Next Growth OS UI step:
+    //
+    // choose Meta ad account.
     // ========================================================
 
     const response =
@@ -421,7 +524,9 @@ export async function GET(
 
 
     // ========================================================
-    // 13. CLEAR ONE-TIME OAUTH COOKIES
+    // 14. CLEAR ONE-TIME OAUTH COOKIES
+    //
+    // State + tenant binding are single-use.
     // ========================================================
 
     response.cookies.delete(
@@ -449,7 +554,13 @@ export async function GET(
     // ========================================================
     // SAFE ERROR LOGGING
     //
-    // Do not log Meta access tokens.
+    // NEVER log:
+    //
+    // Meta access token
+    // client secret
+    // OAuth code
+    // OAuth state value
+    // Secret Manager payload
     // ========================================================
 
     const message =
@@ -468,13 +579,44 @@ export async function GET(
     );
 
 
-    return NextResponse.redirect(
+    // ========================================================
+    // SAFE FAILURE REDIRECT
+    //
+    // Do not expose internal error messages in browser URL.
+    //
+    // Detailed error remains in server logs.
+    // ========================================================
 
-      `${appUrl}/?integration=meta_ads&connection=failed&error=${encodeURIComponent(
-        message
-      )}`
+    const response =
+      NextResponse.redirect(
 
+        `${appUrl}/?integration=meta_ads&connection=failed`
+
+      );
+
+
+    // ========================================================
+    // CLEAR OAUTH COOKIES EVEN ON FAILURE
+    //
+    // Prevent stale state / tenant context from surviving.
+    // ========================================================
+
+    response.cookies.delete(
+      'growthos_meta_state'
     );
+
+
+    response.cookies.delete(
+      'growthos_meta_workspace'
+    );
+
+
+    response.cookies.delete(
+      'growthos_meta_brand'
+    );
+
+
+    return response;
 
   }
 

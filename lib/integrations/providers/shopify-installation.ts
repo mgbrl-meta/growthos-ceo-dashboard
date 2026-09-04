@@ -384,6 +384,13 @@ export async function registerShopifyIntegration(
         ingestion_mode:
           'hybrid',
 
+        setup_status:
+          'required',
+
+        setup_required_at:
+          new Date()
+            .toISOString(),
+
       },
 
     });

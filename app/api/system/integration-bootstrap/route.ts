@@ -3,10 +3,6 @@ import {
 } from 'next/server';
 
 import {
-  resolveTenantContext,
-} from '@/lib/tenancy/context';
-
-import {
   ensureIntegrationControlPlane,
 } from '@/lib/integrations/control-plane';
 
@@ -18,23 +14,57 @@ import {
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
+
+
+// ============================================================
+// GROWTH OS DEVELOPMENT / SYSTEM BOOTSTRAP
+//
+// IMPORTANT:
+//
+// This is NOT a normal tenant-runtime endpoint.
+//
+// It exists only to:
+//
+// 1. bootstrap explicitly configured development tenant
+// 2. ensure integration control-plane infrastructure
+//
+// Environment defaults are intentionally allowed here:
+//
+// GROWTHOS_DEFAULT_WORKSPACE_ID
+// GROWTHOS_DEFAULT_BRAND_ID
+//
+// Normal dashboard/API routes must instead use:
+//
+// resolveRequestTenantContext(request)
+//
+// This endpoint should never be used to determine the active
+// tenant for a normal Growth OS user request.
+// ============================================================
 
 export async function GET() {
 
   try {
 
     // ========================================================
-    // BOOTSTRAP TENANT INFRASTRUCTURE
+    // 1. BOOTSTRAP EXPLICIT DEVELOPMENT TENANT
     //
-    // Setup/bootstrap only.
-    // Not executed during normal application requests.
+    // bootstrapDevelopmentTenant() itself reads the configured
+    // development/default tenant values and returns the exact
+    // tenant it created/resolved.
+    //
+    // Therefore there is no need to call:
+    //
+    // again afterward.
     // ========================================================
 
-    await bootstrapDevelopmentTenant();
+    const tenant =
+      await bootstrapDevelopmentTenant();
 
 
     // ========================================================
-    // INTEGRATION CONTROL PLANE
+    // 2. ENSURE INTEGRATION CONTROL PLANE
     // ========================================================
 
     const controlPlane =
@@ -42,15 +72,7 @@ export async function GET() {
 
 
     // ========================================================
-    // VERIFY TENANT
-    // ========================================================
-
-    const tenant =
-      await resolveTenantContext();
-
-
-    // ========================================================
-    // RESPONSE
+    // 3. RESPONSE
     // ========================================================
 
     return NextResponse.json(
@@ -72,6 +94,9 @@ export async function GET() {
           bootstrap:
             'complete',
 
+          mode:
+            'development_bootstrap',
+
           safeToRerun:
             true,
 
@@ -85,9 +110,19 @@ export async function GET() {
     error: any
   ) {
 
+    const message =
+      String(
+        error?.message
+        ||
+        'Growth OS integration bootstrap failed'
+      );
+
+
     console.error(
       'INTEGRATION_BOOTSTRAP_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
@@ -98,8 +133,6 @@ export async function GET() {
           false,
 
         error:
-          error?.message
-          ||
           'Growth OS integration bootstrap failed',
 
       },

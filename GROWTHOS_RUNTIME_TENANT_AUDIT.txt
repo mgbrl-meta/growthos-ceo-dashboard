@@ -1,0 +1,3482 @@
+============================================================
+GROWTH OS - RUNTIME TENANT RESOLUTION AUDIT
+============================================================
+
+============================================================
+SEARCH: resolveTenantContext\(
+============================================================
+
+  app\api\integrations\meta\accounts\route.ts:48:
+  app\api\integrations\meta\accounts\route.ts:49:    const tenant =
+> app\api\integrations\meta\accounts\route.ts:50:      await resolveTenantContext();
+  app\api\integrations\meta\accounts\route.ts:51:
+  app\api\integrations\meta\accounts\route.ts:52:
+  app\api\integrations\meta\accounts\route.ts:53:    // ========================================================
+  app\api\integrations\meta\accounts\route.ts:54:    // META CONNECTION
+  app\api\integrations\meta\accounts\route.ts:55:    // ========================================================
+  app\api\integrations\meta\accounts\route.ts:56:
+  app\api\integrations\meta\callback\route.ts:225:
+  app\api\integrations\meta\callback\route.ts:226:    const tenant =
+> app\api\integrations\meta\callback\route.ts:227:      await resolveTenantContext();
+  app\api\integrations\meta\callback\route.ts:228:
+  app\api\integrations\meta\callback\route.ts:229:
+  app\api\integrations\meta\callback\route.ts:230:    // ========================================================
+  app\api\integrations\meta\callback\route.ts:231:    // 6. VERIFY TENANT DID NOT CHANGE DURING OAUTH
+  app\api\integrations\meta\callback\route.ts:232:    //
+  app\api\integrations\meta\callback\route.ts:233:    // Never trust workspace / brand IDs supplied through URL
+  app\api\integrations\meta\connect\route.ts:34:
+  app\api\integrations\meta\connect\route.ts:35:    const tenant =
+> app\api\integrations\meta\connect\route.ts:36:      await resolveTenantContext();
+  app\api\integrations\meta\connect\route.ts:37:
+  app\api\integrations\meta\connect\route.ts:38:
+  app\api\integrations\meta\connect\route.ts:39:    const state =
+  app\api\integrations\meta\connect\route.ts:40:      crypto
+  app\api\integrations\meta\connect\route.ts:41:        .randomBytes(
+  app\api\integrations\meta\connect\route.ts:42:          32
+  app\api\integrations\meta\select-account\route.ts:96:
+  app\api\integrations\meta\select-account\route.ts:97:    const tenant =
+> app\api\integrations\meta\select-account\route.ts:98:      await resolveTenantContext();
+  app\api\integrations\meta\select-account\route.ts:99:
+  app\api\integrations\meta\select-account\route.ts:100:
+  app\api\integrations\meta\select-account\route.ts:101:    // ========================================================
+  app\api\integrations\meta\select-account\route.ts:102:    // CURRENT META CONNECTION
+  app\api\integrations\meta\select-account\route.ts:103:    // ========================================================
+  app\api\integrations\meta\select-account\route.ts:104:
+  app\api\system\integration-bootstrap\route.ts:47:
+  app\api\system\integration-bootstrap\route.ts:48:    const tenant =
+> app\api\system\integration-bootstrap\route.ts:49:      await resolveTenantContext();
+  app\api\system\integration-bootstrap\route.ts:50:
+  app\api\system\integration-bootstrap\route.ts:51:
+  app\api\system\integration-bootstrap\route.ts:52:    // ========================================================
+  app\api\system\integration-bootstrap\route.ts:53:    // RESPONSE
+  app\api\system\integration-bootstrap\route.ts:54:    // ========================================================
+  app\api\system\integration-bootstrap\route.ts:55:
+  app\api\system\sync-test\route.ts:51:
+  app\api\system\sync-test\route.ts:52:    const tenant =
+> app\api\system\sync-test\route.ts:53:      await resolveTenantContext();
+  app\api\system\sync-test\route.ts:54:
+  app\api\system\sync-test\route.ts:55:
+  app\api\system\sync-test\route.ts:56:    const connection =
+  app\api\system\sync-test\route.ts:57:      await getIntegrationConnection(
+  app\api\system\sync-test\route.ts:58:
+  app\api\system\sync-test\route.ts:59:        tenant.workspaceId,
+  app\api\system\tenant-context\route.ts:17:
+  app\api\system\tenant-context\route.ts:18:    const tenant =
+> app\api\system\tenant-context\route.ts:19:      await resolveTenantContext();
+  app\api\system\tenant-context\route.ts:20:
+  app\api\system\tenant-context\route.ts:21:
+  app\api\system\tenant-context\route.ts:22:    return NextResponse.json(
+  app\api\system\tenant-context\route.ts:23:      {
+  app\api\system\tenant-context\route.ts:24:
+  app\api\system\tenant-context\route.ts:25:        ok:
+  app\api\system\warehouse-audit\route.ts:21:
+  app\api\system\warehouse-audit\route.ts:22:    const tenant =
+> app\api\system\warehouse-audit\route.ts:23:      await resolveTenantContext();
+  app\api\system\warehouse-audit\route.ts:24:
+  app\api\system\warehouse-audit\route.ts:25:
+  app\api\system\warehouse-audit\route.ts:26:    const audit =
+  app\api\system\warehouse-audit\route.ts:27:      await auditWarehouse();
+  app\api\system\warehouse-audit\route.ts:28:
+  app\api\system\warehouse-audit\route.ts:29:
+  lib\integrations\providers\shopify-installation.ts:184:  ) {
+  lib\integrations\providers\shopify-installation.ts:185:
+> lib\integrations\providers\shopify-installation.ts:186:    return resolveTenantContext();
+  lib\integrations\providers\shopify-installation.ts:187:
+  lib\integrations\providers\shopify-installation.ts:188:  }
+  lib\integrations\providers\shopify-installation.ts:189:
+  lib\integrations\providers\shopify-installation.ts:190:
+  lib\integrations\providers\shopify-installation.ts:191:  // ==========================================================
+  lib\integrations\providers\shopify-installation.ts:192:  // 3. NEW SAAS TENANT
+  lib\integrations\development-bootstrap.ts:31:
+  lib\integrations\development-bootstrap.ts:32:  const tenant =
+> lib\integrations\development-bootstrap.ts:33:    await resolveTenantContext();
+  lib\integrations\development-bootstrap.ts:34:
+  lib\integrations\development-bootstrap.ts:35:
+  lib\integrations\development-bootstrap.ts:36:  // ==========================================================
+  lib\integrations\development-bootstrap.ts:37:  // SHOPIFY
+  lib\integrations\development-bootstrap.ts:38:  // ==========================================================
+  lib\integrations\development-bootstrap.ts:39:
+  lib\integrations\store.ts:491:
+  lib\integrations\store.ts:492:  return (
+> lib\integrations\store.ts:493:    await resolveTenantContext()
+  lib\integrations\store.ts:494:  );
+  lib\integrations\store.ts:495:
+  lib\integrations\store.ts:496:}
+  lib\integrations\store.ts:497:
+  lib\integrations\store.ts:498:
+  lib\integrations\store.ts:499:// ============================================================
+  lib\tenancy\context.ts:250:// ============================================================
+  lib\tenancy\context.ts:251:
+> lib\tenancy\context.ts:252:export async function resolveTenantContext():
+  lib\tenancy\context.ts:253:  Promise<TenantContext> {
+  lib\tenancy\context.ts:254:
+  lib\tenancy\context.ts:255:  requireProjectId();
+  lib\tenancy\context.ts:256:
+  lib\tenancy\context.ts:257:
+  lib\tenancy\context.ts:258:  const workspaceId =
+
+
+
+
+============================================================
+SEARCH: resolveTenantContextById\(
+============================================================
+
+  app\api\auth\brands\route.ts:107:
+  app\api\auth\brands\route.ts:108:      const tenant =
+> app\api\auth\brands\route.ts:109:        await resolveTenantContextById(
+  app\api\auth\brands\route.ts:110:
+  app\api\auth\brands\route.ts:111:          identity.workspaceId,
+  app\api\auth\brands\route.ts:112:
+  app\api\auth\brands\route.ts:113:          identity.brandId
+  app\api\auth\brands\route.ts:114:
+  app\api\auth\brands\route.ts:115:        );
+  app\api\auth\brands\route.ts:200:
+  app\api\auth\brands\route.ts:201:            const tenant =
+> app\api\auth\brands\route.ts:202:              await resolveTenantContextById(
+  app\api\auth\brands\route.ts:203:
+  app\api\auth\brands\route.ts:204:                membership.workspace_id,
+  app\api\auth\brands\route.ts:205:
+  app\api\auth\brands\route.ts:206:                membership.brand_id
+  app\api\auth\brands\route.ts:207:
+  app\api\auth\brands\route.ts:208:              );
+  app\api\auth\shopify\launch\route.ts:220:
+  app\api\auth\shopify\launch\route.ts:221:    const tenant =
+> app\api\auth\shopify\launch\route.ts:222:      await resolveTenantContextById(
+  app\api\auth\shopify\launch\route.ts:223:
+  app\api\auth\shopify\launch\route.ts:224:        account.workspace_id,
+  app\api\auth\shopify\launch\route.ts:225:
+  app\api\auth\shopify\launch\route.ts:226:        account.brand_id
+  app\api\auth\shopify\launch\route.ts:227:
+  app\api\auth\shopify\launch\route.ts:228:      );
+  app\api\auth\switch-brand\route.ts:251:
+  app\api\auth\switch-brand\route.ts:252:    const tenant =
+> app\api\auth\switch-brand\route.ts:253:      await resolveTenantContextById(
+  app\api\auth\switch-brand\route.ts:254:
+  app\api\auth\switch-brand\route.ts:255:        membership.workspace_id,
+  app\api\auth\switch-brand\route.ts:256:
+  app\api\auth\switch-brand\route.ts:257:        membership.brand_id
+  app\api\auth\switch-brand\route.ts:258:
+  app\api\auth\switch-brand\route.ts:259:      );
+  lib\auth\user-store.ts:1017:  // ==========================================================
+  lib\auth\user-store.ts:1018:
+> lib\auth\user-store.ts:1019:  await resolveTenantContextById(
+  lib\auth\user-store.ts:1020:    workspaceId,
+  lib\auth\user-store.ts:1021:    brandId
+  lib\auth\user-store.ts:1022:  );
+  lib\auth\user-store.ts:1023:
+  lib\auth\user-store.ts:1024:
+  lib\auth\user-store.ts:1025:  const membershipId =
+  lib\integrations\providers\shopify-installation.ts:141:  if (existingAccount) {
+  lib\integrations\providers\shopify-installation.ts:142:
+> lib\integrations\providers\shopify-installation.ts:143:    return resolveTenantContextById(
+  lib\integrations\providers\shopify-installation.ts:144:
+  lib\integrations\providers\shopify-installation.ts:145:      existingAccount.workspace_id,
+  lib\integrations\providers\shopify-installation.ts:146:
+  lib\integrations\providers\shopify-installation.ts:147:      existingAccount.brand_id
+  lib\integrations\providers\shopify-installation.ts:148:
+  lib\integrations\providers\shopify-installation.ts:149:    );
+  lib\tenancy\context.ts:60:// ============================================================
+  lib\tenancy\context.ts:61:
+> lib\tenancy\context.ts:62:export async function resolveTenantContextById(
+  lib\tenancy\context.ts:63:  workspaceId: string,
+  lib\tenancy\context.ts:64:  brandId: string
+  lib\tenancy\context.ts:65:):
+  lib\tenancy\context.ts:66:  Promise<TenantContext> {
+  lib\tenancy\context.ts:67:
+  lib\tenancy\context.ts:68:  const projectId =
+  lib\tenancy\context.ts:236:// environment defaults
+  lib\tenancy\context.ts:237://        ?
+> lib\tenancy\context.ts:238:// resolveTenantContextById()
+  lib\tenancy\context.ts:239://
+  lib\tenancy\context.ts:240:// FUTURE:
+  lib\tenancy\context.ts:241://
+  lib\tenancy\context.ts:242:// authenticated user
+  lib\tenancy\context.ts:243://        ?
+  lib\tenancy\context.ts:244:// workspace membership
+  lib\tenancy\context.ts:285:
+  lib\tenancy\context.ts:286:
+> lib\tenancy\context.ts:287:  return resolveTenantContextById(
+  lib\tenancy\context.ts:288:    workspaceId,
+  lib\tenancy\context.ts:289:    brandId
+  lib\tenancy\context.ts:290:  );
+  lib\tenancy\context.ts:291:
+  lib\tenancy\context.ts:292:}
+
+
+
+
+============================================================
+SEARCH: GROWTHOS_DEFAULT_WORKSPACE_ID
+============================================================
+
+  lib\tenancy\context.ts:258:  const workspaceId =
+  lib\tenancy\context.ts:259:    String(
+> lib\tenancy\context.ts:260:      process.env.GROWTHOS_DEFAULT_WORKSPACE_ID
+  lib\tenancy\context.ts:261:      ||
+  lib\tenancy\context.ts:262:      ''
+  lib\tenancy\context.ts:263:    ).trim();
+  lib\tenancy\context.ts:264:
+  lib\tenancy\context.ts:265:
+  lib\tenancy\context.ts:266:  const brandId =
+  lib\tenancy\control-plane.ts:649:
+  lib\tenancy\control-plane.ts:650:  const workspaceId =
+> lib\tenancy\control-plane.ts:651:    process.env.GROWTHOS_DEFAULT_WORKSPACE_ID;
+  lib\tenancy\control-plane.ts:652:
+  lib\tenancy\control-plane.ts:653:
+  lib\tenancy\control-plane.ts:654:  const workspaceName =
+  lib\tenancy\control-plane.ts:655:    process.env.GROWTHOS_DEFAULT_WORKSPACE_NAME;
+  lib\tenancy\control-plane.ts:656:
+  lib\tenancy\control-plane.ts:657:
+
+
+
+
+============================================================
+SEARCH: GROWTHOS_DEFAULT_BRAND_ID
+============================================================
+
+  lib\tenancy\context.ts:266:  const brandId =
+  lib\tenancy\context.ts:267:    String(
+> lib\tenancy\context.ts:268:      process.env.GROWTHOS_DEFAULT_BRAND_ID
+  lib\tenancy\context.ts:269:      ||
+  lib\tenancy\context.ts:270:      ''
+  lib\tenancy\context.ts:271:    ).trim();
+  lib\tenancy\context.ts:272:
+  lib\tenancy\context.ts:273:
+  lib\tenancy\context.ts:274:  if (
+  lib\tenancy\control-plane.ts:657:
+  lib\tenancy\control-plane.ts:658:  const brandId =
+> lib\tenancy\control-plane.ts:659:    process.env.GROWTHOS_DEFAULT_BRAND_ID;
+  lib\tenancy\control-plane.ts:660:
+  lib\tenancy\control-plane.ts:661:
+  lib\tenancy\control-plane.ts:662:  const brandName =
+  lib\tenancy\control-plane.ts:663:    process.env.GROWTHOS_DEFAULT_BRAND_NAME;
+  lib\tenancy\control-plane.ts:664:
+  lib\tenancy\control-plane.ts:665:
+
+
+
+
+============================================================
+SEARCH: GROWTHOS_DEFAULT_WORKSPACE_NAME
+============================================================
+
+  lib\tenancy\control-plane.ts:653:
+  lib\tenancy\control-plane.ts:654:  const workspaceName =
+> lib\tenancy\control-plane.ts:655:    process.env.GROWTHOS_DEFAULT_WORKSPACE_NAME;
+  lib\tenancy\control-plane.ts:656:
+  lib\tenancy\control-plane.ts:657:
+  lib\tenancy\control-plane.ts:658:  const brandId =
+  lib\tenancy\control-plane.ts:659:    process.env.GROWTHOS_DEFAULT_BRAND_ID;
+  lib\tenancy\control-plane.ts:660:
+  lib\tenancy\control-plane.ts:661:
+
+
+
+
+============================================================
+SEARCH: GROWTHOS_DEFAULT_BRAND_NAME
+============================================================
+
+  lib\tenancy\control-plane.ts:661:
+  lib\tenancy\control-plane.ts:662:  const brandName =
+> lib\tenancy\control-plane.ts:663:    process.env.GROWTHOS_DEFAULT_BRAND_NAME;
+  lib\tenancy\control-plane.ts:664:
+  lib\tenancy\control-plane.ts:665:
+  lib\tenancy\control-plane.ts:666:  const currency =
+  lib\tenancy\control-plane.ts:667:    process.env.GROWTHOS_DEFAULT_CURRENCY
+  lib\tenancy\control-plane.ts:668:    ||
+  lib\tenancy\control-plane.ts:669:    'INR';
+
+
+
+
+============================================================
+SEARCH: GROWTHOS_ADMIN_TENANT_ID
+============================================================
+
+  lib\auth\config.ts:110:  return (
+  lib\auth\config.ts:111:    env(
+> lib\auth\config.ts:112:      'GROWTHOS_ADMIN_TENANT_ID'
+  lib\auth\config.ts:113:    )
+  lib\auth\config.ts:114:    ||
+  lib\auth\config.ts:115:    'brillare'
+  lib\auth\config.ts:116:  );
+  lib\auth\config.ts:117:
+  lib\auth\config.ts:118:}
+
+
+
+
+============================================================
+SEARCH: tenantId
+============================================================
+
+  app\api\auth\me\route.ts:98:        // ----------------------------------------------------
+  app\api\auth\me\route.ts:99:
+> app\api\auth\me\route.ts:100:        tenantId:
+> app\api\auth\me\route.ts:101:          identity.tenantId,
+  app\api\auth\me\route.ts:102:
+  app\api\auth\me\route.ts:103:        // ----------------------------------------------------
+  app\api\auth\me\route.ts:104:        // SHOPIFY CONTEXT
+  app\api\auth\me\route.ts:105:        // ----------------------------------------------------
+  app\api\auth\me\route.ts:106:
+  app\api\auth\me\route.ts:107:        shopId:
+  lib\auth\config.ts:106:
+  lib\auth\config.ts:107:
+> lib\auth\config.ts:108:export function getPublicAdminTenantId() {
+  lib\auth\config.ts:109:
+  lib\auth\config.ts:110:  return (
+  lib\auth\config.ts:111:    env(
+  lib\auth\config.ts:112:      'GROWTHOS_ADMIN_TENANT_ID'
+  lib\auth\config.ts:113:    )
+  lib\auth\config.ts:114:    ||
+  lib\auth\config.ts:165:// ============================================================
+  lib\auth\config.ts:166:
+> lib\auth\config.ts:167:export function getPrimaryShopifyTenantId() {
+  lib\auth\config.ts:168:
+  lib\auth\config.ts:169:  return (
+  lib\auth\config.ts:170:    env(
+  lib\auth\config.ts:171:      'SHOPIFY_PRIMARY_TENANT_ID'
+  lib\auth\config.ts:172:    )
+  lib\auth\config.ts:173:    ||
+  lib\auth\request-auth.ts:71:  // ----------------------------------------------------------
+  lib\auth\request-auth.ts:72:
+> lib\auth\request-auth.ts:73:  tenantId:
+  lib\auth\request-auth.ts:74:    string;
+  lib\auth\request-auth.ts:75:
+  lib\auth\request-auth.ts:76:  // ----------------------------------------------------------
+  lib\auth\request-auth.ts:77:  // SHOPIFY IDENTITY
+  lib\auth\request-auth.ts:78:  // ----------------------------------------------------------
+  lib\auth\request-auth.ts:79:
+  lib\auth\request-auth.ts:142:          identity.userId,
+  lib\auth\request-auth.ts:143:
+> lib\auth\request-auth.ts:144:        tenantId:
+> lib\auth\request-auth.ts:145:          identity.tenantId,
+  lib\auth\request-auth.ts:146:
+  lib\auth\request-auth.ts:147:        authMethod:
+  lib\auth\request-auth.ts:148:          'shopify',
+  lib\auth\request-auth.ts:149:
+  lib\auth\request-auth.ts:150:        shopId:
+  lib\auth\request-auth.ts:151:          identity.shopId,
+  lib\auth\request-auth.ts:227:        session.authMethod,
+  lib\auth\request-auth.ts:228:
+> lib\auth\request-auth.ts:229:      tenantId:
+> lib\auth\request-auth.ts:230:        session.tenantId,
+  lib\auth\request-auth.ts:231:
+  lib\auth\request-auth.ts:232:    };
+  lib\auth\request-auth.ts:233:
+  lib\auth\request-auth.ts:234:  } catch (
+  lib\auth\request-auth.ts:235:    error
+  lib\auth\request-auth.ts:236:  ) {
+  lib\auth\session.ts:66:// role
+  lib\auth\session.ts:67://
+> lib\auth\session.ts:68:// tenantId remains temporarily as a compatibility alias.
+  lib\auth\session.ts:69://
+  lib\auth\session.ts:70:// It will eventually be removed after all old callers have
+  lib\auth\session.ts:71:// migrated to workspaceId + brandId.
+  lib\auth\session.ts:72:// ============================================================
+  lib\auth\session.ts:73:
+  lib\auth\session.ts:74:export type GrowthOsSession = {
+  lib\auth\session.ts:98:  // TEMPORARY BACKWARD COMPATIBILITY
+  lib\auth\session.ts:99:  //
+> lib\auth\session.ts:100:  // Old Growth OS code expects tenantId.
+  lib\auth\session.ts:101:  //
+  lib\auth\session.ts:102:  // For the current architecture we map it to brandId.
+  lib\auth\session.ts:103:  // ----------------------------------------------------------
+  lib\auth\session.ts:104:
+> lib\auth\session.ts:105:  tenantId:
+  lib\auth\session.ts:106:    string;
+  lib\auth\session.ts:107:
+  lib\auth\session.ts:108:  authSource:
+  lib\auth\session.ts:109:    'public';
+  lib\auth\session.ts:110:
+  lib\auth\session.ts:111:};
+  lib\auth\session.ts:124:// Old callers can temporarily continue providing:
+  lib\auth\session.ts:125://
+> lib\auth\session.ts:126:// tenantId
+  lib\auth\session.ts:127://
+  lib\auth\session.ts:128:// This allows AUTH 3 to land without breaking the existing
+  lib\auth\session.ts:129:// ENV-backed login route before AUTH 4 replaces it.
+  lib\auth\session.ts:130:// ============================================================
+  lib\auth\session.ts:131:
+  lib\auth\session.ts:132:export type GrowthOsSessionInput = {
+  lib\auth\session.ts:150:    GrowthOsSessionAuthMethod;
+  lib\auth\session.ts:151:
+> lib\auth\session.ts:152:  tenantId?:
+  lib\auth\session.ts:153:    string;
+  lib\auth\session.ts:154:
+  lib\auth\session.ts:155:  authSource:
+  lib\auth\session.ts:156:    'public';
+  lib\auth\session.ts:157:
+  lib\auth\session.ts:158:};
+  lib\auth\session.ts:229://   userId,
+  lib\auth\session.ts:230://   email,
+> lib\auth\session.ts:231://   tenantId,
+  lib\auth\session.ts:232://   authSource: 'public'
+  lib\auth\session.ts:233:// }
+  lib\auth\session.ts:234://
+  lib\auth\session.ts:235:// NEW
+  lib\auth\session.ts:236://
+  lib\auth\session.ts:237:// {
+  lib\auth\session.ts:278:  //
+  lib\auth\session.ts:279:  // Legacy:
+> lib\auth\session.ts:280:  // tenantId ? workspaceId
+  lib\auth\session.ts:281:  // ==========================================================
+  lib\auth\session.ts:282:
+  lib\auth\session.ts:283:  const workspaceId =
+  lib\auth\session.ts:284:    String(
+  lib\auth\session.ts:285:      input.workspaceId
+  lib\auth\session.ts:286:      ||
+> lib\auth\session.ts:287:      input.tenantId
+  lib\auth\session.ts:288:      ||
+  lib\auth\session.ts:289:      ''
+  lib\auth\session.ts:290:    ).trim();
+  lib\auth\session.ts:291:
+  lib\auth\session.ts:292:
+  lib\auth\session.ts:293:  // ==========================================================
+  lib\auth\session.ts:295:  //
+  lib\auth\session.ts:296:  // Legacy:
+> lib\auth\session.ts:297:  // tenantId ? brandId
+  lib\auth\session.ts:298:  //
+  lib\auth\session.ts:299:  // This matches the current Brillare development architecture
+  lib\auth\session.ts:300:  // where workspace and brand currently share the same ID.
+  lib\auth\session.ts:301:  //
+  lib\auth\session.ts:302:  // AUTH 4 will always pass the real membership values.
+  lib\auth\session.ts:303:  // ==========================================================
+  lib\auth\session.ts:307:      input.brandId
+  lib\auth\session.ts:308:      ||
+> lib\auth\session.ts:309:      input.tenantId
+  lib\auth\session.ts:310:      ||
+  lib\auth\session.ts:311:      ''
+  lib\auth\session.ts:312:    ).trim();
+  lib\auth\session.ts:313:
+  lib\auth\session.ts:314:
+  lib\auth\session.ts:315:  if (
+  lib\auth\session.ts:395:    // --------------------------------------------------------
+  lib\auth\session.ts:396:
+> lib\auth\session.ts:397:    tenantId:
+  lib\auth\session.ts:398:      brandId,
+  lib\auth\session.ts:399:
+  lib\auth\session.ts:400:    authSource:
+  lib\auth\session.ts:401:      'public',
+  lib\auth\session.ts:402:
+  lib\auth\session.ts:403:  };
+  lib\auth\session.ts:420:// authMethod      = password | shopify
+  lib\auth\session.ts:421://
+> lib\auth\session.ts:422:// tenantId remains temporarily for compatibility.
+  lib\auth\session.ts:423:// ============================================================
+  lib\auth\session.ts:424:
+  lib\auth\session.ts:425:export async function createGrowthOsSession(
+  lib\auth\session.ts:426:  input: GrowthOsSessionInput
+  lib\auth\session.ts:427:) {
+  lib\auth\session.ts:428:
+  lib\auth\session.ts:467:      // ------------------------------------------------------
+  lib\auth\session.ts:468:
+> lib\auth\session.ts:469:      tenantId:
+> lib\auth\session.ts:470:        session.tenantId,
+  lib\auth\session.ts:471:
+  lib\auth\session.ts:472:      authSource:
+  lib\auth\session.ts:473:        'public',
+  lib\auth\session.ts:474:
+  lib\auth\session.ts:475:    }
+  lib\auth\session.ts:476:  )
+  lib\auth\session.ts:529://
+  lib\auth\session.ts:530:// V1 sessions
+> lib\auth\session.ts:531://   tenantId only
+  lib\auth\session.ts:532://
+  lib\auth\session.ts:533:// V1 compatibility means existing browser sessions do not
+  lib\auth\session.ts:534:// instantly break during the migration.
+  lib\auth\session.ts:535://
+  lib\auth\session.ts:536:// After AUTH 4 / AUTH 5 stabilize, V1 support can be removed.
+  lib\auth\session.ts:537:// ============================================================
+  lib\auth\session.ts:708:      authMethod,
+  lib\auth\session.ts:709:
+> lib\auth\session.ts:710:      tenantId:
+  lib\auth\session.ts:711:        brandId,
+  lib\auth\session.ts:712:
+  lib\auth\session.ts:713:      authSource:
+  lib\auth\session.ts:714:        'public',
+  lib\auth\session.ts:715:
+  lib\auth\session.ts:716:    };
+  lib\auth\session.ts:727:  //   sub,
+  lib\auth\session.ts:728:  //   email,
+> lib\auth\session.ts:729:  //   tenantId,
+  lib\auth\session.ts:730:  //   authSource: "public"
+  lib\auth\session.ts:731:  // }
+  lib\auth\session.ts:732:  //
+  lib\auth\session.ts:733:  // Temporary compatibility assumption:
+  lib\auth\session.ts:734:  //
+> lib\auth\session.ts:735:  // workspaceId = tenantId
+> lib\auth\session.ts:736:  // brandId     = tenantId
+  lib\auth\session.ts:737:  // role        = owner
+  lib\auth\session.ts:738:  // authMethod  = password
+  lib\auth\session.ts:739:  //
+  lib\auth\session.ts:740:  // This keeps current Brillare sessions functioning until
+  lib\auth\session.ts:741:  // AUTH 4 switches login to brand_memberships.
+  lib\auth\session.ts:742:  // ==========================================================
+  lib\auth\session.ts:743:
+> lib\auth\session.ts:744:  const tenantId =
+  lib\auth\session.ts:745:    String(
+> lib\auth\session.ts:746:      payload.tenantId
+  lib\auth\session.ts:747:      ||
+  lib\auth\session.ts:748:      ''
+  lib\auth\session.ts:749:    ).trim();
+  lib\auth\session.ts:750:
+  lib\auth\session.ts:751:
+> lib\auth\session.ts:752:  if (!tenantId) {
+  lib\auth\session.ts:753:
+  lib\auth\session.ts:754:    throw new Error(
+  lib\auth\session.ts:755:      'Invalid Growth OS legacy session'
+  lib\auth\session.ts:756:    );
+  lib\auth\session.ts:757:
+  lib\auth\session.ts:758:  }
+  lib\auth\session.ts:772:
+  lib\auth\session.ts:773:    workspaceId:
+> lib\auth\session.ts:774:      tenantId,
+  lib\auth\session.ts:775:
+  lib\auth\session.ts:776:    brandId:
+> lib\auth\session.ts:777:      tenantId,
+  lib\auth\session.ts:778:
+  lib\auth\session.ts:779:    role:
+  lib\auth\session.ts:780:      'owner',
+  lib\auth\session.ts:781:
+  lib\auth\session.ts:782:    authMethod:
+  lib\auth\session.ts:783:      'password',
+  lib\auth\session.ts:784:
+> lib\auth\session.ts:785:    tenantId,
+  lib\auth\session.ts:786:
+  lib\auth\session.ts:787:    authSource:
+  lib\auth\session.ts:788:      'public',
+  lib\auth\session.ts:789:
+  lib\auth\session.ts:790:  };
+  lib\auth\session.ts:791:
+  lib\auth\shopify.ts:39:  userId: string;
+  lib\auth\shopify.ts:40:
+> lib\auth\shopify.ts:41:  tenantId: string;
+  lib\auth\shopify.ts:42:
+  lib\auth\shopify.ts:43:  shopId: string;
+  lib\auth\shopify.ts:44:
+  lib\auth\shopify.ts:45:  shopDomain: string;
+  lib\auth\shopify.ts:46:
+  lib\auth\shopify.ts:47:  sessionId?: string;
+  lib\auth\shopify.ts:413:      `shopify:${verified.userId}`,
+  lib\auth\shopify.ts:414:
+> lib\auth\shopify.ts:415:    tenantId:
+> lib\auth\shopify.ts:416:      tenant.tenantId,
+  lib\auth\shopify.ts:417:
+  lib\auth\shopify.ts:418:    shopId:
+  lib\auth\shopify.ts:419:      tenant.shopId,
+  lib\auth\shopify.ts:420:
+  lib\auth\shopify.ts:421:    shopDomain:
+  lib\auth\shopify.ts:422:      tenant.shopDomain,
+  lib\auth\tenant-registry.ts:4:  getPrimaryShopifyShopDomain,
+  lib\auth\tenant-registry.ts:5:  getPrimaryShopifyShopId,
+> lib\auth\tenant-registry.ts:6:  getPrimaryShopifyTenantId,
+  lib\auth\tenant-registry.ts:7:  normalizeShopDomain,
+  lib\auth\tenant-registry.ts:8:} from './config';
+  lib\auth\tenant-registry.ts:9:
+  lib\auth\tenant-registry.ts:10:
+  lib\auth\tenant-registry.ts:11:// ============================================================
+  lib\auth\tenant-registry.ts:12:// TENANT
+  lib\auth\tenant-registry.ts:15:export type GrowthOsTenant = {
+  lib\auth\tenant-registry.ts:16:
+> lib\auth\tenant-registry.ts:17:  tenantId: string;
+  lib\auth\tenant-registry.ts:18:
+  lib\auth\tenant-registry.ts:19:  provider:
+  lib\auth\tenant-registry.ts:20:    'shopify';
+  lib\auth\tenant-registry.ts:21:
+  lib\auth\tenant-registry.ts:22:  shopId: string;
+  lib\auth\tenant-registry.ts:23:
+  lib\auth\tenant-registry.ts:58:    {
+  lib\auth\tenant-registry.ts:59:
+> lib\auth\tenant-registry.ts:60:      tenantId:
+> lib\auth\tenant-registry.ts:61:        getPrimaryShopifyTenantId(),
+  lib\auth\tenant-registry.ts:62:
+  lib\auth\tenant-registry.ts:63:      provider:
+  lib\auth\tenant-registry.ts:64:        'shopify',
+  lib\auth\tenant-registry.ts:65:
+  lib\auth\tenant-registry.ts:66:      shopId,
+  lib\auth\tenant-registry.ts:67:
+  proxy.ts:180:    requestHeaders.set(
+  proxy.ts:181:      'x-growthos-tenant-id',
+> proxy.ts:182:      identity.tenantId
+  proxy.ts:183:    );
+  proxy.ts:184:
+  proxy.ts:185:    if (
+  proxy.ts:186:  identity.workspaceId
+  proxy.ts:187:) {
+  proxy.ts:188:
+
+
+
+
+============================================================
+SEARCH: workspaceId
+============================================================
+
+  app\api\auth\brands\route.ts:94:
+  app\api\auth\brands\route.ts:95:      if (
+> app\api\auth\brands\route.ts:96:        !identity.workspaceId
+  app\api\auth\brands\route.ts:97:        ||
+  app\api\auth\brands\route.ts:98:        !identity.brandId
+  app\api\auth\brands\route.ts:99:      ) {
+  app\api\auth\brands\route.ts:100:
+  app\api\auth\brands\route.ts:101:        throw new Error(
+  app\api\auth\brands\route.ts:102:          'SHOPIFY_SESSION_TENANT_MISSING'
+  app\api\auth\brands\route.ts:109:        await resolveTenantContextById(
+  app\api\auth\brands\route.ts:110:
+> app\api\auth\brands\route.ts:111:          identity.workspaceId,
+  app\api\auth\brands\route.ts:112:
+  app\api\auth\brands\route.ts:113:          identity.brandId
+  app\api\auth\brands\route.ts:114:
+  app\api\auth\brands\route.ts:115:        );
+  app\api\auth\brands\route.ts:116:
+  app\api\auth\brands\route.ts:117:
+  app\api\auth\brands\route.ts:123:        active: {
+  app\api\auth\brands\route.ts:124:
+> app\api\auth\brands\route.ts:125:          workspaceId:
+> app\api\auth\brands\route.ts:126:            tenant.workspaceId,
+  app\api\auth\brands\route.ts:127:
+  app\api\auth\brands\route.ts:128:          brandId:
+  app\api\auth\brands\route.ts:129:            tenant.brandId,
+  app\api\auth\brands\route.ts:130:
+  app\api\auth\brands\route.ts:131:        },
+  app\api\auth\brands\route.ts:132:
+  app\api\auth\brands\route.ts:135:          {
+  app\api\auth\brands\route.ts:136:
+> app\api\auth\brands\route.ts:137:            workspaceId:
+> app\api\auth\brands\route.ts:138:              tenant.workspaceId,
+  app\api\auth\brands\route.ts:139:
+  app\api\auth\brands\route.ts:140:            workspaceName:
+  app\api\auth\brands\route.ts:141:              tenant.workspaceName,
+  app\api\auth\brands\route.ts:142:
+  app\api\auth\brands\route.ts:143:            brandId:
+  app\api\auth\brands\route.ts:144:              tenant.brandId,
+  app\api\auth\brands\route.ts:214:                membership.membership_id,
+  app\api\auth\brands\route.ts:215:
+> app\api\auth\brands\route.ts:216:              workspaceId:
+> app\api\auth\brands\route.ts:217:                tenant.workspaceId,
+  app\api\auth\brands\route.ts:218:
+  app\api\auth\brands\route.ts:219:              workspaceName:
+  app\api\auth\brands\route.ts:220:                tenant.workspaceName,
+  app\api\auth\brands\route.ts:221:
+  app\api\auth\brands\route.ts:222:              brandId:
+  app\api\auth\brands\route.ts:223:                tenant.brandId,
+  app\api\auth\brands\route.ts:243:              isActive:
+  app\api\auth\brands\route.ts:244:                (
+> app\api\auth\brands\route.ts:245:                  identity.workspaceId ===
+> app\api\auth\brands\route.ts:246:                    tenant.workspaceId
+  app\api\auth\brands\route.ts:247:
+  app\api\auth\brands\route.ts:248:                  &&
+  app\api\auth\brands\route.ts:249:
+  app\api\auth\brands\route.ts:250:                  identity.brandId ===
+  app\api\auth\brands\route.ts:251:                    tenant.brandId
+  app\api\auth\brands\route.ts:252:                ),
+  app\api\auth\brands\route.ts:271:      active: {
+  app\api\auth\brands\route.ts:272:
+> app\api\auth\brands\route.ts:273:        workspaceId:
+> app\api\auth\brands\route.ts:274:          identity.workspaceId
+  app\api\auth\brands\route.ts:275:          ??
+  app\api\auth\brands\route.ts:276:          null,
+  app\api\auth\brands\route.ts:277:
+  app\api\auth\brands\route.ts:278:        brandId:
+  app\api\auth\brands\route.ts:279:          identity.brandId
+  app\api\auth\brands\route.ts:280:          ??
+  app\api\auth\login\route.ts:302:        user.email,
+  app\api\auth\login\route.ts:303:
+> app\api\auth\login\route.ts:304:      workspaceId:
+  app\api\auth\login\route.ts:305:        membership.workspace_id,
+  app\api\auth\login\route.ts:306:
+  app\api\auth\login\route.ts:307:      brandId:
+  app\api\auth\login\route.ts:308:        membership.brand_id,
+  app\api\auth\login\route.ts:309:
+  app\api\auth\login\route.ts:310:      role:
+  app\api\auth\login\route.ts:383:      activeContext: {
+  app\api\auth\login\route.ts:384:
+> app\api\auth\login\route.ts:385:        workspaceId:
+  app\api\auth\login\route.ts:386:          membership.workspace_id,
+  app\api\auth\login\route.ts:387:
+  app\api\auth\login\route.ts:388:        brandId:
+  app\api\auth\login\route.ts:389:          membership.brand_id,
+  app\api\auth\login\route.ts:390:
+  app\api\auth\login\route.ts:391:        role:
+  app\api\auth\me\route.ts:79:          null,
+  app\api\auth\me\route.ts:80:
+> app\api\auth\me\route.ts:81:        workspaceId:
+> app\api\auth\me\route.ts:82:          identity.workspaceId
+  app\api\auth\me\route.ts:83:          ??
+  app\api\auth\me\route.ts:84:          null,
+  app\api\auth\me\route.ts:85:
+  app\api\auth\me\route.ts:86:        brandId:
+  app\api\auth\me\route.ts:87:          identity.brandId
+  app\api\auth\me\route.ts:88:          ??
+  app\api\auth\shopify\launch\route.ts:247:        `shopify:${account.provider_account_id}`,
+  app\api\auth\shopify\launch\route.ts:248:
+> app\api\auth\shopify\launch\route.ts:249:      workspaceId:
+> app\api\auth\shopify\launch\route.ts:250:        tenant.workspaceId,
+  app\api\auth\shopify\launch\route.ts:251:
+  app\api\auth\shopify\launch\route.ts:252:      brandId:
+  app\api\auth\shopify\launch\route.ts:253:        tenant.brandId,
+  app\api\auth\shopify\launch\route.ts:254:
+  app\api\auth\shopify\launch\route.ts:255:      role:
+  app\api\auth\shopify\launch\route.ts:256:        'admin',
+  app\api\auth\shopify\resolve-shop\route.ts:138:      await getIntegrationConnection(
+  app\api\auth\shopify\resolve-shop\route.ts:139:
+> app\api\auth\shopify\resolve-shop\route.ts:140:        tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:141:
+  app\api\auth\shopify\resolve-shop\route.ts:142:        tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:143:
+  app\api\auth\shopify\resolve-shop\route.ts:144:        'shopify'
+  app\api\auth\shopify\resolve-shop\route.ts:145:
+  app\api\auth\shopify\resolve-shop\route.ts:146:      );
+  app\api\auth\shopify\resolve-shop\route.ts:186:      await upsertIntegrationConnection({
+  app\api\auth\shopify\resolve-shop\route.ts:187:
+> app\api\auth\shopify\resolve-shop\route.ts:188:        workspaceId:
+> app\api\auth\shopify\resolve-shop\route.ts:189:          tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:190:
+  app\api\auth\shopify\resolve-shop\route.ts:191:        brandId:
+  app\api\auth\shopify\resolve-shop\route.ts:192:          tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:193:
+  app\api\auth\shopify\resolve-shop\route.ts:194:        provider:
+  app\api\auth\shopify\resolve-shop\route.ts:195:          'shopify',
+  app\api\auth\shopify\resolve-shop\route.ts:245:      await upsertIntegrationAccount({
+  app\api\auth\shopify\resolve-shop\route.ts:246:
+> app\api\auth\shopify\resolve-shop\route.ts:247:        workspaceId:
+> app\api\auth\shopify\resolve-shop\route.ts:248:          tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:249:
+  app\api\auth\shopify\resolve-shop\route.ts:250:        brandId:
+  app\api\auth\shopify\resolve-shop\route.ts:251:          tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:252:
+  app\api\auth\shopify\resolve-shop\route.ts:253:        connectionId,
+  app\api\auth\shopify\resolve-shop\route.ts:254:
+  app\api\auth\shopify\resolve-shop\route.ts:332:        integration: {
+  app\api\auth\shopify\resolve-shop\route.ts:333:
+> app\api\auth\shopify\resolve-shop\route.ts:334:          workspaceId:
+> app\api\auth\shopify\resolve-shop\route.ts:335:            tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:336:
+  app\api\auth\shopify\resolve-shop\route.ts:337:          brandId:
+  app\api\auth\shopify\resolve-shop\route.ts:338:            tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:339:
+  app\api\auth\shopify\resolve-shop\route.ts:340:          connectionId,
+  app\api\auth\shopify\resolve-shop\route.ts:341:
+  app\api\auth\switch-brand\route.ts:33:// Browser requests:
+  app\api\auth\switch-brand\route.ts:34://
+> app\api\auth\switch-brand\route.ts:35:// workspaceId
+  app\api\auth\switch-brand\route.ts:36:// brandId
+  app\api\auth\switch-brand\route.ts:37://
+  app\api\auth\switch-brand\route.ts:38:// Server verifies:
+  app\api\auth\switch-brand\route.ts:39://
+  app\api\auth\switch-brand\route.ts:40:// authenticated user
+  app\api\auth\switch-brand\route.ts:41://        ?
+  app\api\auth\switch-brand\route.ts:155:
+  app\api\auth\switch-brand\route.ts:156:
+> app\api\auth\switch-brand\route.ts:157:    const workspaceId =
+  app\api\auth\switch-brand\route.ts:158:      String(
+> app\api\auth\switch-brand\route.ts:159:        body?.workspaceId
+  app\api\auth\switch-brand\route.ts:160:        ||
+  app\api\auth\switch-brand\route.ts:161:        ''
+  app\api\auth\switch-brand\route.ts:162:      ).trim();
+  app\api\auth\switch-brand\route.ts:163:
+  app\api\auth\switch-brand\route.ts:164:
+  app\api\auth\switch-brand\route.ts:165:    const brandId =
+  app\api\auth\switch-brand\route.ts:172:
+  app\api\auth\switch-brand\route.ts:173:    if (
+> app\api\auth\switch-brand\route.ts:174:      !workspaceId
+  app\api\auth\switch-brand\route.ts:175:      ||
+  app\api\auth\switch-brand\route.ts:176:      !brandId
+  app\api\auth\switch-brand\route.ts:177:    ) {
+  app\api\auth\switch-brand\route.ts:178:
+  app\api\auth\switch-brand\route.ts:179:      return NextResponse.json(
+  app\api\auth\switch-brand\route.ts:180:        {
+  app\api\auth\switch-brand\route.ts:184:
+  app\api\auth\switch-brand\route.ts:185:          error:
+> app\api\auth\switch-brand\route.ts:186:            'workspaceId and brandId are required',
+  app\api\auth\switch-brand\route.ts:187:
+  app\api\auth\switch-brand\route.ts:188:        },
+  app\api\auth\switch-brand\route.ts:189:        {
+  app\api\auth\switch-brand\route.ts:190:          status:
+  app\api\auth\switch-brand\route.ts:191:            400,
+  app\api\auth\switch-brand\route.ts:192:        }
+  app\api\auth\switch-brand\route.ts:215:
+  app\api\auth\switch-brand\route.ts:216:          item.workspace_id ===
+> app\api\auth\switch-brand\route.ts:217:            workspaceId
+  app\api\auth\switch-brand\route.ts:218:
+  app\api\auth\switch-brand\route.ts:219:          &&
+  app\api\auth\switch-brand\route.ts:220:
+  app\api\auth\switch-brand\route.ts:221:          item.brand_id ===
+  app\api\auth\switch-brand\route.ts:222:            brandId
+  app\api\auth\switch-brand\route.ts:223:
+  app\api\auth\switch-brand\route.ts:282:        identity.email,
+  app\api\auth\switch-brand\route.ts:283:
+> app\api\auth\switch-brand\route.ts:284:      workspaceId:
+> app\api\auth\switch-brand\route.ts:285:        tenant.workspaceId,
+  app\api\auth\switch-brand\route.ts:286:
+  app\api\auth\switch-brand\route.ts:287:      brandId:
+  app\api\auth\switch-brand\route.ts:288:        tenant.brandId,
+  app\api\auth\switch-brand\route.ts:289:
+  app\api\auth\switch-brand\route.ts:290:      role:
+  app\api\auth\switch-brand\route.ts:291:        membership.role,
+  app\api\auth\switch-brand\route.ts:311:      activeContext: {
+  app\api\auth\switch-brand\route.ts:312:
+> app\api\auth\switch-brand\route.ts:313:        workspaceId:
+> app\api\auth\switch-brand\route.ts:314:          tenant.workspaceId,
+  app\api\auth\switch-brand\route.ts:315:
+  app\api\auth\switch-brand\route.ts:316:        workspaceName:
+  app\api\auth\switch-brand\route.ts:317:          tenant.workspaceName,
+  app\api\auth\switch-brand\route.ts:318:
+  app\api\auth\switch-brand\route.ts:319:        workspaceSlug:
+  app\api\auth\switch-brand\route.ts:320:          tenant.workspaceSlug,
+  app\api\integrations\meta\accounts\route.ts:58:      await getIntegrationConnection(
+  app\api\integrations\meta\accounts\route.ts:59:
+> app\api\integrations\meta\accounts\route.ts:60:        tenant.workspaceId,
+  app\api\integrations\meta\accounts\route.ts:61:
+  app\api\integrations\meta\accounts\route.ts:62:        tenant.brandId,
+  app\api\integrations\meta\accounts\route.ts:63:
+  app\api\integrations\meta\accounts\route.ts:64:        'meta_ads'
+  app\api\integrations\meta\accounts\route.ts:65:
+  app\api\integrations\meta\accounts\route.ts:66:      );
+  app\api\integrations\meta\callback\route.ts:244:      ||
+  app\api\integrations\meta\callback\route.ts:245:      expectedWorkspace !==
+> app\api\integrations\meta\callback\route.ts:246:        tenant.workspaceId
+  app\api\integrations\meta\callback\route.ts:247:      ||
+  app\api\integrations\meta\callback\route.ts:248:      expectedBrand !==
+  app\api\integrations\meta\callback\route.ts:249:        tenant.brandId
+  app\api\integrations\meta\callback\route.ts:250:    ) {
+  app\api\integrations\meta\callback\route.ts:251:
+  app\api\integrations\meta\callback\route.ts:252:      throw new Error(
+  app\api\integrations\meta\callback\route.ts:305:      await storeIntegrationSecret({
+  app\api\integrations\meta\callback\route.ts:306:
+> app\api\integrations\meta\callback\route.ts:307:        workspaceId:
+> app\api\integrations\meta\callback\route.ts:308:          tenant.workspaceId,
+  app\api\integrations\meta\callback\route.ts:309:
+  app\api\integrations\meta\callback\route.ts:310:        brandId:
+  app\api\integrations\meta\callback\route.ts:311:          tenant.brandId,
+  app\api\integrations\meta\callback\route.ts:312:
+  app\api\integrations\meta\callback\route.ts:313:        provider:
+  app\api\integrations\meta\callback\route.ts:314:          'meta_ads',
+  app\api\integrations\meta\callback\route.ts:365:    await upsertIntegrationConnection({
+  app\api\integrations\meta\callback\route.ts:366:
+> app\api\integrations\meta\callback\route.ts:367:      workspaceId:
+> app\api\integrations\meta\callback\route.ts:368:        tenant.workspaceId,
+  app\api\integrations\meta\callback\route.ts:369:
+  app\api\integrations\meta\callback\route.ts:370:      brandId:
+  app\api\integrations\meta\callback\route.ts:371:        tenant.brandId,
+  app\api\integrations\meta\callback\route.ts:372:
+  app\api\integrations\meta\callback\route.ts:373:      provider:
+  app\api\integrations\meta\callback\route.ts:374:        'meta_ads',
+  app\api\integrations\meta\connect\route.ts:98:    response.cookies.set(
+  app\api\integrations\meta\connect\route.ts:99:      'growthos_meta_workspace',
+> app\api\integrations\meta\connect\route.ts:100:      tenant.workspaceId,
+  app\api\integrations\meta\connect\route.ts:101:      cookieOptions
+  app\api\integrations\meta\connect\route.ts:102:    );
+  app\api\integrations\meta\connect\route.ts:103:
+  app\api\integrations\meta\connect\route.ts:104:
+  app\api\integrations\meta\connect\route.ts:105:    response.cookies.set(
+  app\api\integrations\meta\connect\route.ts:106:      'growthos_meta_brand',
+  app\api\integrations\meta\select-account\route.ts:106:      await getIntegrationConnection(
+  app\api\integrations\meta\select-account\route.ts:107:
+> app\api\integrations\meta\select-account\route.ts:108:        tenant.workspaceId,
+  app\api\integrations\meta\select-account\route.ts:109:
+  app\api\integrations\meta\select-account\route.ts:110:        tenant.brandId,
+  app\api\integrations\meta\select-account\route.ts:111:
+  app\api\integrations\meta\select-account\route.ts:112:        'meta_ads'
+  app\api\integrations\meta\select-account\route.ts:113:
+  app\api\integrations\meta\select-account\route.ts:114:      );
+  app\api\integrations\meta\select-account\route.ts:213:      await upsertIntegrationConnection({
+  app\api\integrations\meta\select-account\route.ts:214:
+> app\api\integrations\meta\select-account\route.ts:215:        workspaceId:
+> app\api\integrations\meta\select-account\route.ts:216:          tenant.workspaceId,
+  app\api\integrations\meta\select-account\route.ts:217:
+  app\api\integrations\meta\select-account\route.ts:218:        brandId:
+  app\api\integrations\meta\select-account\route.ts:219:          tenant.brandId,
+  app\api\integrations\meta\select-account\route.ts:220:
+  app\api\integrations\meta\select-account\route.ts:221:        provider:
+  app\api\integrations\meta\select-account\route.ts:222:          'meta_ads',
+  app\api\integrations\meta\select-account\route.ts:269:      await upsertIntegrationAccount({
+  app\api\integrations\meta\select-account\route.ts:270:
+> app\api\integrations\meta\select-account\route.ts:271:        workspaceId:
+> app\api\integrations\meta\select-account\route.ts:272:          tenant.workspaceId,
+  app\api\integrations\meta\select-account\route.ts:273:
+  app\api\integrations\meta\select-account\route.ts:274:        brandId:
+  app\api\integrations\meta\select-account\route.ts:275:          tenant.brandId,
+  app\api\integrations\meta\select-account\route.ts:276:
+  app\api\integrations\meta\select-account\route.ts:277:        connectionId,
+  app\api\integrations\meta\select-account\route.ts:278:
+  app\api\integrations\shopify\callback\route.ts:325:      await storeShopifyOfflineCredential({
+  app\api\integrations\shopify\callback\route.ts:326:
+> app\api\integrations\shopify\callback\route.ts:327:        workspaceId:
+> app\api\integrations\shopify\callback\route.ts:328:          tenant.workspaceId,
+  app\api\integrations\shopify\callback\route.ts:329:
+  app\api\integrations\shopify\callback\route.ts:330:        brandId:
+  app\api\integrations\shopify\callback\route.ts:331:          tenant.brandId,
+  app\api\integrations\shopify\callback\route.ts:332:
+  app\api\integrations\shopify\callback\route.ts:333:        shop:
+  app\api\integrations\shopify\callback\route.ts:334:          canonicalShop,
+  app\api\integrations\shopify\callback\route.ts:386:        tenant: {
+  app\api\integrations\shopify\callback\route.ts:387:
+> app\api\integrations\shopify\callback\route.ts:388:          workspaceId:
+> app\api\integrations\shopify\callback\route.ts:389:            tenant.workspaceId,
+  app\api\integrations\shopify\callback\route.ts:390:
+  app\api\integrations\shopify\callback\route.ts:391:          brandId:
+  app\api\integrations\shopify\callback\route.ts:392:            tenant.brandId,
+  app\api\integrations\shopify\callback\route.ts:393:
+  app\api\integrations\shopify\callback\route.ts:394:        },
+  app\api\integrations\shopify\callback\route.ts:395:
+  app\api\integrations\shopify\callback\route.ts:421:        `shopify:${canonicalShop.shopId}`,
+  app\api\integrations\shopify\callback\route.ts:422:
+> app\api\integrations\shopify\callback\route.ts:423:      workspaceId:
+> app\api\integrations\shopify\callback\route.ts:424:        tenant.workspaceId,
+  app\api\integrations\shopify\callback\route.ts:425:
+  app\api\integrations\shopify\callback\route.ts:426:      brandId:
+  app\api\integrations\shopify\callback\route.ts:427:        tenant.brandId,
+  app\api\integrations\shopify\callback\route.ts:428:
+  app\api\integrations\shopify\callback\route.ts:429:      role:
+  app\api\integrations\shopify\callback\route.ts:430:        'admin',
+  app\api\integrations\route.ts:47:      await listIntegrationConnections(
+  app\api\integrations\route.ts:48:
+> app\api\integrations\route.ts:49:        tenant.workspaceId,
+  app\api\integrations\route.ts:50:
+  app\api\integrations\route.ts:51:        tenant.brandId
+  app\api\integrations\route.ts:52:
+  app\api\integrations\route.ts:53:      );
+  app\api\integrations\route.ts:54:
+  app\api\integrations\route.ts:55:
+  app\api\integrations\route.ts:222:        meta: {
+  app\api\integrations\route.ts:223:
+> app\api\integrations\route.ts:224:          workspaceId:
+> app\api\integrations\route.ts:225:            tenant.workspaceId,
+  app\api\integrations\route.ts:226:
+  app\api\integrations\route.ts:227:          workspaceName:
+  app\api\integrations\route.ts:228:            tenant.workspaceName,
+  app\api\integrations\route.ts:229:
+  app\api\integrations\route.ts:230:          brandId:
+  app\api\integrations\route.ts:231:            tenant.brandId,
+  app\api\system\sync-test\route.ts:57:      await getIntegrationConnection(
+  app\api\system\sync-test\route.ts:58:
+> app\api\system\sync-test\route.ts:59:        tenant.workspaceId,
+  app\api\system\sync-test\route.ts:60:
+  app\api\system\sync-test\route.ts:61:        tenant.brandId,
+  app\api\system\sync-test\route.ts:62:
+  app\api\system\sync-test\route.ts:63:        provider
+  app\api\system\sync-test\route.ts:64:
+  app\api\system\sync-test\route.ts:65:      );
+  app\api\system\sync-test\route.ts:90:      await runIntegrationSync({
+  app\api\system\sync-test\route.ts:91:
+> app\api\system\sync-test\route.ts:92:        workspaceId:
+> app\api\system\sync-test\route.ts:93:          tenant.workspaceId,
+  app\api\system\sync-test\route.ts:94:
+  app\api\system\sync-test\route.ts:95:        brandId:
+  app\api\system\sync-test\route.ts:96:          tenant.brandId,
+  app\api\system\sync-test\route.ts:97:
+  app\api\system\sync-test\route.ts:98:        connectionId:
+  app\api\system\sync-test\route.ts:99:          connection.connection_id,
+  app\integrations\setup\page.tsx:214:  if (
+  app\integrations\setup\page.tsx:215:    connection.workspace_id !==
+> app\integrations\setup\page.tsx:216:      session.workspaceId
+  app\integrations\setup\page.tsx:217:    ||
+  app\integrations\setup\page.tsx:218:    connection.brand_id !==
+  app\integrations\setup\page.tsx:219:      session.brandId
+  app\integrations\setup\page.tsx:220:  ) {
+  app\integrations\setup\page.tsx:221:
+  app\integrations\setup\page.tsx:222:    return (
+  lib\auth\request-auth.ts:28:// Public/password sessions now carry:
+  lib\auth\request-auth.ts:29://
+> lib\auth\request-auth.ts:30:// workspaceId
+  lib\auth\request-auth.ts:31:// brandId
+  lib\auth\request-auth.ts:32:// role
+  lib\auth\request-auth.ts:33:// authMethod
+  lib\auth\request-auth.ts:34://
+  lib\auth\request-auth.ts:35:// Shopify bearer authentication remains supported while we
+  lib\auth\request-auth.ts:36:// migrate it to dynamic integration-account resolution in
+  lib\auth\request-auth.ts:55:  // ----------------------------------------------------------
+  lib\auth\request-auth.ts:56:
+> lib\auth\request-auth.ts:57:  workspaceId?:
+  lib\auth\request-auth.ts:58:    string;
+  lib\auth\request-auth.ts:59:
+  lib\auth\request-auth.ts:60:  brandId?:
+  lib\auth\request-auth.ts:61:    string;
+  lib\auth\request-auth.ts:62:
+  lib\auth\request-auth.ts:63:  role?:
+  lib\auth\request-auth.ts:215:        session.email,
+  lib\auth\request-auth.ts:216:
+> lib\auth\request-auth.ts:217:      workspaceId:
+> lib\auth\request-auth.ts:218:        session.workspaceId,
+  lib\auth\request-auth.ts:219:
+  lib\auth\request-auth.ts:220:      brandId:
+  lib\auth\request-auth.ts:221:        session.brandId,
+  lib\auth\request-auth.ts:222:
+  lib\auth\request-auth.ts:223:      role:
+  lib\auth\request-auth.ts:224:        session.role,
+  lib\auth\session.ts:69://
+  lib\auth\session.ts:70:// It will eventually be removed after all old callers have
+> lib\auth\session.ts:71:// migrated to workspaceId + brandId.
+  lib\auth\session.ts:72:// ============================================================
+  lib\auth\session.ts:73:
+  lib\auth\session.ts:74:export type GrowthOsSession = {
+  lib\auth\session.ts:75:
+  lib\auth\session.ts:76:  sessionVersion:
+  lib\auth\session.ts:77:    1 | 2;
+  lib\auth\session.ts:83:    string;
+  lib\auth\session.ts:84:
+> lib\auth\session.ts:85:  workspaceId:
+  lib\auth\session.ts:86:    string;
+  lib\auth\session.ts:87:
+  lib\auth\session.ts:88:  brandId:
+  lib\auth\session.ts:89:    string;
+  lib\auth\session.ts:90:
+  lib\auth\session.ts:91:  role:
+  lib\auth\session.ts:117:// New callers should provide:
+  lib\auth\session.ts:118://
+> lib\auth\session.ts:119:// workspaceId
+  lib\auth\session.ts:120:// brandId
+  lib\auth\session.ts:121:// role
+  lib\auth\session.ts:122:// authMethod
+  lib\auth\session.ts:123://
+  lib\auth\session.ts:124:// Old callers can temporarily continue providing:
+  lib\auth\session.ts:125://
+  lib\auth\session.ts:138:    string;
+  lib\auth\session.ts:139:
+> lib\auth\session.ts:140:  workspaceId?:
+  lib\auth\session.ts:141:    string;
+  lib\auth\session.ts:142:
+  lib\auth\session.ts:143:  brandId?:
+  lib\auth\session.ts:144:    string;
+  lib\auth\session.ts:145:
+  lib\auth\session.ts:146:  role?:
+  lib\auth\session.ts:238://   userId,
+  lib\auth\session.ts:239://   email,
+> lib\auth\session.ts:240://   workspaceId,
+  lib\auth\session.ts:241://   brandId,
+  lib\auth\session.ts:242://   role,
+  lib\auth\session.ts:243://   authMethod,
+  lib\auth\session.ts:244://   authSource: 'public'
+  lib\auth\session.ts:245:// }
+  lib\auth\session.ts:246://
+  lib\auth\session.ts:278:  //
+  lib\auth\session.ts:279:  // Legacy:
+> lib\auth\session.ts:280:  // tenantId ? workspaceId
+  lib\auth\session.ts:281:  // ==========================================================
+  lib\auth\session.ts:282:
+> lib\auth\session.ts:283:  const workspaceId =
+  lib\auth\session.ts:284:    String(
+> lib\auth\session.ts:285:      input.workspaceId
+  lib\auth\session.ts:286:      ||
+  lib\auth\session.ts:287:      input.tenantId
+  lib\auth\session.ts:288:      ||
+  lib\auth\session.ts:289:      ''
+  lib\auth\session.ts:290:    ).trim();
+  lib\auth\session.ts:291:
+  lib\auth\session.ts:314:
+  lib\auth\session.ts:315:  if (
+> lib\auth\session.ts:316:    !workspaceId
+  lib\auth\session.ts:317:    ||
+  lib\auth\session.ts:318:    !brandId
+  lib\auth\session.ts:319:  ) {
+  lib\auth\session.ts:320:
+  lib\auth\session.ts:321:    throw new Error(
+> lib\auth\session.ts:322:      'Growth OS session requires workspaceId and brandId'
+  lib\auth\session.ts:323:    );
+  lib\auth\session.ts:324:
+  lib\auth\session.ts:325:  }
+  lib\auth\session.ts:326:
+  lib\auth\session.ts:327:
+  lib\auth\session.ts:328:  const role =
+  lib\auth\session.ts:383:        : undefined,
+  lib\auth\session.ts:384:
+> lib\auth\session.ts:385:    workspaceId,
+  lib\auth\session.ts:386:
+  lib\auth\session.ts:387:    brandId,
+  lib\auth\session.ts:388:
+  lib\auth\session.ts:389:    role,
+  lib\auth\session.ts:390:
+  lib\auth\session.ts:391:    authMethod,
+  lib\auth\session.ts:415:// sub             = user ID
+  lib\auth\session.ts:416://
+> lib\auth\session.ts:417:// workspaceId     = active Growth OS workspace
+  lib\auth\session.ts:418:// brandId         = active Growth OS brand
+  lib\auth\session.ts:419:// role            = membership role
+  lib\auth\session.ts:420:// authMethod      = password | shopify
+  lib\auth\session.ts:421://
+  lib\auth\session.ts:422:// tenantId remains temporarily for compatibility.
+  lib\auth\session.ts:423:// ============================================================
+  lib\auth\session.ts:451:        '',
+  lib\auth\session.ts:452:
+> lib\auth\session.ts:453:      workspaceId:
+> lib\auth\session.ts:454:        session.workspaceId,
+  lib\auth\session.ts:455:
+  lib\auth\session.ts:456:      brandId:
+  lib\auth\session.ts:457:        session.brandId,
+  lib\auth\session.ts:458:
+  lib\auth\session.ts:459:      role:
+  lib\auth\session.ts:460:        session.role,
+  lib\auth\session.ts:526://
+  lib\auth\session.ts:527:// V2 sessions
+> lib\auth\session.ts:528://   workspaceId + brandId + role + authMethod
+  lib\auth\session.ts:529://
+  lib\auth\session.ts:530:// V1 sessions
+  lib\auth\session.ts:531://   tenantId only
+  lib\auth\session.ts:532://
+  lib\auth\session.ts:533:// V1 compatibility means existing browser sessions do not
+  lib\auth\session.ts:534:// instantly break during the migration.
+  lib\auth\session.ts:635:  ) {
+  lib\auth\session.ts:636:
+> lib\auth\session.ts:637:    const workspaceId =
+  lib\auth\session.ts:638:      String(
+> lib\auth\session.ts:639:        payload.workspaceId
+  lib\auth\session.ts:640:        ||
+  lib\auth\session.ts:641:        ''
+  lib\auth\session.ts:642:      ).trim();
+  lib\auth\session.ts:643:
+  lib\auth\session.ts:644:
+  lib\auth\session.ts:645:    const brandId =
+  lib\auth\session.ts:668:
+  lib\auth\session.ts:669:    if (
+> lib\auth\session.ts:670:      !workspaceId
+  lib\auth\session.ts:671:      ||
+  lib\auth\session.ts:672:      !brandId
+  lib\auth\session.ts:673:      ||
+  lib\auth\session.ts:674:      !isValidRole(
+  lib\auth\session.ts:675:        role
+  lib\auth\session.ts:676:      )
+  lib\auth\session.ts:700:          : undefined,
+  lib\auth\session.ts:701:
+> lib\auth\session.ts:702:      workspaceId,
+  lib\auth\session.ts:703:
+  lib\auth\session.ts:704:      brandId,
+  lib\auth\session.ts:705:
+  lib\auth\session.ts:706:      role,
+  lib\auth\session.ts:707:
+  lib\auth\session.ts:708:      authMethod,
+  lib\auth\session.ts:733:  // Temporary compatibility assumption:
+  lib\auth\session.ts:734:  //
+> lib\auth\session.ts:735:  // workspaceId = tenantId
+  lib\auth\session.ts:736:  // brandId     = tenantId
+  lib\auth\session.ts:737:  // role        = owner
+  lib\auth\session.ts:738:  // authMethod  = password
+  lib\auth\session.ts:739:  //
+  lib\auth\session.ts:740:  // This keeps current Brillare sessions functioning until
+  lib\auth\session.ts:741:  // AUTH 4 switches login to brand_memberships.
+  lib\auth\session.ts:771:        : undefined,
+  lib\auth\session.ts:772:
+> lib\auth\session.ts:773:    workspaceId:
+  lib\auth\session.ts:774:      tenantId,
+  lib\auth\session.ts:775:
+  lib\auth\session.ts:776:    brandId:
+  lib\auth\session.ts:777:      tenantId,
+  lib\auth\session.ts:778:
+  lib\auth\session.ts:779:    role:
+  lib\auth\user-store.ts:239:function buildMembershipId(
+  lib\auth\user-store.ts:240:  userId: string,
+> lib\auth\user-store.ts:241:  workspaceId: string,
+  lib\auth\user-store.ts:242:  brandId: string
+  lib\auth\user-store.ts:243:) {
+  lib\auth\user-store.ts:244:
+  lib\auth\user-store.ts:245:  const source =
+  lib\auth\user-store.ts:246:    [
+  lib\auth\user-store.ts:247:      userId,
+> lib\auth\user-store.ts:248:      workspaceId,
+  lib\auth\user-store.ts:249:      brandId,
+  lib\auth\user-store.ts:250:    ].join(
+  lib\auth\user-store.ts:251:      ':'
+  lib\auth\user-store.ts:252:    );
+  lib\auth\user-store.ts:253:
+  lib\auth\user-store.ts:254:
+  lib\auth\user-store.ts:930:      string;
+  lib\auth\user-store.ts:931:
+> lib\auth\user-store.ts:932:    workspaceId:
+  lib\auth\user-store.ts:933:      string;
+  lib\auth\user-store.ts:934:
+  lib\auth\user-store.ts:935:    brandId:
+  lib\auth\user-store.ts:936:      string;
+  lib\auth\user-store.ts:937:
+  lib\auth\user-store.ts:938:    role:
+  lib\auth\user-store.ts:963:
+  lib\auth\user-store.ts:964:
+> lib\auth\user-store.ts:965:  const workspaceId =
+  lib\auth\user-store.ts:966:    String(
+> lib\auth\user-store.ts:967:      input.workspaceId
+  lib\auth\user-store.ts:968:      ||
+  lib\auth\user-store.ts:969:      ''
+  lib\auth\user-store.ts:970:    ).trim();
+  lib\auth\user-store.ts:971:
+  lib\auth\user-store.ts:972:
+  lib\auth\user-store.ts:973:  const brandId =
+  lib\auth\user-store.ts:982:    !userId
+  lib\auth\user-store.ts:983:    ||
+> lib\auth\user-store.ts:984:    !workspaceId
+  lib\auth\user-store.ts:985:    ||
+  lib\auth\user-store.ts:986:    !brandId
+  lib\auth\user-store.ts:987:  ) {
+  lib\auth\user-store.ts:988:
+  lib\auth\user-store.ts:989:    throw new Error(
+  lib\auth\user-store.ts:990:      'User, workspace and brand are required'
+  lib\auth\user-store.ts:1018:
+  lib\auth\user-store.ts:1019:  await resolveTenantContextById(
+> lib\auth\user-store.ts:1020:    workspaceId,
+  lib\auth\user-store.ts:1021:    brandId
+  lib\auth\user-store.ts:1022:  );
+  lib\auth\user-store.ts:1023:
+  lib\auth\user-store.ts:1024:
+  lib\auth\user-store.ts:1025:  const membershipId =
+  lib\auth\user-store.ts:1026:    buildMembershipId(
+  lib\auth\user-store.ts:1027:      userId,
+> lib\auth\user-store.ts:1028:      workspaceId,
+  lib\auth\user-store.ts:1029:      brandId
+  lib\auth\user-store.ts:1030:    );
+  lib\auth\user-store.ts:1031:
+  lib\auth\user-store.ts:1032:
+  lib\auth\user-store.ts:1033:  const role =
+  lib\auth\user-store.ts:1034:    input.role;
+  lib\auth\user-store.ts:1241:
+  lib\auth\user-store.ts:1242:      workspace_id:
+> lib\auth\user-store.ts:1243:        workspaceId,
+  lib\auth\user-store.ts:1244:
+  lib\auth\user-store.ts:1245:      brand_id:
+  lib\auth\user-store.ts:1246:        brandId,
+  lib\auth\user-store.ts:1247:
+  lib\auth\user-store.ts:1248:      role,
+  lib\auth\user-store.ts:1249:
+  lib\auth\user-store.ts:1289:    userId,
+  lib\auth\user-store.ts:1290:
+> lib\auth\user-store.ts:1291:    workspaceId,
+  lib\auth\user-store.ts:1292:
+  lib\auth\user-store.ts:1293:    brandId,
+  lib\auth\user-store.ts:1294:
+  lib\auth\user-store.ts:1295:    role,
+  lib\auth\user-store.ts:1296:
+  lib\auth\user-store.ts:1297:    status,
+  lib\integrations\providers\development.ts:54:
+  lib\integrations\providers\development.ts:55:    async testConnection(
+> lib\integrations\providers\development.ts:56:      workspaceId,
+  lib\integrations\providers\development.ts:57:      brandId,
+  lib\integrations\providers\development.ts:58:      connectionId
+  lib\integrations\providers\development.ts:59:    ): Promise<ProviderHealth> {
+  lib\integrations\providers\development.ts:60:
+  lib\integrations\providers\development.ts:61:      return {
+  lib\integrations\providers\development.ts:62:
+  lib\integrations\providers\development.ts:72:        details: {
+  lib\integrations\providers\development.ts:73:
+> lib\integrations\providers\development.ts:74:          workspaceId,
+  lib\integrations\providers\development.ts:75:
+  lib\integrations\providers\development.ts:76:          brandId,
+  lib\integrations\providers\development.ts:77:
+  lib\integrations\providers\development.ts:78:          connectionId,
+  lib\integrations\providers\development.ts:79:
+  lib\integrations\providers\development.ts:80:          connectionMode:
+  lib\integrations\providers\shopify-credentials.ts:192:  input: {
+  lib\integrations\providers\shopify-credentials.ts:193:
+> lib\integrations\providers\shopify-credentials.ts:194:    workspaceId:
+  lib\integrations\providers\shopify-credentials.ts:195:      string;
+  lib\integrations\providers\shopify-credentials.ts:196:
+  lib\integrations\providers\shopify-credentials.ts:197:    brandId:
+  lib\integrations\providers\shopify-credentials.ts:198:      string;
+  lib\integrations\providers\shopify-credentials.ts:199:
+  lib\integrations\providers\shopify-credentials.ts:200:    shop:
+  lib\integrations\providers\shopify-credentials.ts:207:) {
+  lib\integrations\providers\shopify-credentials.ts:208:
+> lib\integrations\providers\shopify-credentials.ts:209:  const workspaceId =
+  lib\integrations\providers\shopify-credentials.ts:210:    String(
+> lib\integrations\providers\shopify-credentials.ts:211:      input.workspaceId
+  lib\integrations\providers\shopify-credentials.ts:212:      ||
+  lib\integrations\providers\shopify-credentials.ts:213:      ''
+  lib\integrations\providers\shopify-credentials.ts:214:    ).trim();
+  lib\integrations\providers\shopify-credentials.ts:215:
+  lib\integrations\providers\shopify-credentials.ts:216:
+  lib\integrations\providers\shopify-credentials.ts:217:  const brandId =
+  lib\integrations\providers\shopify-credentials.ts:224:
+  lib\integrations\providers\shopify-credentials.ts:225:  if (
+> lib\integrations\providers\shopify-credentials.ts:226:    !workspaceId
+  lib\integrations\providers\shopify-credentials.ts:227:    ||
+  lib\integrations\providers\shopify-credentials.ts:228:    !brandId
+  lib\integrations\providers\shopify-credentials.ts:229:  ) {
+  lib\integrations\providers\shopify-credentials.ts:230:
+  lib\integrations\providers\shopify-credentials.ts:231:    throw new Error(
+  lib\integrations\providers\shopify-credentials.ts:232:      'SHOPIFY_CREDENTIAL_TENANT_MISSING'
+  lib\integrations\providers\shopify-credentials.ts:401:    await storeIntegrationSecret({
+  lib\integrations\providers\shopify-credentials.ts:402:
+> lib\integrations\providers\shopify-credentials.ts:403:      workspaceId,
+  lib\integrations\providers\shopify-credentials.ts:404:
+  lib\integrations\providers\shopify-credentials.ts:405:      brandId,
+  lib\integrations\providers\shopify-credentials.ts:406:
+  lib\integrations\providers\shopify-credentials.ts:407:      provider:
+  lib\integrations\providers\shopify-credentials.ts:408:        'shopify',
+  lib\integrations\providers\shopify-credentials.ts:409:
+  lib\integrations\providers\shopify-credentials.ts:629:  input: {
+  lib\integrations\providers\shopify-credentials.ts:630:
+> lib\integrations\providers\shopify-credentials.ts:631:    workspaceId:
+  lib\integrations\providers\shopify-credentials.ts:632:      string;
+  lib\integrations\providers\shopify-credentials.ts:633:
+  lib\integrations\providers\shopify-credentials.ts:634:    brandId:
+  lib\integrations\providers\shopify-credentials.ts:635:      string;
+  lib\integrations\providers\shopify-credentials.ts:636:
+  lib\integrations\providers\shopify-credentials.ts:637:    secretName:
+  lib\integrations\providers\shopify-credentials.ts:686:    await storeShopifyOfflineCredential({
+  lib\integrations\providers\shopify-credentials.ts:687:
+> lib\integrations\providers\shopify-credentials.ts:688:      workspaceId:
+> lib\integrations\providers\shopify-credentials.ts:689:        input.workspaceId,
+  lib\integrations\providers\shopify-credentials.ts:690:
+  lib\integrations\providers\shopify-credentials.ts:691:      brandId:
+  lib\integrations\providers\shopify-credentials.ts:692:        input.brandId,
+  lib\integrations\providers\shopify-credentials.ts:693:
+  lib\integrations\providers\shopify-credentials.ts:694:      shop: {
+  lib\integrations\providers\shopify-credentials.ts:695:
+  lib\integrations\providers\shopify-installation.ts:227:  return upsertGrowthOSTenant({
+  lib\integrations\providers\shopify-installation.ts:228:
+> lib\integrations\providers\shopify-installation.ts:229:    workspaceId:
+  lib\integrations\providers\shopify-installation.ts:230:      shopKey,
+  lib\integrations\providers\shopify-installation.ts:231:
+  lib\integrations\providers\shopify-installation.ts:232:    workspaceName:
+  lib\integrations\providers\shopify-installation.ts:233:      shopName,
+  lib\integrations\providers\shopify-installation.ts:234:
+  lib\integrations\providers\shopify-installation.ts:235:    workspaceSlug:
+  lib\integrations\providers\shopify-installation.ts:276:    tenant: {
+  lib\integrations\providers\shopify-installation.ts:277:
+> lib\integrations\providers\shopify-installation.ts:278:      workspaceId:
+  lib\integrations\providers\shopify-installation.ts:279:        string;
+  lib\integrations\providers\shopify-installation.ts:280:
+  lib\integrations\providers\shopify-installation.ts:281:      brandId:
+  lib\integrations\providers\shopify-installation.ts:282:        string;
+  lib\integrations\providers\shopify-installation.ts:283:
+  lib\integrations\providers\shopify-installation.ts:284:    };
+  lib\integrations\providers\shopify-installation.ts:300:    await upsertIntegrationConnection({
+  lib\integrations\providers\shopify-installation.ts:301:
+> lib\integrations\providers\shopify-installation.ts:302:      workspaceId:
+> lib\integrations\providers\shopify-installation.ts:303:        input.tenant.workspaceId,
+  lib\integrations\providers\shopify-installation.ts:304:
+  lib\integrations\providers\shopify-installation.ts:305:      brandId:
+  lib\integrations\providers\shopify-installation.ts:306:        input.tenant.brandId,
+  lib\integrations\providers\shopify-installation.ts:307:
+  lib\integrations\providers\shopify-installation.ts:308:      provider:
+  lib\integrations\providers\shopify-installation.ts:309:        'shopify',
+  lib\integrations\providers\shopify-installation.ts:345:    await upsertIntegrationAccount({
+  lib\integrations\providers\shopify-installation.ts:346:
+> lib\integrations\providers\shopify-installation.ts:347:      workspaceId:
+> lib\integrations\providers\shopify-installation.ts:348:        input.tenant.workspaceId,
+  lib\integrations\providers\shopify-installation.ts:349:
+  lib\integrations\providers\shopify-installation.ts:350:      brandId:
+  lib\integrations\providers\shopify-installation.ts:351:        input.tenant.brandId,
+  lib\integrations\providers\shopify-installation.ts:352:
+  lib\integrations\providers\shopify-installation.ts:353:      connectionId,
+  lib\integrations\providers\shopify-installation.ts:354:
+  lib\integrations\development-bootstrap.ts:41:  await upsertIntegrationConnection({
+  lib\integrations\development-bootstrap.ts:42:
+> lib\integrations\development-bootstrap.ts:43:    workspaceId:
+> lib\integrations\development-bootstrap.ts:44:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:45:
+  lib\integrations\development-bootstrap.ts:46:    brandId:
+  lib\integrations\development-bootstrap.ts:47:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:48:
+  lib\integrations\development-bootstrap.ts:49:    provider:
+  lib\integrations\development-bootstrap.ts:50:      'shopify',
+  lib\integrations\development-bootstrap.ts:75:  await upsertIntegrationConnection({
+  lib\integrations\development-bootstrap.ts:76:
+> lib\integrations\development-bootstrap.ts:77:    workspaceId:
+> lib\integrations\development-bootstrap.ts:78:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:79:
+  lib\integrations\development-bootstrap.ts:80:    brandId:
+  lib\integrations\development-bootstrap.ts:81:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:82:
+  lib\integrations\development-bootstrap.ts:83:    provider:
+  lib\integrations\development-bootstrap.ts:84:      'meta_ads',
+  lib\integrations\development-bootstrap.ts:108:  await upsertIntegrationConnection({
+  lib\integrations\development-bootstrap.ts:109:
+> lib\integrations\development-bootstrap.ts:110:    workspaceId:
+> lib\integrations\development-bootstrap.ts:111:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:112:
+  lib\integrations\development-bootstrap.ts:113:    brandId:
+  lib\integrations\development-bootstrap.ts:114:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:115:
+  lib\integrations\development-bootstrap.ts:116:    provider:
+  lib\integrations\development-bootstrap.ts:117:      'google_ads',
+  lib\integrations\development-bootstrap.ts:141:  await upsertIntegrationConnection({
+  lib\integrations\development-bootstrap.ts:142:
+> lib\integrations\development-bootstrap.ts:143:    workspaceId:
+> lib\integrations\development-bootstrap.ts:144:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:145:
+  lib\integrations\development-bootstrap.ts:146:    brandId:
+  lib\integrations\development-bootstrap.ts:147:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:148:
+  lib\integrations\development-bootstrap.ts:149:    provider:
+  lib\integrations\development-bootstrap.ts:150:      'bigquery',
+  lib\integrations\development-bootstrap.ts:177:  return {
+  lib\integrations\development-bootstrap.ts:178:
+> lib\integrations\development-bootstrap.ts:179:    workspaceId:
+> lib\integrations\development-bootstrap.ts:180:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:181:
+  lib\integrations\development-bootstrap.ts:182:    brandId:
+  lib\integrations\development-bootstrap.ts:183:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:184:
+  lib\integrations\development-bootstrap.ts:185:    connections: [
+  lib\integrations\development-bootstrap.ts:186:
+  lib\integrations\provider.ts:84:export type SyncContext = {
+  lib\integrations\provider.ts:85:
+> lib\integrations\provider.ts:86:  workspaceId: string;
+  lib\integrations\provider.ts:87:
+  lib\integrations\provider.ts:88:  brandId: string;
+  lib\integrations\provider.ts:89:
+  lib\integrations\provider.ts:90:  connectionId: string;
+  lib\integrations\provider.ts:91:
+  lib\integrations\provider.ts:92:  providerAccountId?: string | null;
+  lib\integrations\provider.ts:160:
+  lib\integrations\provider.ts:161:  testConnection(
+> lib\integrations\provider.ts:162:    workspaceId: string,
+  lib\integrations\provider.ts:163:    brandId: string,
+  lib\integrations\provider.ts:164:    connectionId: string
+  lib\integrations\provider.ts:165:  ): Promise<ProviderHealth>;
+  lib\integrations\provider.ts:166:
+  lib\integrations\provider.ts:167:
+  lib\integrations\provider.ts:168:  // ==========================================================
+  lib\integrations\provider.ts:171:
+  lib\integrations\provider.ts:172:  discoverAccounts(
+> lib\integrations\provider.ts:173:    workspaceId: string,
+  lib\integrations\provider.ts:174:    brandId: string,
+  lib\integrations\provider.ts:175:    connectionId: string
+  lib\integrations\provider.ts:176:  ): Promise<ProviderAccount[]>;
+  lib\integrations\provider.ts:177:
+  lib\integrations\provider.ts:178:
+  lib\integrations\provider.ts:179:  // ==========================================================
+  lib\integrations\secrets.ts:312:
+  lib\integrations\secrets.ts:313:export function buildIntegrationSecretId(
+> lib\integrations\secrets.ts:314:  workspaceId: string,
+  lib\integrations\secrets.ts:315:  brandId: string,
+  lib\integrations\secrets.ts:316:  provider: string
+  lib\integrations\secrets.ts:317:) {
+  lib\integrations\secrets.ts:318:
+  lib\integrations\secrets.ts:319:  if (
+> lib\integrations\secrets.ts:320:    !workspaceId
+  lib\integrations\secrets.ts:321:    ||
+  lib\integrations\secrets.ts:322:    !brandId
+  lib\integrations\secrets.ts:323:    ||
+  lib\integrations\secrets.ts:324:    !provider
+  lib\integrations\secrets.ts:325:  ) {
+  lib\integrations\secrets.ts:326:
+  lib\integrations\secrets.ts:327:    throw new Error(
+> lib\integrations\secrets.ts:328:      'workspaceId, brandId and provider are required to build an integration secret ID'
+  lib\integrations\secrets.ts:329:    );
+  lib\integrations\secrets.ts:330:
+  lib\integrations\secrets.ts:331:  }
+  lib\integrations\secrets.ts:332:
+  lib\integrations\secrets.ts:333:
+  lib\integrations\secrets.ts:334:  return makeSafeSecretId(
+  lib\integrations\secrets.ts:337:      'growthos',
+  lib\integrations\secrets.ts:338:
+> lib\integrations\secrets.ts:339:      workspaceId,
+  lib\integrations\secrets.ts:340:
+  lib\integrations\secrets.ts:341:      brandId,
+  lib\integrations\secrets.ts:342:
+  lib\integrations\secrets.ts:343:      provider,
+  lib\integrations\secrets.ts:344:
+  lib\integrations\secrets.ts:345:    ].join('-')
+  lib\integrations\secrets.ts:383:  input: {
+  lib\integrations\secrets.ts:384:
+> lib\integrations\secrets.ts:385:    workspaceId: string;
+  lib\integrations\secrets.ts:386:
+  lib\integrations\secrets.ts:387:    brandId: string;
+  lib\integrations\secrets.ts:388:
+  lib\integrations\secrets.ts:389:    provider: string;
+  lib\integrations\secrets.ts:390:
+  lib\integrations\secrets.ts:391:    value: unknown;
+  lib\integrations\secrets.ts:413:    buildIntegrationSecretId(
+  lib\integrations\secrets.ts:414:
+> lib\integrations\secrets.ts:415:      input.workspaceId,
+  lib\integrations\secrets.ts:416:
+  lib\integrations\secrets.ts:417:      input.brandId,
+  lib\integrations\secrets.ts:418:
+  lib\integrations\secrets.ts:419:      input.provider
+  lib\integrations\secrets.ts:420:
+  lib\integrations\secrets.ts:421:    );
+  lib\integrations\store.ts:91:export type UpsertIntegrationAccountInput = {
+  lib\integrations\store.ts:92:
+> lib\integrations\store.ts:93:  workspaceId: string;
+  lib\integrations\store.ts:94:
+  lib\integrations\store.ts:95:  brandId: string;
+  lib\integrations\store.ts:96:
+  lib\integrations\store.ts:97:  connectionId: string;
+  lib\integrations\store.ts:98:
+  lib\integrations\store.ts:99:  provider: string;
+  lib\integrations\store.ts:508:
+  lib\integrations\store.ts:509:function buildConnectionId(
+> lib\integrations\store.ts:510:  workspaceId: string,
+  lib\integrations\store.ts:511:  brandId: string,
+  lib\integrations\store.ts:512:  provider: string
+  lib\integrations\store.ts:513:) {
+  lib\integrations\store.ts:514:
+  lib\integrations\store.ts:515:  return [
+> lib\integrations\store.ts:516:    workspaceId,
+  lib\integrations\store.ts:517:    brandId,
+  lib\integrations\store.ts:518:    provider,
+  lib\integrations\store.ts:519:  ].join(
+  lib\integrations\store.ts:520:    ':'
+  lib\integrations\store.ts:521:  );
+  lib\integrations\store.ts:522:
+  lib\integrations\store.ts:541:
+  lib\integrations\store.ts:542:function buildIntegrationAccountId(
+> lib\integrations\store.ts:543:  workspaceId: string,
+  lib\integrations\store.ts:544:  brandId: string,
+  lib\integrations\store.ts:545:  provider: string,
+  lib\integrations\store.ts:546:  providerAccountId: string
+  lib\integrations\store.ts:547:) {
+  lib\integrations\store.ts:548:
+  lib\integrations\store.ts:549:  return [
+  lib\integrations\store.ts:550:
+> lib\integrations\store.ts:551:    workspaceId,
+  lib\integrations\store.ts:552:
+  lib\integrations\store.ts:553:    brandId,
+  lib\integrations\store.ts:554:
+  lib\integrations\store.ts:555:    provider,
+  lib\integrations\store.ts:556:
+  lib\integrations\store.ts:557:    providerAccountId,
+  lib\integrations\store.ts:571:  input: {
+  lib\integrations\store.ts:572:
+> lib\integrations\store.ts:573:    workspaceId: string;
+  lib\integrations\store.ts:574:
+  lib\integrations\store.ts:575:    brandId: string;
+  lib\integrations\store.ts:576:
+  lib\integrations\store.ts:577:    provider: string;
+  lib\integrations\store.ts:578:
+  lib\integrations\store.ts:579:    connectionMode: string;
+  lib\integrations\store.ts:607:  const connectionId =
+  lib\integrations\store.ts:608:    buildConnectionId(
+> lib\integrations\store.ts:609:      input.workspaceId,
+  lib\integrations\store.ts:610:      input.brandId,
+  lib\integrations\store.ts:611:      input.provider
+  lib\integrations\store.ts:612:    );
+  lib\integrations\store.ts:613:
+  lib\integrations\store.ts:614:
+  lib\integrations\store.ts:615:  const query = `
+  lib\integrations\store.ts:812:
+  lib\integrations\store.ts:813:      workspace_id:
+> lib\integrations\store.ts:814:        input.workspaceId,
+  lib\integrations\store.ts:815:
+  lib\integrations\store.ts:816:      brand_id:
+  lib\integrations\store.ts:817:        input.brandId,
+  lib\integrations\store.ts:818:
+  lib\integrations\store.ts:819:      provider:
+  lib\integrations\store.ts:820:        input.provider,
+  lib\integrations\store.ts:944:    buildIntegrationAccountId(
+  lib\integrations\store.ts:945:
+> lib\integrations\store.ts:946:      input.workspaceId,
+  lib\integrations\store.ts:947:
+  lib\integrations\store.ts:948:      input.brandId,
+  lib\integrations\store.ts:949:
+  lib\integrations\store.ts:950:      input.provider,
+  lib\integrations\store.ts:951:
+  lib\integrations\store.ts:952:      input.providerAccountId
+  lib\integrations\store.ts:1203:
+  lib\integrations\store.ts:1204:      workspace_id:
+> lib\integrations\store.ts:1205:        input.workspaceId,
+  lib\integrations\store.ts:1206:
+  lib\integrations\store.ts:1207:      brand_id:
+  lib\integrations\store.ts:1208:        input.brandId,
+  lib\integrations\store.ts:1209:
+  lib\integrations\store.ts:1210:      connection_id:
+  lib\integrations\store.ts:1211:        input.connectionId,
+  lib\integrations\store.ts:1304:
+  lib\integrations\store.ts:1305:export async function getIntegrationConnection(
+> lib\integrations\store.ts:1306:  workspaceId: string,
+  lib\integrations\store.ts:1307:  brandId: string,
+  lib\integrations\store.ts:1308:  provider: string
+  lib\integrations\store.ts:1309:) {
+  lib\integrations\store.ts:1310:
+  lib\integrations\store.ts:1311:  await ensureIntegrationStore();
+  lib\integrations\store.ts:1312:
+  lib\integrations\store.ts:1414:
+  lib\integrations\store.ts:1415:        workspace_id:
+> lib\integrations\store.ts:1416:          workspaceId,
+  lib\integrations\store.ts:1417:
+  lib\integrations\store.ts:1418:        brand_id:
+  lib\integrations\store.ts:1419:          brandId,
+  lib\integrations\store.ts:1420:
+  lib\integrations\store.ts:1421:        provider,
+  lib\integrations\store.ts:1422:
+  lib\integrations\store.ts:1593:
+  lib\integrations\store.ts:1594:export async function listIntegrationConnections(
+> lib\integrations\store.ts:1595:  workspaceId: string,
+  lib\integrations\store.ts:1596:  brandId: string
+  lib\integrations\store.ts:1597:) {
+  lib\integrations\store.ts:1598:
+  lib\integrations\store.ts:1599:  await ensureIntegrationStore();
+  lib\integrations\store.ts:1600:
+  lib\integrations\store.ts:1601:
+  lib\integrations\store.ts:1696:
+  lib\integrations\store.ts:1697:        workspace_id:
+> lib\integrations\store.ts:1698:          workspaceId,
+  lib\integrations\store.ts:1699:
+  lib\integrations\store.ts:1700:        brand_id:
+  lib\integrations\store.ts:1701:          brandId,
+  lib\integrations\store.ts:1702:
+  lib\integrations\store.ts:1703:      },
+  lib\integrations\store.ts:1704:
+  lib\integrations\store.ts:1914:
+  lib\integrations\store.ts:1915:export async function getSelectedIntegrationAccount(
+> lib\integrations\store.ts:1916:  workspaceId: string,
+  lib\integrations\store.ts:1917:  brandId: string,
+  lib\integrations\store.ts:1918:  provider: string
+  lib\integrations\store.ts:1919:) {
+  lib\integrations\store.ts:1920:
+  lib\integrations\store.ts:1921:  await ensureIntegrationStore();
+  lib\integrations\store.ts:1922:
+  lib\integrations\store.ts:2010:
+  lib\integrations\store.ts:2011:        workspace_id:
+> lib\integrations\store.ts:2012:          workspaceId,
+  lib\integrations\store.ts:2013:
+  lib\integrations\store.ts:2014:        brand_id:
+  lib\integrations\store.ts:2015:          brandId,
+  lib\integrations\store.ts:2016:
+  lib\integrations\store.ts:2017:        provider,
+  lib\integrations\store.ts:2018:
+  lib\integrations\sync-engine.ts:33:  input: {
+  lib\integrations\sync-engine.ts:34:
+> lib\integrations\sync-engine.ts:35:    workspaceId: string;
+  lib\integrations\sync-engine.ts:36:
+  lib\integrations\sync-engine.ts:37:    brandId: string;
+  lib\integrations\sync-engine.ts:38:
+  lib\integrations\sync-engine.ts:39:    connectionId: string;
+  lib\integrations\sync-engine.ts:40:
+  lib\integrations\sync-engine.ts:41:    providerId: string;
+  lib\integrations\sync-engine.ts:79:    await getSyncState({
+  lib\integrations\sync-engine.ts:80:
+> lib\integrations\sync-engine.ts:81:      workspaceId:
+> lib\integrations\sync-engine.ts:82:        input.workspaceId,
+  lib\integrations\sync-engine.ts:83:
+  lib\integrations\sync-engine.ts:84:      brandId:
+  lib\integrations\sync-engine.ts:85:        input.brandId,
+  lib\integrations\sync-engine.ts:86:
+  lib\integrations\sync-engine.ts:87:      connectionId:
+  lib\integrations\sync-engine.ts:88:        input.connectionId,
+  lib\integrations\sync-engine.ts:115:    runId,
+  lib\integrations\sync-engine.ts:116:
+> lib\integrations\sync-engine.ts:117:    workspaceId:
+> lib\integrations\sync-engine.ts:118:      input.workspaceId,
+  lib\integrations\sync-engine.ts:119:
+  lib\integrations\sync-engine.ts:120:    brandId:
+  lib\integrations\sync-engine.ts:121:      input.brandId,
+  lib\integrations\sync-engine.ts:122:
+  lib\integrations\sync-engine.ts:123:    connectionId:
+  lib\integrations\sync-engine.ts:124:      input.connectionId,
+  lib\integrations\sync-engine.ts:148:    const context = {
+  lib\integrations\sync-engine.ts:149:
+> lib\integrations\sync-engine.ts:150:      workspaceId:
+> lib\integrations\sync-engine.ts:151:        input.workspaceId,
+  lib\integrations\sync-engine.ts:152:
+  lib\integrations\sync-engine.ts:153:      brandId:
+  lib\integrations\sync-engine.ts:154:        input.brandId,
+  lib\integrations\sync-engine.ts:155:
+  lib\integrations\sync-engine.ts:156:      connectionId:
+  lib\integrations\sync-engine.ts:157:        input.connectionId,
+  lib\integrations\sync-engine.ts:238:    await markSyncStateSuccess({
+  lib\integrations\sync-engine.ts:239:
+> lib\integrations\sync-engine.ts:240:      workspaceId:
+> lib\integrations\sync-engine.ts:241:        input.workspaceId,
+  lib\integrations\sync-engine.ts:242:
+  lib\integrations\sync-engine.ts:243:      brandId:
+  lib\integrations\sync-engine.ts:244:        input.brandId,
+  lib\integrations\sync-engine.ts:245:
+  lib\integrations\sync-engine.ts:246:      connectionId:
+  lib\integrations\sync-engine.ts:247:        input.connectionId,
+  lib\integrations\sync-engine.ts:321:    await markSyncStateFailure({
+  lib\integrations\sync-engine.ts:322:
+> lib\integrations\sync-engine.ts:323:      workspaceId:
+> lib\integrations\sync-engine.ts:324:        input.workspaceId,
+  lib\integrations\sync-engine.ts:325:
+  lib\integrations\sync-engine.ts:326:      brandId:
+  lib\integrations\sync-engine.ts:327:        input.brandId,
+  lib\integrations\sync-engine.ts:328:
+  lib\integrations\sync-engine.ts:329:      connectionId:
+  lib\integrations\sync-engine.ts:330:        input.connectionId,
+  lib\integrations\sync-store.ts:55:    runId: string;
+  lib\integrations\sync-store.ts:56:
+> lib\integrations\sync-store.ts:57:    workspaceId: string;
+  lib\integrations\sync-store.ts:58:
+  lib\integrations\sync-store.ts:59:    brandId: string;
+  lib\integrations\sync-store.ts:60:
+  lib\integrations\sync-store.ts:61:    connectionId: string;
+  lib\integrations\sync-store.ts:62:
+  lib\integrations\sync-store.ts:63:    provider: string;
+  lib\integrations\sync-store.ts:207:
+  lib\integrations\sync-store.ts:208:      workspace_id:
+> lib\integrations\sync-store.ts:209:        input.workspaceId,
+  lib\integrations\sync-store.ts:210:
+  lib\integrations\sync-store.ts:211:      brand_id:
+  lib\integrations\sync-store.ts:212:        input.brandId,
+  lib\integrations\sync-store.ts:213:
+  lib\integrations\sync-store.ts:214:      connection_id:
+  lib\integrations\sync-store.ts:215:        input.connectionId,
+  lib\integrations\sync-store.ts:451:  input: {
+  lib\integrations\sync-store.ts:452:
+> lib\integrations\sync-store.ts:453:    workspaceId: string;
+  lib\integrations\sync-store.ts:454:
+  lib\integrations\sync-store.ts:455:    brandId: string;
+  lib\integrations\sync-store.ts:456:
+  lib\integrations\sync-store.ts:457:    connectionId: string;
+  lib\integrations\sync-store.ts:458:
+  lib\integrations\sync-store.ts:459:    provider: string;
+  lib\integrations\sync-store.ts:535:
+  lib\integrations\sync-store.ts:536:        workspace_id:
+> lib\integrations\sync-store.ts:537:          input.workspaceId,
+  lib\integrations\sync-store.ts:538:
+  lib\integrations\sync-store.ts:539:        brand_id:
+  lib\integrations\sync-store.ts:540:          input.brandId,
+  lib\integrations\sync-store.ts:541:
+  lib\integrations\sync-store.ts:542:        connection_id:
+  lib\integrations\sync-store.ts:543:          input.connectionId,
+  lib\integrations\sync-store.ts:570:  input: {
+  lib\integrations\sync-store.ts:571:
+> lib\integrations\sync-store.ts:572:    workspaceId: string;
+  lib\integrations\sync-store.ts:573:
+  lib\integrations\sync-store.ts:574:    brandId: string;
+  lib\integrations\sync-store.ts:575:
+  lib\integrations\sync-store.ts:576:    connectionId: string;
+  lib\integrations\sync-store.ts:577:
+  lib\integrations\sync-store.ts:578:    provider: string;
+  lib\integrations\sync-store.ts:595:  const syncStateId =
+  lib\integrations\sync-store.ts:596:    [
+> lib\integrations\sync-store.ts:597:      input.workspaceId,
+  lib\integrations\sync-store.ts:598:      input.brandId,
+  lib\integrations\sync-store.ts:599:      input.provider,
+  lib\integrations\sync-store.ts:600:      input.entity,
+  lib\integrations\sync-store.ts:601:    ].join(
+  lib\integrations\sync-store.ts:602:      ':'
+  lib\integrations\sync-store.ts:603:    );
+  lib\integrations\sync-store.ts:793:
+  lib\integrations\sync-store.ts:794:      workspace_id:
+> lib\integrations\sync-store.ts:795:        input.workspaceId,
+  lib\integrations\sync-store.ts:796:
+  lib\integrations\sync-store.ts:797:      brand_id:
+  lib\integrations\sync-store.ts:798:        input.brandId,
+  lib\integrations\sync-store.ts:799:
+  lib\integrations\sync-store.ts:800:      connection_id:
+  lib\integrations\sync-store.ts:801:        input.connectionId,
+  lib\integrations\sync-store.ts:834:  input: {
+  lib\integrations\sync-store.ts:835:
+> lib\integrations\sync-store.ts:836:    workspaceId: string;
+  lib\integrations\sync-store.ts:837:
+  lib\integrations\sync-store.ts:838:    brandId: string;
+  lib\integrations\sync-store.ts:839:
+  lib\integrations\sync-store.ts:840:    connectionId: string;
+  lib\integrations\sync-store.ts:841:
+  lib\integrations\sync-store.ts:842:    provider: string;
+  lib\integrations\sync-store.ts:855:  const syncStateId =
+  lib\integrations\sync-store.ts:856:    [
+> lib\integrations\sync-store.ts:857:      input.workspaceId,
+  lib\integrations\sync-store.ts:858:      input.brandId,
+  lib\integrations\sync-store.ts:859:      input.provider,
+  lib\integrations\sync-store.ts:860:      input.entity,
+  lib\integrations\sync-store.ts:861:    ].join(
+  lib\integrations\sync-store.ts:862:      ':'
+  lib\integrations\sync-store.ts:863:    );
+  lib\integrations\sync-store.ts:996:
+  lib\integrations\sync-store.ts:997:      workspace_id:
+> lib\integrations\sync-store.ts:998:        input.workspaceId,
+  lib\integrations\sync-store.ts:999:
+  lib\integrations\sync-store.ts:1000:      brand_id:
+  lib\integrations\sync-store.ts:1001:        input.brandId,
+  lib\integrations\sync-store.ts:1002:
+  lib\integrations\sync-store.ts:1003:      connection_id:
+  lib\integrations\sync-store.ts:1004:        input.connectionId,
+  lib\tenancy\context.ts:61:
+  lib\tenancy\context.ts:62:export async function resolveTenantContextById(
+> lib\tenancy\context.ts:63:  workspaceId: string,
+  lib\tenancy\context.ts:64:  brandId: string
+  lib\tenancy\context.ts:65:):
+  lib\tenancy\context.ts:66:  Promise<TenantContext> {
+  lib\tenancy\context.ts:67:
+  lib\tenancy\context.ts:68:  const projectId =
+  lib\tenancy\context.ts:69:    requireProjectId();
+  lib\tenancy\context.ts:70:
+  lib\tenancy\context.ts:71:
+> lib\tenancy\context.ts:72:  const normalizedWorkspaceId =
+  lib\tenancy\context.ts:73:    String(
+> lib\tenancy\context.ts:74:      workspaceId
+  lib\tenancy\context.ts:75:      ||
+  lib\tenancy\context.ts:76:      ''
+  lib\tenancy\context.ts:77:    ).trim();
+  lib\tenancy\context.ts:78:
+  lib\tenancy\context.ts:79:
+  lib\tenancy\context.ts:80:  const normalizedBrandId =
+  lib\tenancy\context.ts:87:
+  lib\tenancy\context.ts:88:  if (
+> lib\tenancy\context.ts:89:    !normalizedWorkspaceId
+  lib\tenancy\context.ts:90:    ||
+  lib\tenancy\context.ts:91:    !normalizedBrandId
+  lib\tenancy\context.ts:92:  ) {
+  lib\tenancy\context.ts:93:
+  lib\tenancy\context.ts:94:    throw new Error(
+  lib\tenancy\context.ts:95:      'Workspace and brand identity are required'
+  lib\tenancy\context.ts:155:
+  lib\tenancy\context.ts:156:        workspace_id:
+> lib\tenancy\context.ts:157:          normalizedWorkspaceId,
+  lib\tenancy\context.ts:158:
+  lib\tenancy\context.ts:159:        brand_id:
+  lib\tenancy\context.ts:160:          normalizedBrandId,
+  lib\tenancy\context.ts:161:
+  lib\tenancy\context.ts:162:      },
+  lib\tenancy\context.ts:163:
+  lib\tenancy\context.ts:172:
+  lib\tenancy\context.ts:173:    throw new Error(
+> lib\tenancy\context.ts:174:      `Growth OS tenant could not be resolved: ${normalizedWorkspaceId}/${normalizedBrandId}`
+  lib\tenancy\context.ts:175:    );
+  lib\tenancy\context.ts:176:
+  lib\tenancy\context.ts:177:  }
+  lib\tenancy\context.ts:178:
+  lib\tenancy\context.ts:179:
+  lib\tenancy\context.ts:180:  return {
+  lib\tenancy\context.ts:181:
+> lib\tenancy\context.ts:182:    workspaceId:
+  lib\tenancy\context.ts:183:      String(
+  lib\tenancy\context.ts:184:        row.workspace_id
+  lib\tenancy\context.ts:185:      ),
+  lib\tenancy\context.ts:186:
+  lib\tenancy\context.ts:187:    workspaceName:
+  lib\tenancy\context.ts:188:      String(
+  lib\tenancy\context.ts:256:
+  lib\tenancy\context.ts:257:
+> lib\tenancy\context.ts:258:  const workspaceId =
+  lib\tenancy\context.ts:259:    String(
+  lib\tenancy\context.ts:260:      process.env.GROWTHOS_DEFAULT_WORKSPACE_ID
+  lib\tenancy\context.ts:261:      ||
+  lib\tenancy\context.ts:262:      ''
+  lib\tenancy\context.ts:263:    ).trim();
+  lib\tenancy\context.ts:264:
+  lib\tenancy\context.ts:273:
+  lib\tenancy\context.ts:274:  if (
+> lib\tenancy\context.ts:275:    !workspaceId
+  lib\tenancy\context.ts:276:    ||
+  lib\tenancy\context.ts:277:    !brandId
+  lib\tenancy\context.ts:278:  ) {
+  lib\tenancy\context.ts:279:
+  lib\tenancy\context.ts:280:    throw new Error(
+  lib\tenancy\context.ts:281:      'Default Growth OS tenant is not configured'
+  lib\tenancy\context.ts:286:
+  lib\tenancy\context.ts:287:  return resolveTenantContextById(
+> lib\tenancy\context.ts:288:    workspaceId,
+  lib\tenancy\context.ts:289:    brandId
+  lib\tenancy\context.ts:290:  );
+  lib\tenancy\context.ts:291:
+  lib\tenancy\context.ts:292:}
+  lib\tenancy\control-plane.ts:34:export type UpsertGrowthOSTenantInput = {
+  lib\tenancy\control-plane.ts:35:
+> lib\tenancy\control-plane.ts:36:  workspaceId: string;
+  lib\tenancy\control-plane.ts:37:
+  lib\tenancy\control-plane.ts:38:  workspaceName: string;
+  lib\tenancy\control-plane.ts:39:
+  lib\tenancy\control-plane.ts:40:  workspaceSlug: string;
+  lib\tenancy\control-plane.ts:41:
+  lib\tenancy\control-plane.ts:42:  brandId: string;
+  lib\tenancy\control-plane.ts:268:
+  lib\tenancy\control-plane.ts:269:
+> lib\tenancy\control-plane.ts:270:  const workspaceId =
+  lib\tenancy\control-plane.ts:271:    String(
+> lib\tenancy\control-plane.ts:272:      input.workspaceId || ''
+  lib\tenancy\control-plane.ts:273:    ).trim();
+  lib\tenancy\control-plane.ts:274:
+  lib\tenancy\control-plane.ts:275:
+  lib\tenancy\control-plane.ts:276:  const workspaceName =
+  lib\tenancy\control-plane.ts:277:    String(
+  lib\tenancy\control-plane.ts:278:      input.workspaceName || ''
+  lib\tenancy\control-plane.ts:327:
+  lib\tenancy\control-plane.ts:328:  if (
+> lib\tenancy\control-plane.ts:329:    !workspaceId
+  lib\tenancy\control-plane.ts:330:    ||
+  lib\tenancy\control-plane.ts:331:    !workspaceName
+  lib\tenancy\control-plane.ts:332:    ||
+  lib\tenancy\control-plane.ts:333:    !workspaceSlug
+  lib\tenancy\control-plane.ts:334:    ||
+  lib\tenancy\control-plane.ts:335:    !brandId
+  lib\tenancy\control-plane.ts:450:
+  lib\tenancy\control-plane.ts:451:      workspace_id:
+> lib\tenancy\control-plane.ts:452:        workspaceId,
+  lib\tenancy\control-plane.ts:453:
+  lib\tenancy\control-plane.ts:454:      workspace_name:
+  lib\tenancy\control-plane.ts:455:        workspaceName,
+  lib\tenancy\control-plane.ts:456:
+  lib\tenancy\control-plane.ts:457:      workspace_slug:
+  lib\tenancy\control-plane.ts:458:        workspaceSlug,
+  lib\tenancy\control-plane.ts:595:
+  lib\tenancy\control-plane.ts:596:      workspace_id:
+> lib\tenancy\control-plane.ts:597:        workspaceId,
+  lib\tenancy\control-plane.ts:598:
+  lib\tenancy\control-plane.ts:599:      brand_name:
+  lib\tenancy\control-plane.ts:600:        brandName,
+  lib\tenancy\control-plane.ts:601:
+  lib\tenancy\control-plane.ts:602:      brand_slug:
+  lib\tenancy\control-plane.ts:603:        brandSlug,
+  lib\tenancy\control-plane.ts:614:  return {
+  lib\tenancy\control-plane.ts:615:
+> lib\tenancy\control-plane.ts:616:    workspaceId,
+  lib\tenancy\control-plane.ts:617:
+  lib\tenancy\control-plane.ts:618:    workspaceName,
+  lib\tenancy\control-plane.ts:619:
+  lib\tenancy\control-plane.ts:620:    workspaceSlug,
+  lib\tenancy\control-plane.ts:621:
+  lib\tenancy\control-plane.ts:622:    brandId,
+  lib\tenancy\control-plane.ts:648:export async function bootstrapDevelopmentTenant() {
+  lib\tenancy\control-plane.ts:649:
+> lib\tenancy\control-plane.ts:650:  const workspaceId =
+  lib\tenancy\control-plane.ts:651:    process.env.GROWTHOS_DEFAULT_WORKSPACE_ID;
+  lib\tenancy\control-plane.ts:652:
+  lib\tenancy\control-plane.ts:653:
+  lib\tenancy\control-plane.ts:654:  const workspaceName =
+  lib\tenancy\control-plane.ts:655:    process.env.GROWTHOS_DEFAULT_WORKSPACE_NAME;
+  lib\tenancy\control-plane.ts:656:
+  lib\tenancy\control-plane.ts:677:
+  lib\tenancy\control-plane.ts:678:  if (
+> lib\tenancy\control-plane.ts:679:    !workspaceId
+  lib\tenancy\control-plane.ts:680:    ||
+  lib\tenancy\control-plane.ts:681:    !workspaceName
+  lib\tenancy\control-plane.ts:682:    ||
+  lib\tenancy\control-plane.ts:683:    !brandId
+  lib\tenancy\control-plane.ts:684:    ||
+  lib\tenancy\control-plane.ts:685:    !brandName
+  lib\tenancy\control-plane.ts:695:  return upsertGrowthOSTenant({
+  lib\tenancy\control-plane.ts:696:
+> lib\tenancy\control-plane.ts:697:    workspaceId,
+  lib\tenancy\control-plane.ts:698:
+  lib\tenancy\control-plane.ts:699:    workspaceName,
+  lib\tenancy\control-plane.ts:700:
+  lib\tenancy\control-plane.ts:701:    workspaceSlug:
+> lib\tenancy\control-plane.ts:702:      workspaceId,
+  lib\tenancy\control-plane.ts:703:
+  lib\tenancy\control-plane.ts:704:    brandId,
+  lib\tenancy\control-plane.ts:705:
+  lib\tenancy\control-plane.ts:706:    brandName,
+  lib\tenancy\control-plane.ts:707:
+  lib\tenancy\control-plane.ts:708:    brandSlug:
+  lib\tenancy\types.ts:18:export type Workspace = {
+  lib\tenancy\types.ts:19:
+> lib\tenancy\types.ts:20:  workspaceId: string;
+  lib\tenancy\types.ts:21:
+  lib\tenancy\types.ts:22:  workspaceName: string;
+  lib\tenancy\types.ts:23:
+  lib\tenancy\types.ts:24:  workspaceSlug: string;
+  lib\tenancy\types.ts:25:
+  lib\tenancy\types.ts:26:  status: WorkspaceStatus;
+  lib\tenancy\types.ts:33:  brandId: string;
+  lib\tenancy\types.ts:34:
+> lib\tenancy\types.ts:35:  workspaceId: string;
+  lib\tenancy\types.ts:36:
+  lib\tenancy\types.ts:37:  brandName: string;
+  lib\tenancy\types.ts:38:
+  lib\tenancy\types.ts:39:  brandSlug: string;
+  lib\tenancy\types.ts:40:
+  lib\tenancy\types.ts:41:  status: BrandStatus;
+  lib\tenancy\types.ts:50:export type TenantContext = {
+  lib\tenancy\types.ts:51:
+> lib\tenancy\types.ts:52:  workspaceId: string;
+  lib\tenancy\types.ts:53:
+  lib\tenancy\types.ts:54:  workspaceName: string;
+  lib\tenancy\types.ts:55:
+  lib\tenancy\types.ts:56:  workspaceSlug: string;
+  lib\tenancy\types.ts:57:
+  lib\tenancy\types.ts:58:  brandId: string;
+  proxy.ts:184:
+  proxy.ts:185:    if (
+> proxy.ts:186:  identity.workspaceId
+  proxy.ts:187:) {
+  proxy.ts:188:
+  proxy.ts:189:  requestHeaders.set(
+  proxy.ts:190:    'x-growthos-workspace-id',
+> proxy.ts:191:    identity.workspaceId
+  proxy.ts:192:  );
+  proxy.ts:193:
+  proxy.ts:194:}
+  proxy.ts:195:
+  proxy.ts:196:
+  proxy.ts:197:if (
+
+
+
+
+============================================================
+SEARCH: brandId
+============================================================
+
+  app\api\auth\brands\route.ts:96:        !identity.workspaceId
+  app\api\auth\brands\route.ts:97:        ||
+> app\api\auth\brands\route.ts:98:        !identity.brandId
+  app\api\auth\brands\route.ts:99:      ) {
+  app\api\auth\brands\route.ts:100:
+  app\api\auth\brands\route.ts:101:        throw new Error(
+  app\api\auth\brands\route.ts:102:          'SHOPIFY_SESSION_TENANT_MISSING'
+  app\api\auth\brands\route.ts:103:        );
+  app\api\auth\brands\route.ts:104:
+  app\api\auth\brands\route.ts:111:          identity.workspaceId,
+  app\api\auth\brands\route.ts:112:
+> app\api\auth\brands\route.ts:113:          identity.brandId
+  app\api\auth\brands\route.ts:114:
+  app\api\auth\brands\route.ts:115:        );
+  app\api\auth\brands\route.ts:116:
+  app\api\auth\brands\route.ts:117:
+  app\api\auth\brands\route.ts:118:      return NextResponse.json({
+  app\api\auth\brands\route.ts:119:
+  app\api\auth\brands\route.ts:126:            tenant.workspaceId,
+  app\api\auth\brands\route.ts:127:
+> app\api\auth\brands\route.ts:128:          brandId:
+> app\api\auth\brands\route.ts:129:            tenant.brandId,
+  app\api\auth\brands\route.ts:130:
+  app\api\auth\brands\route.ts:131:        },
+  app\api\auth\brands\route.ts:132:
+  app\api\auth\brands\route.ts:133:        brands: [
+  app\api\auth\brands\route.ts:134:
+  app\api\auth\brands\route.ts:135:          {
+  app\api\auth\brands\route.ts:141:              tenant.workspaceName,
+  app\api\auth\brands\route.ts:142:
+> app\api\auth\brands\route.ts:143:            brandId:
+> app\api\auth\brands\route.ts:144:              tenant.brandId,
+  app\api\auth\brands\route.ts:145:
+  app\api\auth\brands\route.ts:146:            brandName:
+  app\api\auth\brands\route.ts:147:              tenant.brandName,
+  app\api\auth\brands\route.ts:148:
+  app\api\auth\brands\route.ts:149:            brandSlug:
+  app\api\auth\brands\route.ts:150:              tenant.brandSlug,
+  app\api\auth\brands\route.ts:220:                tenant.workspaceName,
+  app\api\auth\brands\route.ts:221:
+> app\api\auth\brands\route.ts:222:              brandId:
+> app\api\auth\brands\route.ts:223:                tenant.brandId,
+  app\api\auth\brands\route.ts:224:
+  app\api\auth\brands\route.ts:225:              brandName:
+  app\api\auth\brands\route.ts:226:                tenant.brandName,
+  app\api\auth\brands\route.ts:227:
+  app\api\auth\brands\route.ts:228:              brandSlug:
+  app\api\auth\brands\route.ts:229:                tenant.brandSlug,
+  app\api\auth\brands\route.ts:248:                  &&
+  app\api\auth\brands\route.ts:249:
+> app\api\auth\brands\route.ts:250:                  identity.brandId ===
+> app\api\auth\brands\route.ts:251:                    tenant.brandId
+  app\api\auth\brands\route.ts:252:                ),
+  app\api\auth\brands\route.ts:253:
+  app\api\auth\brands\route.ts:254:            };
+  app\api\auth\brands\route.ts:255:
+  app\api\auth\brands\route.ts:256:          }
+  app\api\auth\brands\route.ts:257:        )
+  app\api\auth\brands\route.ts:276:          null,
+  app\api\auth\brands\route.ts:277:
+> app\api\auth\brands\route.ts:278:        brandId:
+> app\api\auth\brands\route.ts:279:          identity.brandId
+  app\api\auth\brands\route.ts:280:          ??
+  app\api\auth\brands\route.ts:281:          null,
+  app\api\auth\brands\route.ts:282:
+  app\api\auth\brands\route.ts:283:      },
+  app\api\auth\brands\route.ts:284:
+  app\api\auth\brands\route.ts:285:      brands,
+  app\api\auth\login\route.ts:305:        membership.workspace_id,
+  app\api\auth\login\route.ts:306:
+> app\api\auth\login\route.ts:307:      brandId:
+  app\api\auth\login\route.ts:308:        membership.brand_id,
+  app\api\auth\login\route.ts:309:
+  app\api\auth\login\route.ts:310:      role:
+  app\api\auth\login\route.ts:311:        membership.role,
+  app\api\auth\login\route.ts:312:
+  app\api\auth\login\route.ts:313:      authMethod:
+  app\api\auth\login\route.ts:386:          membership.workspace_id,
+  app\api\auth\login\route.ts:387:
+> app\api\auth\login\route.ts:388:        brandId:
+  app\api\auth\login\route.ts:389:          membership.brand_id,
+  app\api\auth\login\route.ts:390:
+  app\api\auth\login\route.ts:391:        role:
+  app\api\auth\login\route.ts:392:          membership.role,
+  app\api\auth\login\route.ts:393:
+  app\api\auth\login\route.ts:394:      },
+  app\api\auth\me\route.ts:84:          null,
+  app\api\auth\me\route.ts:85:
+> app\api\auth\me\route.ts:86:        brandId:
+> app\api\auth\me\route.ts:87:          identity.brandId
+  app\api\auth\me\route.ts:88:          ??
+  app\api\auth\me\route.ts:89:          null,
+  app\api\auth\me\route.ts:90:
+  app\api\auth\me\route.ts:91:        role:
+  app\api\auth\me\route.ts:92:          identity.role
+  app\api\auth\me\route.ts:93:          ??
+  app\api\auth\shopify\launch\route.ts:250:        tenant.workspaceId,
+  app\api\auth\shopify\launch\route.ts:251:
+> app\api\auth\shopify\launch\route.ts:252:      brandId:
+> app\api\auth\shopify\launch\route.ts:253:        tenant.brandId,
+  app\api\auth\shopify\launch\route.ts:254:
+  app\api\auth\shopify\launch\route.ts:255:      role:
+  app\api\auth\shopify\launch\route.ts:256:        'admin',
+  app\api\auth\shopify\launch\route.ts:257:
+  app\api\auth\shopify\launch\route.ts:258:      authMethod:
+  app\api\auth\shopify\launch\route.ts:259:        'shopify',
+  app\api\auth\shopify\resolve-shop\route.ts:140:        tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:141:
+> app\api\auth\shopify\resolve-shop\route.ts:142:        tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:143:
+  app\api\auth\shopify\resolve-shop\route.ts:144:        'shopify'
+  app\api\auth\shopify\resolve-shop\route.ts:145:
+  app\api\auth\shopify\resolve-shop\route.ts:146:      );
+  app\api\auth\shopify\resolve-shop\route.ts:147:
+  app\api\auth\shopify\resolve-shop\route.ts:148:
+  app\api\auth\shopify\resolve-shop\route.ts:189:          tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:190:
+> app\api\auth\shopify\resolve-shop\route.ts:191:        brandId:
+> app\api\auth\shopify\resolve-shop\route.ts:192:          tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:193:
+  app\api\auth\shopify\resolve-shop\route.ts:194:        provider:
+  app\api\auth\shopify\resolve-shop\route.ts:195:          'shopify',
+  app\api\auth\shopify\resolve-shop\route.ts:196:
+  app\api\auth\shopify\resolve-shop\route.ts:197:        connectionMode:
+  app\api\auth\shopify\resolve-shop\route.ts:198:          connection.connection_mode
+  app\api\auth\shopify\resolve-shop\route.ts:248:          tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:249:
+> app\api\auth\shopify\resolve-shop\route.ts:250:        brandId:
+> app\api\auth\shopify\resolve-shop\route.ts:251:          tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:252:
+  app\api\auth\shopify\resolve-shop\route.ts:253:        connectionId,
+  app\api\auth\shopify\resolve-shop\route.ts:254:
+  app\api\auth\shopify\resolve-shop\route.ts:255:        provider:
+  app\api\auth\shopify\resolve-shop\route.ts:256:          'shopify',
+  app\api\auth\shopify\resolve-shop\route.ts:257:
+  app\api\auth\shopify\resolve-shop\route.ts:335:            tenant.workspaceId,
+  app\api\auth\shopify\resolve-shop\route.ts:336:
+> app\api\auth\shopify\resolve-shop\route.ts:337:          brandId:
+> app\api\auth\shopify\resolve-shop\route.ts:338:            tenant.brandId,
+  app\api\auth\shopify\resolve-shop\route.ts:339:
+  app\api\auth\shopify\resolve-shop\route.ts:340:          connectionId,
+  app\api\auth\shopify\resolve-shop\route.ts:341:
+  app\api\auth\shopify\resolve-shop\route.ts:342:          integrationAccountId,
+  app\api\auth\shopify\resolve-shop\route.ts:343:
+  app\api\auth\shopify\resolve-shop\route.ts:344:          provider:
+  app\api\auth\switch-brand\route.ts:34://
+  app\api\auth\switch-brand\route.ts:35:// workspaceId
+> app\api\auth\switch-brand\route.ts:36:// brandId
+  app\api\auth\switch-brand\route.ts:37://
+  app\api\auth\switch-brand\route.ts:38:// Server verifies:
+  app\api\auth\switch-brand\route.ts:39://
+  app\api\auth\switch-brand\route.ts:40:// authenticated user
+  app\api\auth\switch-brand\route.ts:41://        ?
+  app\api\auth\switch-brand\route.ts:42:// brand_memberships
+  app\api\auth\switch-brand\route.ts:48:// issue NEW signed Growth OS session
+  app\api\auth\switch-brand\route.ts:49://
+> app\api\auth\switch-brand\route.ts:50:// Browser cannot gain access merely by changing brandId.
+  app\api\auth\switch-brand\route.ts:51:// ============================================================
+  app\api\auth\switch-brand\route.ts:52:
+  app\api\auth\switch-brand\route.ts:53:export async function POST(
+  app\api\auth\switch-brand\route.ts:54:  request: NextRequest
+  app\api\auth\switch-brand\route.ts:55:) {
+  app\api\auth\switch-brand\route.ts:56:
+  app\api\auth\switch-brand\route.ts:163:
+  app\api\auth\switch-brand\route.ts:164:
+> app\api\auth\switch-brand\route.ts:165:    const brandId =
+  app\api\auth\switch-brand\route.ts:166:      String(
+> app\api\auth\switch-brand\route.ts:167:        body?.brandId
+  app\api\auth\switch-brand\route.ts:168:        ||
+  app\api\auth\switch-brand\route.ts:169:        ''
+  app\api\auth\switch-brand\route.ts:170:      ).trim();
+  app\api\auth\switch-brand\route.ts:171:
+  app\api\auth\switch-brand\route.ts:172:
+  app\api\auth\switch-brand\route.ts:173:    if (
+  app\api\auth\switch-brand\route.ts:174:      !workspaceId
+  app\api\auth\switch-brand\route.ts:175:      ||
+> app\api\auth\switch-brand\route.ts:176:      !brandId
+  app\api\auth\switch-brand\route.ts:177:    ) {
+  app\api\auth\switch-brand\route.ts:178:
+  app\api\auth\switch-brand\route.ts:179:      return NextResponse.json(
+  app\api\auth\switch-brand\route.ts:180:        {
+  app\api\auth\switch-brand\route.ts:181:
+  app\api\auth\switch-brand\route.ts:182:          ok:
+  app\api\auth\switch-brand\route.ts:184:
+  app\api\auth\switch-brand\route.ts:185:          error:
+> app\api\auth\switch-brand\route.ts:186:            'workspaceId and brandId are required',
+  app\api\auth\switch-brand\route.ts:187:
+  app\api\auth\switch-brand\route.ts:188:        },
+  app\api\auth\switch-brand\route.ts:189:        {
+  app\api\auth\switch-brand\route.ts:190:          status:
+  app\api\auth\switch-brand\route.ts:191:            400,
+  app\api\auth\switch-brand\route.ts:192:        }
+  app\api\auth\switch-brand\route.ts:220:
+  app\api\auth\switch-brand\route.ts:221:          item.brand_id ===
+> app\api\auth\switch-brand\route.ts:222:            brandId
+  app\api\auth\switch-brand\route.ts:223:
+  app\api\auth\switch-brand\route.ts:224:      );
+  app\api\auth\switch-brand\route.ts:225:
+  app\api\auth\switch-brand\route.ts:226:
+  app\api\auth\switch-brand\route.ts:227:    if (!membership) {
+  app\api\auth\switch-brand\route.ts:228:
+  app\api\auth\switch-brand\route.ts:285:        tenant.workspaceId,
+  app\api\auth\switch-brand\route.ts:286:
+> app\api\auth\switch-brand\route.ts:287:      brandId:
+> app\api\auth\switch-brand\route.ts:288:        tenant.brandId,
+  app\api\auth\switch-brand\route.ts:289:
+  app\api\auth\switch-brand\route.ts:290:      role:
+  app\api\auth\switch-brand\route.ts:291:        membership.role,
+  app\api\auth\switch-brand\route.ts:292:
+  app\api\auth\switch-brand\route.ts:293:      authMethod:
+  app\api\auth\switch-brand\route.ts:294:        'password',
+  app\api\auth\switch-brand\route.ts:320:          tenant.workspaceSlug,
+  app\api\auth\switch-brand\route.ts:321:
+> app\api\auth\switch-brand\route.ts:322:        brandId:
+> app\api\auth\switch-brand\route.ts:323:          tenant.brandId,
+  app\api\auth\switch-brand\route.ts:324:
+  app\api\auth\switch-brand\route.ts:325:        brandName:
+  app\api\auth\switch-brand\route.ts:326:          tenant.brandName,
+  app\api\auth\switch-brand\route.ts:327:
+  app\api\auth\switch-brand\route.ts:328:        brandSlug:
+  app\api\auth\switch-brand\route.ts:329:          tenant.brandSlug,
+  app\api\integrations\meta\accounts\route.ts:60:        tenant.workspaceId,
+  app\api\integrations\meta\accounts\route.ts:61:
+> app\api\integrations\meta\accounts\route.ts:62:        tenant.brandId,
+  app\api\integrations\meta\accounts\route.ts:63:
+  app\api\integrations\meta\accounts\route.ts:64:        'meta_ads'
+  app\api\integrations\meta\accounts\route.ts:65:
+  app\api\integrations\meta\accounts\route.ts:66:      );
+  app\api\integrations\meta\accounts\route.ts:67:
+  app\api\integrations\meta\accounts\route.ts:68:
+  app\api\integrations\meta\callback\route.ts:247:      ||
+  app\api\integrations\meta\callback\route.ts:248:      expectedBrand !==
+> app\api\integrations\meta\callback\route.ts:249:        tenant.brandId
+  app\api\integrations\meta\callback\route.ts:250:    ) {
+  app\api\integrations\meta\callback\route.ts:251:
+  app\api\integrations\meta\callback\route.ts:252:      throw new Error(
+  app\api\integrations\meta\callback\route.ts:253:        'Meta OAuth tenant context changed during authorization'
+  app\api\integrations\meta\callback\route.ts:254:      );
+  app\api\integrations\meta\callback\route.ts:255:
+  app\api\integrations\meta\callback\route.ts:308:          tenant.workspaceId,
+  app\api\integrations\meta\callback\route.ts:309:
+> app\api\integrations\meta\callback\route.ts:310:        brandId:
+> app\api\integrations\meta\callback\route.ts:311:          tenant.brandId,
+  app\api\integrations\meta\callback\route.ts:312:
+  app\api\integrations\meta\callback\route.ts:313:        provider:
+  app\api\integrations\meta\callback\route.ts:314:          'meta_ads',
+  app\api\integrations\meta\callback\route.ts:315:
+  app\api\integrations\meta\callback\route.ts:316:        value: {
+  app\api\integrations\meta\callback\route.ts:317:
+  app\api\integrations\meta\callback\route.ts:368:        tenant.workspaceId,
+  app\api\integrations\meta\callback\route.ts:369:
+> app\api\integrations\meta\callback\route.ts:370:      brandId:
+> app\api\integrations\meta\callback\route.ts:371:        tenant.brandId,
+  app\api\integrations\meta\callback\route.ts:372:
+  app\api\integrations\meta\callback\route.ts:373:      provider:
+  app\api\integrations\meta\callback\route.ts:374:        'meta_ads',
+  app\api\integrations\meta\callback\route.ts:375:
+  app\api\integrations\meta\callback\route.ts:376:      connectionMode:
+  app\api\integrations\meta\callback\route.ts:377:        'oauth',
+  app\api\integrations\meta\connect\route.ts:105:    response.cookies.set(
+  app\api\integrations\meta\connect\route.ts:106:      'growthos_meta_brand',
+> app\api\integrations\meta\connect\route.ts:107:      tenant.brandId,
+  app\api\integrations\meta\connect\route.ts:108:      cookieOptions
+  app\api\integrations\meta\connect\route.ts:109:    );
+  app\api\integrations\meta\connect\route.ts:110:
+  app\api\integrations\meta\connect\route.ts:111:
+  app\api\integrations\meta\connect\route.ts:112:    return response;
+  app\api\integrations\meta\connect\route.ts:113:
+  app\api\integrations\meta\select-account\route.ts:108:        tenant.workspaceId,
+  app\api\integrations\meta\select-account\route.ts:109:
+> app\api\integrations\meta\select-account\route.ts:110:        tenant.brandId,
+  app\api\integrations\meta\select-account\route.ts:111:
+  app\api\integrations\meta\select-account\route.ts:112:        'meta_ads'
+  app\api\integrations\meta\select-account\route.ts:113:
+  app\api\integrations\meta\select-account\route.ts:114:      );
+  app\api\integrations\meta\select-account\route.ts:115:
+  app\api\integrations\meta\select-account\route.ts:116:
+  app\api\integrations\meta\select-account\route.ts:216:          tenant.workspaceId,
+  app\api\integrations\meta\select-account\route.ts:217:
+> app\api\integrations\meta\select-account\route.ts:218:        brandId:
+> app\api\integrations\meta\select-account\route.ts:219:          tenant.brandId,
+  app\api\integrations\meta\select-account\route.ts:220:
+  app\api\integrations\meta\select-account\route.ts:221:        provider:
+  app\api\integrations\meta\select-account\route.ts:222:          'meta_ads',
+  app\api\integrations\meta\select-account\route.ts:223:
+  app\api\integrations\meta\select-account\route.ts:224:        connectionMode:
+  app\api\integrations\meta\select-account\route.ts:225:          'oauth',
+  app\api\integrations\meta\select-account\route.ts:272:          tenant.workspaceId,
+  app\api\integrations\meta\select-account\route.ts:273:
+> app\api\integrations\meta\select-account\route.ts:274:        brandId:
+> app\api\integrations\meta\select-account\route.ts:275:          tenant.brandId,
+  app\api\integrations\meta\select-account\route.ts:276:
+  app\api\integrations\meta\select-account\route.ts:277:        connectionId,
+  app\api\integrations\meta\select-account\route.ts:278:
+  app\api\integrations\meta\select-account\route.ts:279:        provider:
+  app\api\integrations\meta\select-account\route.ts:280:          'meta_ads',
+  app\api\integrations\meta\select-account\route.ts:281:
+  app\api\integrations\shopify\callback\route.ts:328:          tenant.workspaceId,
+  app\api\integrations\shopify\callback\route.ts:329:
+> app\api\integrations\shopify\callback\route.ts:330:        brandId:
+> app\api\integrations\shopify\callback\route.ts:331:          tenant.brandId,
+  app\api\integrations\shopify\callback\route.ts:332:
+  app\api\integrations\shopify\callback\route.ts:333:        shop:
+  app\api\integrations\shopify\callback\route.ts:334:          canonicalShop,
+  app\api\integrations\shopify\callback\route.ts:335:
+  app\api\integrations\shopify\callback\route.ts:336:        credential,
+  app\api\integrations\shopify\callback\route.ts:337:
+  app\api\integrations\shopify\callback\route.ts:389:            tenant.workspaceId,
+  app\api\integrations\shopify\callback\route.ts:390:
+> app\api\integrations\shopify\callback\route.ts:391:          brandId:
+> app\api\integrations\shopify\callback\route.ts:392:            tenant.brandId,
+  app\api\integrations\shopify\callback\route.ts:393:
+  app\api\integrations\shopify\callback\route.ts:394:        },
+  app\api\integrations\shopify\callback\route.ts:395:
+  app\api\integrations\shopify\callback\route.ts:396:        shop:
+  app\api\integrations\shopify\callback\route.ts:397:          canonicalShop,
+  app\api\integrations\shopify\callback\route.ts:398:
+  app\api\integrations\shopify\callback\route.ts:424:        tenant.workspaceId,
+  app\api\integrations\shopify\callback\route.ts:425:
+> app\api\integrations\shopify\callback\route.ts:426:      brandId:
+> app\api\integrations\shopify\callback\route.ts:427:        tenant.brandId,
+  app\api\integrations\shopify\callback\route.ts:428:
+  app\api\integrations\shopify\callback\route.ts:429:      role:
+  app\api\integrations\shopify\callback\route.ts:430:        'admin',
+  app\api\integrations\shopify\callback\route.ts:431:
+  app\api\integrations\shopify\callback\route.ts:432:      authMethod:
+  app\api\integrations\shopify\callback\route.ts:433:        'shopify',
+  app\api\integrations\route.ts:49:        tenant.workspaceId,
+  app\api\integrations\route.ts:50:
+> app\api\integrations\route.ts:51:        tenant.brandId
+  app\api\integrations\route.ts:52:
+  app\api\integrations\route.ts:53:      );
+  app\api\integrations\route.ts:54:
+  app\api\integrations\route.ts:55:
+  app\api\integrations\route.ts:56:    // ========================================================
+  app\api\integrations\route.ts:57:    // CONNECTION LOOKUP
+  app\api\integrations\route.ts:228:            tenant.workspaceName,
+  app\api\integrations\route.ts:229:
+> app\api\integrations\route.ts:230:          brandId:
+> app\api\integrations\route.ts:231:            tenant.brandId,
+  app\api\integrations\route.ts:232:
+  app\api\integrations\route.ts:233:          brandName:
+  app\api\integrations\route.ts:234:            tenant.brandName,
+  app\api\integrations\route.ts:235:
+  app\api\integrations\route.ts:236:          registeredConnections:
+  app\api\integrations\route.ts:237:            connections.length,
+  app\api\retention-os\action-tracker\route.ts:110:
+  app\api\retention-os\action-tracker\route.ts:111:      WHERE
+> app\api\retention-os\action-tracker\route.ts:112:        brand_id = @brandId
+  app\api\retention-os\action-tracker\route.ts:113:
+  app\api\retention-os\action-tracker\route.ts:114:      ORDER BY
+  app\api\retention-os\action-tracker\route.ts:115:        scheduled_execution_date,
+  app\api\retention-os\action-tracker\route.ts:116:        source_execution_group_rank
+  app\api\retention-os\action-tracker\route.ts:117:    `;
+  app\api\retention-os\action-tracker\route.ts:118:
+  app\api\retention-os\action-tracker\route.ts:122:
+  app\api\retention-os\action-tracker\route.ts:123:        params: {
+> app\api\retention-os\action-tracker\route.ts:124:          brandId:
+  app\api\retention-os\action-tracker\route.ts:125:            BRAND_ID,
+  app\api\retention-os\action-tracker\route.ts:126:        },
+  app\api\retention-os\action-tracker\route.ts:127:      });
+  app\api\retention-os\action-tracker\route.ts:128:
+  app\api\retention-os\action-tracker\route.ts:129:    return NextResponse.json({
+  app\api\retention-os\action-tracker\route.ts:130:      ok: true,
+  app\api\retention-os\daily-planner\route.ts:29:
+  app\api\retention-os\daily-planner\route.ts:30:        WHERE
+> app\api\retention-os\daily-planner\route.ts:31:          brand_id = @brandId
+  app\api\retention-os\daily-planner\route.ts:32:
+  app\api\retention-os\daily-planner\route.ts:33:        QUALIFY
+  app\api\retention-os\daily-planner\route.ts:34:          ROW_NUMBER() OVER (
+  app\api\retention-os\daily-planner\route.ts:35:            PARTITION BY
+  app\api\retention-os\daily-planner\route.ts:36:              source_execution_group_id
+  app\api\retention-os\daily-planner\route.ts:37:
+  app\api\retention-os\daily-planner\route.ts:131:      WHERE
+  app\api\retention-os\daily-planner\route.ts:132:        g.brand_id =
+> app\api\retention-os\daily-planner\route.ts:133:          @brandId
+  app\api\retention-os\daily-planner\route.ts:134:
+  app\api\retention-os\daily-planner\route.ts:135:        ${
+  app\api\retention-os\daily-planner\route.ts:136:          selectedDate
+  app\api\retention-os\daily-planner\route.ts:137:            ? `
+  app\api\retention-os\daily-planner\route.ts:138:              AND
+  app\api\retention-os\daily-planner\route.ts:139:                g.scheduled_execution_date =
+  app\api\retention-os\daily-planner\route.ts:154:    const params:
+  app\api\retention-os\daily-planner\route.ts:155:      Record<string, string> = {
+> app\api\retention-os\daily-planner\route.ts:156:        brandId: BRAND_ID,
+  app\api\retention-os\daily-planner\route.ts:157:      };
+  app\api\retention-os\daily-planner\route.ts:158:
+  app\api\retention-os\daily-planner\route.ts:159:    if (selectedDate) {
+  app\api\retention-os\daily-planner\route.ts:160:      params.selectedDate =
+  app\api\retention-os\daily-planner\route.ts:161:        selectedDate;
+  app\api\retention-os\daily-planner\route.ts:162:    }
+  app\api\system\sync-test\route.ts:59:        tenant.workspaceId,
+  app\api\system\sync-test\route.ts:60:
+> app\api\system\sync-test\route.ts:61:        tenant.brandId,
+  app\api\system\sync-test\route.ts:62:
+  app\api\system\sync-test\route.ts:63:        provider
+  app\api\system\sync-test\route.ts:64:
+  app\api\system\sync-test\route.ts:65:      );
+  app\api\system\sync-test\route.ts:66:
+  app\api\system\sync-test\route.ts:67:
+  app\api\system\sync-test\route.ts:93:          tenant.workspaceId,
+  app\api\system\sync-test\route.ts:94:
+> app\api\system\sync-test\route.ts:95:        brandId:
+> app\api\system\sync-test\route.ts:96:          tenant.brandId,
+  app\api\system\sync-test\route.ts:97:
+  app\api\system\sync-test\route.ts:98:        connectionId:
+  app\api\system\sync-test\route.ts:99:          connection.connection_id,
+  app\api\system\sync-test\route.ts:100:
+  app\api\system\sync-test\route.ts:101:        providerId:
+  app\api\system\sync-test\route.ts:102:          provider,
+  app\integrations\setup\page.tsx:217:    ||
+  app\integrations\setup\page.tsx:218:    connection.brand_id !==
+> app\integrations\setup\page.tsx:219:      session.brandId
+  app\integrations\setup\page.tsx:220:  ) {
+  app\integrations\setup\page.tsx:221:
+  app\integrations\setup\page.tsx:222:    return (
+  app\integrations\setup\page.tsx:223:
+  app\integrations\setup\page.tsx:224:      <SetupError
+  app\integrations\setup\page.tsx:225:        title="Access denied"
+  lib\auth\request-auth.ts:29://
+  lib\auth\request-auth.ts:30:// workspaceId
+> lib\auth\request-auth.ts:31:// brandId
+  lib\auth\request-auth.ts:32:// role
+  lib\auth\request-auth.ts:33:// authMethod
+  lib\auth\request-auth.ts:34://
+  lib\auth\request-auth.ts:35:// Shopify bearer authentication remains supported while we
+  lib\auth\request-auth.ts:36:// migrate it to dynamic integration-account resolution in
+  lib\auth\request-auth.ts:37:// AUTH 5.
+  lib\auth\request-auth.ts:58:    string;
+  lib\auth\request-auth.ts:59:
+> lib\auth\request-auth.ts:60:  brandId?:
+  lib\auth\request-auth.ts:61:    string;
+  lib\auth\request-auth.ts:62:
+  lib\auth\request-auth.ts:63:  role?:
+  lib\auth\request-auth.ts:64:    GrowthOsSessionRole;
+  lib\auth\request-auth.ts:65:
+  lib\auth\request-auth.ts:66:  authMethod?:
+  lib\auth\request-auth.ts:218:        session.workspaceId,
+  lib\auth\request-auth.ts:219:
+> lib\auth\request-auth.ts:220:      brandId:
+> lib\auth\request-auth.ts:221:        session.brandId,
+  lib\auth\request-auth.ts:222:
+  lib\auth\request-auth.ts:223:      role:
+  lib\auth\request-auth.ts:224:        session.role,
+  lib\auth\request-auth.ts:225:
+  lib\auth\request-auth.ts:226:      authMethod:
+  lib\auth\request-auth.ts:227:        session.authMethod,
+  lib\auth\session.ts:69://
+  lib\auth\session.ts:70:// It will eventually be removed after all old callers have
+> lib\auth\session.ts:71:// migrated to workspaceId + brandId.
+  lib\auth\session.ts:72:// ============================================================
+  lib\auth\session.ts:73:
+  lib\auth\session.ts:74:export type GrowthOsSession = {
+  lib\auth\session.ts:75:
+  lib\auth\session.ts:76:  sessionVersion:
+  lib\auth\session.ts:77:    1 | 2;
+  lib\auth\session.ts:86:    string;
+  lib\auth\session.ts:87:
+> lib\auth\session.ts:88:  brandId:
+  lib\auth\session.ts:89:    string;
+  lib\auth\session.ts:90:
+  lib\auth\session.ts:91:  role:
+  lib\auth\session.ts:92:    GrowthOsSessionRole;
+  lib\auth\session.ts:93:
+  lib\auth\session.ts:94:  authMethod:
+  lib\auth\session.ts:100:  // Old Growth OS code expects tenantId.
+  lib\auth\session.ts:101:  //
+> lib\auth\session.ts:102:  // For the current architecture we map it to brandId.
+  lib\auth\session.ts:103:  // ----------------------------------------------------------
+  lib\auth\session.ts:104:
+  lib\auth\session.ts:105:  tenantId:
+  lib\auth\session.ts:106:    string;
+  lib\auth\session.ts:107:
+  lib\auth\session.ts:108:  authSource:
+  lib\auth\session.ts:118://
+  lib\auth\session.ts:119:// workspaceId
+> lib\auth\session.ts:120:// brandId
+  lib\auth\session.ts:121:// role
+  lib\auth\session.ts:122:// authMethod
+  lib\auth\session.ts:123://
+  lib\auth\session.ts:124:// Old callers can temporarily continue providing:
+  lib\auth\session.ts:125://
+  lib\auth\session.ts:126:// tenantId
+  lib\auth\session.ts:141:    string;
+  lib\auth\session.ts:142:
+> lib\auth\session.ts:143:  brandId?:
+  lib\auth\session.ts:144:    string;
+  lib\auth\session.ts:145:
+  lib\auth\session.ts:146:  role?:
+  lib\auth\session.ts:147:    GrowthOsSessionRole;
+  lib\auth\session.ts:148:
+  lib\auth\session.ts:149:  authMethod?:
+  lib\auth\session.ts:239://   email,
+  lib\auth\session.ts:240://   workspaceId,
+> lib\auth\session.ts:241://   brandId,
+  lib\auth\session.ts:242://   role,
+  lib\auth\session.ts:243://   authMethod,
+  lib\auth\session.ts:244://   authSource: 'public'
+  lib\auth\session.ts:245:// }
+  lib\auth\session.ts:246://
+  lib\auth\session.ts:247:// Legacy support is temporary and exists only until AUTH 4.
+  lib\auth\session.ts:295:  //
+  lib\auth\session.ts:296:  // Legacy:
+> lib\auth\session.ts:297:  // tenantId ? brandId
+  lib\auth\session.ts:298:  //
+  lib\auth\session.ts:299:  // This matches the current Brillare development architecture
+  lib\auth\session.ts:300:  // where workspace and brand currently share the same ID.
+  lib\auth\session.ts:301:  //
+  lib\auth\session.ts:302:  // AUTH 4 will always pass the real membership values.
+  lib\auth\session.ts:303:  // ==========================================================
+  lib\auth\session.ts:304:
+> lib\auth\session.ts:305:  const brandId =
+  lib\auth\session.ts:306:    String(
+> lib\auth\session.ts:307:      input.brandId
+  lib\auth\session.ts:308:      ||
+  lib\auth\session.ts:309:      input.tenantId
+  lib\auth\session.ts:310:      ||
+  lib\auth\session.ts:311:      ''
+  lib\auth\session.ts:312:    ).trim();
+  lib\auth\session.ts:313:
+  lib\auth\session.ts:316:    !workspaceId
+  lib\auth\session.ts:317:    ||
+> lib\auth\session.ts:318:    !brandId
+  lib\auth\session.ts:319:  ) {
+  lib\auth\session.ts:320:
+  lib\auth\session.ts:321:    throw new Error(
+> lib\auth\session.ts:322:      'Growth OS session requires workspaceId and brandId'
+  lib\auth\session.ts:323:    );
+  lib\auth\session.ts:324:
+  lib\auth\session.ts:325:  }
+  lib\auth\session.ts:326:
+  lib\auth\session.ts:327:
+  lib\auth\session.ts:328:  const role =
+  lib\auth\session.ts:385:    workspaceId,
+  lib\auth\session.ts:386:
+> lib\auth\session.ts:387:    brandId,
+  lib\auth\session.ts:388:
+  lib\auth\session.ts:389:    role,
+  lib\auth\session.ts:390:
+  lib\auth\session.ts:391:    authMethod,
+  lib\auth\session.ts:392:
+  lib\auth\session.ts:393:    // --------------------------------------------------------
+  lib\auth\session.ts:396:
+  lib\auth\session.ts:397:    tenantId:
+> lib\auth\session.ts:398:      brandId,
+  lib\auth\session.ts:399:
+  lib\auth\session.ts:400:    authSource:
+  lib\auth\session.ts:401:      'public',
+  lib\auth\session.ts:402:
+  lib\auth\session.ts:403:  };
+  lib\auth\session.ts:404:
+  lib\auth\session.ts:416://
+  lib\auth\session.ts:417:// workspaceId     = active Growth OS workspace
+> lib\auth\session.ts:418:// brandId         = active Growth OS brand
+  lib\auth\session.ts:419:// role            = membership role
+  lib\auth\session.ts:420:// authMethod      = password | shopify
+  lib\auth\session.ts:421://
+  lib\auth\session.ts:422:// tenantId remains temporarily for compatibility.
+  lib\auth\session.ts:423:// ============================================================
+  lib\auth\session.ts:424:
+  lib\auth\session.ts:454:        session.workspaceId,
+  lib\auth\session.ts:455:
+> lib\auth\session.ts:456:      brandId:
+> lib\auth\session.ts:457:        session.brandId,
+  lib\auth\session.ts:458:
+  lib\auth\session.ts:459:      role:
+  lib\auth\session.ts:460:        session.role,
+  lib\auth\session.ts:461:
+  lib\auth\session.ts:462:      authMethod:
+  lib\auth\session.ts:463:        session.authMethod,
+  lib\auth\session.ts:526://
+  lib\auth\session.ts:527:// V2 sessions
+> lib\auth\session.ts:528://   workspaceId + brandId + role + authMethod
+  lib\auth\session.ts:529://
+  lib\auth\session.ts:530:// V1 sessions
+  lib\auth\session.ts:531://   tenantId only
+  lib\auth\session.ts:532://
+  lib\auth\session.ts:533:// V1 compatibility means existing browser sessions do not
+  lib\auth\session.ts:534:// instantly break during the migration.
+  lib\auth\session.ts:643:
+  lib\auth\session.ts:644:
+> lib\auth\session.ts:645:    const brandId =
+  lib\auth\session.ts:646:      String(
+> lib\auth\session.ts:647:        payload.brandId
+  lib\auth\session.ts:648:        ||
+  lib\auth\session.ts:649:        ''
+  lib\auth\session.ts:650:      ).trim();
+  lib\auth\session.ts:651:
+  lib\auth\session.ts:652:
+  lib\auth\session.ts:653:    const role =
+  lib\auth\session.ts:670:      !workspaceId
+  lib\auth\session.ts:671:      ||
+> lib\auth\session.ts:672:      !brandId
+  lib\auth\session.ts:673:      ||
+  lib\auth\session.ts:674:      !isValidRole(
+  lib\auth\session.ts:675:        role
+  lib\auth\session.ts:676:      )
+  lib\auth\session.ts:677:      ||
+  lib\auth\session.ts:678:      !isValidAuthMethod(
+  lib\auth\session.ts:702:      workspaceId,
+  lib\auth\session.ts:703:
+> lib\auth\session.ts:704:      brandId,
+  lib\auth\session.ts:705:
+  lib\auth\session.ts:706:      role,
+  lib\auth\session.ts:707:
+  lib\auth\session.ts:708:      authMethod,
+  lib\auth\session.ts:709:
+  lib\auth\session.ts:710:      tenantId:
+> lib\auth\session.ts:711:        brandId,
+  lib\auth\session.ts:712:
+  lib\auth\session.ts:713:      authSource:
+  lib\auth\session.ts:714:        'public',
+  lib\auth\session.ts:715:
+  lib\auth\session.ts:716:    };
+  lib\auth\session.ts:717:
+  lib\auth\session.ts:734:  //
+  lib\auth\session.ts:735:  // workspaceId = tenantId
+> lib\auth\session.ts:736:  // brandId     = tenantId
+  lib\auth\session.ts:737:  // role        = owner
+  lib\auth\session.ts:738:  // authMethod  = password
+  lib\auth\session.ts:739:  //
+  lib\auth\session.ts:740:  // This keeps current Brillare sessions functioning until
+  lib\auth\session.ts:741:  // AUTH 4 switches login to brand_memberships.
+  lib\auth\session.ts:742:  // ==========================================================
+  lib\auth\session.ts:774:      tenantId,
+  lib\auth\session.ts:775:
+> lib\auth\session.ts:776:    brandId:
+  lib\auth\session.ts:777:      tenantId,
+  lib\auth\session.ts:778:
+  lib\auth\session.ts:779:    role:
+  lib\auth\session.ts:780:      'owner',
+  lib\auth\session.ts:781:
+  lib\auth\session.ts:782:    authMethod:
+  lib\auth\user-store.ts:240:  userId: string,
+  lib\auth\user-store.ts:241:  workspaceId: string,
+> lib\auth\user-store.ts:242:  brandId: string
+  lib\auth\user-store.ts:243:) {
+  lib\auth\user-store.ts:244:
+  lib\auth\user-store.ts:245:  const source =
+  lib\auth\user-store.ts:246:    [
+  lib\auth\user-store.ts:247:      userId,
+  lib\auth\user-store.ts:248:      workspaceId,
+> lib\auth\user-store.ts:249:      brandId,
+  lib\auth\user-store.ts:250:    ].join(
+  lib\auth\user-store.ts:251:      ':'
+  lib\auth\user-store.ts:252:    );
+  lib\auth\user-store.ts:253:
+  lib\auth\user-store.ts:254:
+  lib\auth\user-store.ts:255:  return (
+  lib\auth\user-store.ts:933:      string;
+  lib\auth\user-store.ts:934:
+> lib\auth\user-store.ts:935:    brandId:
+  lib\auth\user-store.ts:936:      string;
+  lib\auth\user-store.ts:937:
+  lib\auth\user-store.ts:938:    role:
+  lib\auth\user-store.ts:939:      GrowthOSBrandRole;
+  lib\auth\user-store.ts:940:
+  lib\auth\user-store.ts:941:    status?:
+  lib\auth\user-store.ts:971:
+  lib\auth\user-store.ts:972:
+> lib\auth\user-store.ts:973:  const brandId =
+  lib\auth\user-store.ts:974:    String(
+> lib\auth\user-store.ts:975:      input.brandId
+  lib\auth\user-store.ts:976:      ||
+  lib\auth\user-store.ts:977:      ''
+  lib\auth\user-store.ts:978:    ).trim();
+  lib\auth\user-store.ts:979:
+  lib\auth\user-store.ts:980:
+  lib\auth\user-store.ts:981:  if (
+  lib\auth\user-store.ts:984:    !workspaceId
+  lib\auth\user-store.ts:985:    ||
+> lib\auth\user-store.ts:986:    !brandId
+  lib\auth\user-store.ts:987:  ) {
+  lib\auth\user-store.ts:988:
+  lib\auth\user-store.ts:989:    throw new Error(
+  lib\auth\user-store.ts:990:      'User, workspace and brand are required'
+  lib\auth\user-store.ts:991:    );
+  lib\auth\user-store.ts:992:
+  lib\auth\user-store.ts:1019:  await resolveTenantContextById(
+  lib\auth\user-store.ts:1020:    workspaceId,
+> lib\auth\user-store.ts:1021:    brandId
+  lib\auth\user-store.ts:1022:  );
+  lib\auth\user-store.ts:1023:
+  lib\auth\user-store.ts:1024:
+  lib\auth\user-store.ts:1025:  const membershipId =
+  lib\auth\user-store.ts:1026:    buildMembershipId(
+  lib\auth\user-store.ts:1027:      userId,
+  lib\auth\user-store.ts:1028:      workspaceId,
+> lib\auth\user-store.ts:1029:      brandId
+  lib\auth\user-store.ts:1030:    );
+  lib\auth\user-store.ts:1031:
+  lib\auth\user-store.ts:1032:
+  lib\auth\user-store.ts:1033:  const role =
+  lib\auth\user-store.ts:1034:    input.role;
+  lib\auth\user-store.ts:1035:
+  lib\auth\user-store.ts:1244:
+  lib\auth\user-store.ts:1245:      brand_id:
+> lib\auth\user-store.ts:1246:        brandId,
+  lib\auth\user-store.ts:1247:
+  lib\auth\user-store.ts:1248:      role,
+  lib\auth\user-store.ts:1249:
+  lib\auth\user-store.ts:1250:      status,
+  lib\auth\user-store.ts:1251:
+  lib\auth\user-store.ts:1252:      is_default:
+  lib\auth\user-store.ts:1291:    workspaceId,
+  lib\auth\user-store.ts:1292:
+> lib\auth\user-store.ts:1293:    brandId,
+  lib\auth\user-store.ts:1294:
+  lib\auth\user-store.ts:1295:    role,
+  lib\auth\user-store.ts:1296:
+  lib\auth\user-store.ts:1297:    status,
+  lib\auth\user-store.ts:1298:
+  lib\auth\user-store.ts:1299:    isDefault,
+  lib\integrations\providers\development.ts:55:    async testConnection(
+  lib\integrations\providers\development.ts:56:      workspaceId,
+> lib\integrations\providers\development.ts:57:      brandId,
+  lib\integrations\providers\development.ts:58:      connectionId
+  lib\integrations\providers\development.ts:59:    ): Promise<ProviderHealth> {
+  lib\integrations\providers\development.ts:60:
+  lib\integrations\providers\development.ts:61:      return {
+  lib\integrations\providers\development.ts:62:
+  lib\integrations\providers\development.ts:63:        provider:
+  lib\integrations\providers\development.ts:74:          workspaceId,
+  lib\integrations\providers\development.ts:75:
+> lib\integrations\providers\development.ts:76:          brandId,
+  lib\integrations\providers\development.ts:77:
+  lib\integrations\providers\development.ts:78:          connectionId,
+  lib\integrations\providers\development.ts:79:
+  lib\integrations\providers\development.ts:80:          connectionMode:
+  lib\integrations\providers\development.ts:81:            'legacy',
+  lib\integrations\providers\development.ts:82:
+  lib\integrations\providers\shopify-credentials.ts:195:      string;
+  lib\integrations\providers\shopify-credentials.ts:196:
+> lib\integrations\providers\shopify-credentials.ts:197:    brandId:
+  lib\integrations\providers\shopify-credentials.ts:198:      string;
+  lib\integrations\providers\shopify-credentials.ts:199:
+  lib\integrations\providers\shopify-credentials.ts:200:    shop:
+  lib\integrations\providers\shopify-credentials.ts:201:      ShopifyResolvedShop;
+  lib\integrations\providers\shopify-credentials.ts:202:
+  lib\integrations\providers\shopify-credentials.ts:203:    credential:
+  lib\integrations\providers\shopify-credentials.ts:215:
+  lib\integrations\providers\shopify-credentials.ts:216:
+> lib\integrations\providers\shopify-credentials.ts:217:  const brandId =
+  lib\integrations\providers\shopify-credentials.ts:218:    String(
+> lib\integrations\providers\shopify-credentials.ts:219:      input.brandId
+  lib\integrations\providers\shopify-credentials.ts:220:      ||
+  lib\integrations\providers\shopify-credentials.ts:221:      ''
+  lib\integrations\providers\shopify-credentials.ts:222:    ).trim();
+  lib\integrations\providers\shopify-credentials.ts:223:
+  lib\integrations\providers\shopify-credentials.ts:224:
+  lib\integrations\providers\shopify-credentials.ts:225:  if (
+  lib\integrations\providers\shopify-credentials.ts:226:    !workspaceId
+  lib\integrations\providers\shopify-credentials.ts:227:    ||
+> lib\integrations\providers\shopify-credentials.ts:228:    !brandId
+  lib\integrations\providers\shopify-credentials.ts:229:  ) {
+  lib\integrations\providers\shopify-credentials.ts:230:
+  lib\integrations\providers\shopify-credentials.ts:231:    throw new Error(
+  lib\integrations\providers\shopify-credentials.ts:232:      'SHOPIFY_CREDENTIAL_TENANT_MISSING'
+  lib\integrations\providers\shopify-credentials.ts:233:    );
+  lib\integrations\providers\shopify-credentials.ts:234:
+  lib\integrations\providers\shopify-credentials.ts:403:      workspaceId,
+  lib\integrations\providers\shopify-credentials.ts:404:
+> lib\integrations\providers\shopify-credentials.ts:405:      brandId,
+  lib\integrations\providers\shopify-credentials.ts:406:
+  lib\integrations\providers\shopify-credentials.ts:407:      provider:
+  lib\integrations\providers\shopify-credentials.ts:408:        'shopify',
+  lib\integrations\providers\shopify-credentials.ts:409:
+  lib\integrations\providers\shopify-credentials.ts:410:      value:
+  lib\integrations\providers\shopify-credentials.ts:411:        payload,
+  lib\integrations\providers\shopify-credentials.ts:632:      string;
+  lib\integrations\providers\shopify-credentials.ts:633:
+> lib\integrations\providers\shopify-credentials.ts:634:    brandId:
+  lib\integrations\providers\shopify-credentials.ts:635:      string;
+  lib\integrations\providers\shopify-credentials.ts:636:
+  lib\integrations\providers\shopify-credentials.ts:637:    secretName:
+  lib\integrations\providers\shopify-credentials.ts:638:      string;
+  lib\integrations\providers\shopify-credentials.ts:639:
+  lib\integrations\providers\shopify-credentials.ts:640:  }
+  lib\integrations\providers\shopify-credentials.ts:689:        input.workspaceId,
+  lib\integrations\providers\shopify-credentials.ts:690:
+> lib\integrations\providers\shopify-credentials.ts:691:      brandId:
+> lib\integrations\providers\shopify-credentials.ts:692:        input.brandId,
+  lib\integrations\providers\shopify-credentials.ts:693:
+  lib\integrations\providers\shopify-credentials.ts:694:      shop: {
+  lib\integrations\providers\shopify-credentials.ts:695:
+  lib\integrations\providers\shopify-credentials.ts:696:        shopId:
+  lib\integrations\providers\shopify-credentials.ts:697:          stored.shop_id,
+  lib\integrations\providers\shopify-credentials.ts:698:
+  lib\integrations\providers\shopify-installation.ts:236:      shopKey,
+  lib\integrations\providers\shopify-installation.ts:237:
+> lib\integrations\providers\shopify-installation.ts:238:    brandId:
+  lib\integrations\providers\shopify-installation.ts:239:      shopKey,
+  lib\integrations\providers\shopify-installation.ts:240:
+  lib\integrations\providers\shopify-installation.ts:241:    brandName:
+  lib\integrations\providers\shopify-installation.ts:242:      shopName,
+  lib\integrations\providers\shopify-installation.ts:243:
+  lib\integrations\providers\shopify-installation.ts:244:    brandSlug:
+  lib\integrations\providers\shopify-installation.ts:279:        string;
+  lib\integrations\providers\shopify-installation.ts:280:
+> lib\integrations\providers\shopify-installation.ts:281:      brandId:
+  lib\integrations\providers\shopify-installation.ts:282:        string;
+  lib\integrations\providers\shopify-installation.ts:283:
+  lib\integrations\providers\shopify-installation.ts:284:    };
+  lib\integrations\providers\shopify-installation.ts:285:
+  lib\integrations\providers\shopify-installation.ts:286:    shop:
+  lib\integrations\providers\shopify-installation.ts:287:      ShopifyResolvedShop;
+  lib\integrations\providers\shopify-installation.ts:303:        input.tenant.workspaceId,
+  lib\integrations\providers\shopify-installation.ts:304:
+> lib\integrations\providers\shopify-installation.ts:305:      brandId:
+> lib\integrations\providers\shopify-installation.ts:306:        input.tenant.brandId,
+  lib\integrations\providers\shopify-installation.ts:307:
+  lib\integrations\providers\shopify-installation.ts:308:      provider:
+  lib\integrations\providers\shopify-installation.ts:309:        'shopify',
+  lib\integrations\providers\shopify-installation.ts:310:
+  lib\integrations\providers\shopify-installation.ts:311:      connectionMode:
+  lib\integrations\providers\shopify-installation.ts:312:        'oauth',
+  lib\integrations\providers\shopify-installation.ts:348:        input.tenant.workspaceId,
+  lib\integrations\providers\shopify-installation.ts:349:
+> lib\integrations\providers\shopify-installation.ts:350:      brandId:
+> lib\integrations\providers\shopify-installation.ts:351:        input.tenant.brandId,
+  lib\integrations\providers\shopify-installation.ts:352:
+  lib\integrations\providers\shopify-installation.ts:353:      connectionId,
+  lib\integrations\providers\shopify-installation.ts:354:
+  lib\integrations\providers\shopify-installation.ts:355:      provider:
+  lib\integrations\providers\shopify-installation.ts:356:        'shopify',
+  lib\integrations\providers\shopify-installation.ts:357:
+  lib\integrations\development-bootstrap.ts:44:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:45:
+> lib\integrations\development-bootstrap.ts:46:    brandId:
+> lib\integrations\development-bootstrap.ts:47:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:48:
+  lib\integrations\development-bootstrap.ts:49:    provider:
+  lib\integrations\development-bootstrap.ts:50:      'shopify',
+  lib\integrations\development-bootstrap.ts:51:
+  lib\integrations\development-bootstrap.ts:52:    connectionMode:
+  lib\integrations\development-bootstrap.ts:53:      'legacy',
+  lib\integrations\development-bootstrap.ts:78:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:79:
+> lib\integrations\development-bootstrap.ts:80:    brandId:
+> lib\integrations\development-bootstrap.ts:81:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:82:
+  lib\integrations\development-bootstrap.ts:83:    provider:
+  lib\integrations\development-bootstrap.ts:84:      'meta_ads',
+  lib\integrations\development-bootstrap.ts:85:
+  lib\integrations\development-bootstrap.ts:86:    connectionMode:
+  lib\integrations\development-bootstrap.ts:87:      'legacy',
+  lib\integrations\development-bootstrap.ts:111:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:112:
+> lib\integrations\development-bootstrap.ts:113:    brandId:
+> lib\integrations\development-bootstrap.ts:114:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:115:
+  lib\integrations\development-bootstrap.ts:116:    provider:
+  lib\integrations\development-bootstrap.ts:117:      'google_ads',
+  lib\integrations\development-bootstrap.ts:118:
+  lib\integrations\development-bootstrap.ts:119:    connectionMode:
+  lib\integrations\development-bootstrap.ts:120:      'legacy',
+  lib\integrations\development-bootstrap.ts:144:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:145:
+> lib\integrations\development-bootstrap.ts:146:    brandId:
+> lib\integrations\development-bootstrap.ts:147:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:148:
+  lib\integrations\development-bootstrap.ts:149:    provider:
+  lib\integrations\development-bootstrap.ts:150:      'bigquery',
+  lib\integrations\development-bootstrap.ts:151:
+  lib\integrations\development-bootstrap.ts:152:    connectionMode:
+  lib\integrations\development-bootstrap.ts:153:      'native',
+  lib\integrations\development-bootstrap.ts:180:      tenant.workspaceId,
+  lib\integrations\development-bootstrap.ts:181:
+> lib\integrations\development-bootstrap.ts:182:    brandId:
+> lib\integrations\development-bootstrap.ts:183:      tenant.brandId,
+  lib\integrations\development-bootstrap.ts:184:
+  lib\integrations\development-bootstrap.ts:185:    connections: [
+  lib\integrations\development-bootstrap.ts:186:
+  lib\integrations\development-bootstrap.ts:187:      {
+  lib\integrations\development-bootstrap.ts:188:        provider:
+  lib\integrations\development-bootstrap.ts:189:          'shopify',
+  lib\integrations\provider.ts:86:  workspaceId: string;
+  lib\integrations\provider.ts:87:
+> lib\integrations\provider.ts:88:  brandId: string;
+  lib\integrations\provider.ts:89:
+  lib\integrations\provider.ts:90:  connectionId: string;
+  lib\integrations\provider.ts:91:
+  lib\integrations\provider.ts:92:  providerAccountId?: string | null;
+  lib\integrations\provider.ts:93:
+  lib\integrations\provider.ts:94:  entity: string;
+  lib\integrations\provider.ts:161:  testConnection(
+  lib\integrations\provider.ts:162:    workspaceId: string,
+> lib\integrations\provider.ts:163:    brandId: string,
+  lib\integrations\provider.ts:164:    connectionId: string
+  lib\integrations\provider.ts:165:  ): Promise<ProviderHealth>;
+  lib\integrations\provider.ts:166:
+  lib\integrations\provider.ts:167:
+  lib\integrations\provider.ts:168:  // ==========================================================
+  lib\integrations\provider.ts:169:  // ACCOUNT DISCOVERY
+  lib\integrations\provider.ts:172:  discoverAccounts(
+  lib\integrations\provider.ts:173:    workspaceId: string,
+> lib\integrations\provider.ts:174:    brandId: string,
+  lib\integrations\provider.ts:175:    connectionId: string
+  lib\integrations\provider.ts:176:  ): Promise<ProviderAccount[]>;
+  lib\integrations\provider.ts:177:
+  lib\integrations\provider.ts:178:
+  lib\integrations\provider.ts:179:  // ==========================================================
+  lib\integrations\provider.ts:180:  // DATA SYNCHRONIZATION
+  lib\integrations\secrets.ts:313:export function buildIntegrationSecretId(
+  lib\integrations\secrets.ts:314:  workspaceId: string,
+> lib\integrations\secrets.ts:315:  brandId: string,
+  lib\integrations\secrets.ts:316:  provider: string
+  lib\integrations\secrets.ts:317:) {
+  lib\integrations\secrets.ts:318:
+  lib\integrations\secrets.ts:319:  if (
+  lib\integrations\secrets.ts:320:    !workspaceId
+  lib\integrations\secrets.ts:321:    ||
+> lib\integrations\secrets.ts:322:    !brandId
+  lib\integrations\secrets.ts:323:    ||
+  lib\integrations\secrets.ts:324:    !provider
+  lib\integrations\secrets.ts:325:  ) {
+  lib\integrations\secrets.ts:326:
+  lib\integrations\secrets.ts:327:    throw new Error(
+> lib\integrations\secrets.ts:328:      'workspaceId, brandId and provider are required to build an integration secret ID'
+  lib\integrations\secrets.ts:329:    );
+  lib\integrations\secrets.ts:330:
+  lib\integrations\secrets.ts:331:  }
+  lib\integrations\secrets.ts:332:
+  lib\integrations\secrets.ts:333:
+  lib\integrations\secrets.ts:334:  return makeSafeSecretId(
+  lib\integrations\secrets.ts:339:      workspaceId,
+  lib\integrations\secrets.ts:340:
+> lib\integrations\secrets.ts:341:      brandId,
+  lib\integrations\secrets.ts:342:
+  lib\integrations\secrets.ts:343:      provider,
+  lib\integrations\secrets.ts:344:
+  lib\integrations\secrets.ts:345:    ].join('-')
+  lib\integrations\secrets.ts:346:  );
+  lib\integrations\secrets.ts:347:
+  lib\integrations\secrets.ts:385:    workspaceId: string;
+  lib\integrations\secrets.ts:386:
+> lib\integrations\secrets.ts:387:    brandId: string;
+  lib\integrations\secrets.ts:388:
+  lib\integrations\secrets.ts:389:    provider: string;
+  lib\integrations\secrets.ts:390:
+  lib\integrations\secrets.ts:391:    value: unknown;
+  lib\integrations\secrets.ts:392:
+  lib\integrations\secrets.ts:393:  }
+  lib\integrations\secrets.ts:415:      input.workspaceId,
+  lib\integrations\secrets.ts:416:
+> lib\integrations\secrets.ts:417:      input.brandId,
+  lib\integrations\secrets.ts:418:
+  lib\integrations\secrets.ts:419:      input.provider
+  lib\integrations\secrets.ts:420:
+  lib\integrations\secrets.ts:421:    );
+  lib\integrations\secrets.ts:422:
+  lib\integrations\secrets.ts:423:
+  lib\integrations\store.ts:93:  workspaceId: string;
+  lib\integrations\store.ts:94:
+> lib\integrations\store.ts:95:  brandId: string;
+  lib\integrations\store.ts:96:
+  lib\integrations\store.ts:97:  connectionId: string;
+  lib\integrations\store.ts:98:
+  lib\integrations\store.ts:99:  provider: string;
+  lib\integrations\store.ts:100:
+  lib\integrations\store.ts:101:  providerAccountId: string;
+  lib\integrations\store.ts:509:function buildConnectionId(
+  lib\integrations\store.ts:510:  workspaceId: string,
+> lib\integrations\store.ts:511:  brandId: string,
+  lib\integrations\store.ts:512:  provider: string
+  lib\integrations\store.ts:513:) {
+  lib\integrations\store.ts:514:
+  lib\integrations\store.ts:515:  return [
+  lib\integrations\store.ts:516:    workspaceId,
+> lib\integrations\store.ts:517:    brandId,
+  lib\integrations\store.ts:518:    provider,
+  lib\integrations\store.ts:519:  ].join(
+  lib\integrations\store.ts:520:    ':'
+  lib\integrations\store.ts:521:  );
+  lib\integrations\store.ts:522:
+  lib\integrations\store.ts:523:}
+  lib\integrations\store.ts:542:function buildIntegrationAccountId(
+  lib\integrations\store.ts:543:  workspaceId: string,
+> lib\integrations\store.ts:544:  brandId: string,
+  lib\integrations\store.ts:545:  provider: string,
+  lib\integrations\store.ts:546:  providerAccountId: string
+  lib\integrations\store.ts:547:) {
+  lib\integrations\store.ts:548:
+  lib\integrations\store.ts:549:  return [
+  lib\integrations\store.ts:550:
+  lib\integrations\store.ts:551:    workspaceId,
+  lib\integrations\store.ts:552:
+> lib\integrations\store.ts:553:    brandId,
+  lib\integrations\store.ts:554:
+  lib\integrations\store.ts:555:    provider,
+  lib\integrations\store.ts:556:
+  lib\integrations\store.ts:557:    providerAccountId,
+  lib\integrations\store.ts:558:
+  lib\integrations\store.ts:559:  ].join(
+  lib\integrations\store.ts:573:    workspaceId: string;
+  lib\integrations\store.ts:574:
+> lib\integrations\store.ts:575:    brandId: string;
+  lib\integrations\store.ts:576:
+  lib\integrations\store.ts:577:    provider: string;
+  lib\integrations\store.ts:578:
+  lib\integrations\store.ts:579:    connectionMode: string;
+  lib\integrations\store.ts:580:
+  lib\integrations\store.ts:581:    ingestionAdapter: string;
+  lib\integrations\store.ts:608:    buildConnectionId(
+  lib\integrations\store.ts:609:      input.workspaceId,
+> lib\integrations\store.ts:610:      input.brandId,
+  lib\integrations\store.ts:611:      input.provider
+  lib\integrations\store.ts:612:    );
+  lib\integrations\store.ts:613:
+  lib\integrations\store.ts:614:
+  lib\integrations\store.ts:615:  const query = `
+  lib\integrations\store.ts:616:
+  lib\integrations\store.ts:815:
+  lib\integrations\store.ts:816:      brand_id:
+> lib\integrations\store.ts:817:        input.brandId,
+  lib\integrations\store.ts:818:
+  lib\integrations\store.ts:819:      provider:
+  lib\integrations\store.ts:820:        input.provider,
+  lib\integrations\store.ts:821:
+  lib\integrations\store.ts:822:      connection_mode:
+  lib\integrations\store.ts:823:        input.connectionMode,
+  lib\integrations\store.ts:946:      input.workspaceId,
+  lib\integrations\store.ts:947:
+> lib\integrations\store.ts:948:      input.brandId,
+  lib\integrations\store.ts:949:
+  lib\integrations\store.ts:950:      input.provider,
+  lib\integrations\store.ts:951:
+  lib\integrations\store.ts:952:      input.providerAccountId
+  lib\integrations\store.ts:953:
+  lib\integrations\store.ts:954:    );
+  lib\integrations\store.ts:1206:
+  lib\integrations\store.ts:1207:      brand_id:
+> lib\integrations\store.ts:1208:        input.brandId,
+  lib\integrations\store.ts:1209:
+  lib\integrations\store.ts:1210:      connection_id:
+  lib\integrations\store.ts:1211:        input.connectionId,
+  lib\integrations\store.ts:1212:
+  lib\integrations\store.ts:1213:      provider:
+  lib\integrations\store.ts:1214:        input.provider,
+  lib\integrations\store.ts:1305:export async function getIntegrationConnection(
+  lib\integrations\store.ts:1306:  workspaceId: string,
+> lib\integrations\store.ts:1307:  brandId: string,
+  lib\integrations\store.ts:1308:  provider: string
+  lib\integrations\store.ts:1309:) {
+  lib\integrations\store.ts:1310:
+  lib\integrations\store.ts:1311:  await ensureIntegrationStore();
+  lib\integrations\store.ts:1312:
+  lib\integrations\store.ts:1313:
+  lib\integrations\store.ts:1417:
+  lib\integrations\store.ts:1418:        brand_id:
+> lib\integrations\store.ts:1419:          brandId,
+  lib\integrations\store.ts:1420:
+  lib\integrations\store.ts:1421:        provider,
+  lib\integrations\store.ts:1422:
+  lib\integrations\store.ts:1423:      },
+  lib\integrations\store.ts:1424:
+  lib\integrations\store.ts:1425:    });
+  lib\integrations\store.ts:1594:export async function listIntegrationConnections(
+  lib\integrations\store.ts:1595:  workspaceId: string,
+> lib\integrations\store.ts:1596:  brandId: string
+  lib\integrations\store.ts:1597:) {
+  lib\integrations\store.ts:1598:
+  lib\integrations\store.ts:1599:  await ensureIntegrationStore();
+  lib\integrations\store.ts:1600:
+  lib\integrations\store.ts:1601:
+  lib\integrations\store.ts:1602:  const projectId =
+  lib\integrations\store.ts:1699:
+  lib\integrations\store.ts:1700:        brand_id:
+> lib\integrations\store.ts:1701:          brandId,
+  lib\integrations\store.ts:1702:
+  lib\integrations\store.ts:1703:      },
+  lib\integrations\store.ts:1704:
+  lib\integrations\store.ts:1705:    });
+  lib\integrations\store.ts:1706:
+  lib\integrations\store.ts:1707:
+  lib\integrations\store.ts:1915:export async function getSelectedIntegrationAccount(
+  lib\integrations\store.ts:1916:  workspaceId: string,
+> lib\integrations\store.ts:1917:  brandId: string,
+  lib\integrations\store.ts:1918:  provider: string
+  lib\integrations\store.ts:1919:) {
+  lib\integrations\store.ts:1920:
+  lib\integrations\store.ts:1921:  await ensureIntegrationStore();
+  lib\integrations\store.ts:1922:
+  lib\integrations\store.ts:1923:
+  lib\integrations\store.ts:2013:
+  lib\integrations\store.ts:2014:        brand_id:
+> lib\integrations\store.ts:2015:          brandId,
+  lib\integrations\store.ts:2016:
+  lib\integrations\store.ts:2017:        provider,
+  lib\integrations\store.ts:2018:
+  lib\integrations\store.ts:2019:      },
+  lib\integrations\store.ts:2020:
+  lib\integrations\store.ts:2021:    });
+  lib\integrations\sync-engine.ts:35:    workspaceId: string;
+  lib\integrations\sync-engine.ts:36:
+> lib\integrations\sync-engine.ts:37:    brandId: string;
+  lib\integrations\sync-engine.ts:38:
+  lib\integrations\sync-engine.ts:39:    connectionId: string;
+  lib\integrations\sync-engine.ts:40:
+  lib\integrations\sync-engine.ts:41:    providerId: string;
+  lib\integrations\sync-engine.ts:42:
+  lib\integrations\sync-engine.ts:43:    providerAccountId?: string | null;
+  lib\integrations\sync-engine.ts:82:        input.workspaceId,
+  lib\integrations\sync-engine.ts:83:
+> lib\integrations\sync-engine.ts:84:      brandId:
+> lib\integrations\sync-engine.ts:85:        input.brandId,
+  lib\integrations\sync-engine.ts:86:
+  lib\integrations\sync-engine.ts:87:      connectionId:
+  lib\integrations\sync-engine.ts:88:        input.connectionId,
+  lib\integrations\sync-engine.ts:89:
+  lib\integrations\sync-engine.ts:90:      provider:
+  lib\integrations\sync-engine.ts:91:        input.providerId,
+  lib\integrations\sync-engine.ts:118:      input.workspaceId,
+  lib\integrations\sync-engine.ts:119:
+> lib\integrations\sync-engine.ts:120:    brandId:
+> lib\integrations\sync-engine.ts:121:      input.brandId,
+  lib\integrations\sync-engine.ts:122:
+  lib\integrations\sync-engine.ts:123:    connectionId:
+  lib\integrations\sync-engine.ts:124:      input.connectionId,
+  lib\integrations\sync-engine.ts:125:
+  lib\integrations\sync-engine.ts:126:    provider:
+  lib\integrations\sync-engine.ts:127:      input.providerId,
+  lib\integrations\sync-engine.ts:151:        input.workspaceId,
+  lib\integrations\sync-engine.ts:152:
+> lib\integrations\sync-engine.ts:153:      brandId:
+> lib\integrations\sync-engine.ts:154:        input.brandId,
+  lib\integrations\sync-engine.ts:155:
+  lib\integrations\sync-engine.ts:156:      connectionId:
+  lib\integrations\sync-engine.ts:157:        input.connectionId,
+  lib\integrations\sync-engine.ts:158:
+  lib\integrations\sync-engine.ts:159:      providerAccountId:
+  lib\integrations\sync-engine.ts:160:        input.providerAccountId
+  lib\integrations\sync-engine.ts:241:        input.workspaceId,
+  lib\integrations\sync-engine.ts:242:
+> lib\integrations\sync-engine.ts:243:      brandId:
+> lib\integrations\sync-engine.ts:244:        input.brandId,
+  lib\integrations\sync-engine.ts:245:
+  lib\integrations\sync-engine.ts:246:      connectionId:
+  lib\integrations\sync-engine.ts:247:        input.connectionId,
+  lib\integrations\sync-engine.ts:248:
+  lib\integrations\sync-engine.ts:249:      provider:
+  lib\integrations\sync-engine.ts:250:        input.providerId,
+  lib\integrations\sync-engine.ts:324:        input.workspaceId,
+  lib\integrations\sync-engine.ts:325:
+> lib\integrations\sync-engine.ts:326:      brandId:
+> lib\integrations\sync-engine.ts:327:        input.brandId,
+  lib\integrations\sync-engine.ts:328:
+  lib\integrations\sync-engine.ts:329:      connectionId:
+  lib\integrations\sync-engine.ts:330:        input.connectionId,
+  lib\integrations\sync-engine.ts:331:
+  lib\integrations\sync-engine.ts:332:      provider:
+  lib\integrations\sync-engine.ts:333:        input.providerId,
+  lib\integrations\sync-store.ts:57:    workspaceId: string;
+  lib\integrations\sync-store.ts:58:
+> lib\integrations\sync-store.ts:59:    brandId: string;
+  lib\integrations\sync-store.ts:60:
+  lib\integrations\sync-store.ts:61:    connectionId: string;
+  lib\integrations\sync-store.ts:62:
+  lib\integrations\sync-store.ts:63:    provider: string;
+  lib\integrations\sync-store.ts:64:
+  lib\integrations\sync-store.ts:65:    entity: string;
+  lib\integrations\sync-store.ts:210:
+  lib\integrations\sync-store.ts:211:      brand_id:
+> lib\integrations\sync-store.ts:212:        input.brandId,
+  lib\integrations\sync-store.ts:213:
+  lib\integrations\sync-store.ts:214:      connection_id:
+  lib\integrations\sync-store.ts:215:        input.connectionId,
+  lib\integrations\sync-store.ts:216:
+  lib\integrations\sync-store.ts:217:      provider:
+  lib\integrations\sync-store.ts:218:        input.provider,
+  lib\integrations\sync-store.ts:453:    workspaceId: string;
+  lib\integrations\sync-store.ts:454:
+> lib\integrations\sync-store.ts:455:    brandId: string;
+  lib\integrations\sync-store.ts:456:
+  lib\integrations\sync-store.ts:457:    connectionId: string;
+  lib\integrations\sync-store.ts:458:
+  lib\integrations\sync-store.ts:459:    provider: string;
+  lib\integrations\sync-store.ts:460:
+  lib\integrations\sync-store.ts:461:    entity: string;
+  lib\integrations\sync-store.ts:538:
+  lib\integrations\sync-store.ts:539:        brand_id:
+> lib\integrations\sync-store.ts:540:          input.brandId,
+  lib\integrations\sync-store.ts:541:
+  lib\integrations\sync-store.ts:542:        connection_id:
+  lib\integrations\sync-store.ts:543:          input.connectionId,
+  lib\integrations\sync-store.ts:544:
+  lib\integrations\sync-store.ts:545:        provider:
+  lib\integrations\sync-store.ts:546:          input.provider,
+  lib\integrations\sync-store.ts:572:    workspaceId: string;
+  lib\integrations\sync-store.ts:573:
+> lib\integrations\sync-store.ts:574:    brandId: string;
+  lib\integrations\sync-store.ts:575:
+  lib\integrations\sync-store.ts:576:    connectionId: string;
+  lib\integrations\sync-store.ts:577:
+  lib\integrations\sync-store.ts:578:    provider: string;
+  lib\integrations\sync-store.ts:579:
+  lib\integrations\sync-store.ts:580:    entity: string;
+  lib\integrations\sync-store.ts:596:    [
+  lib\integrations\sync-store.ts:597:      input.workspaceId,
+> lib\integrations\sync-store.ts:598:      input.brandId,
+  lib\integrations\sync-store.ts:599:      input.provider,
+  lib\integrations\sync-store.ts:600:      input.entity,
+  lib\integrations\sync-store.ts:601:    ].join(
+  lib\integrations\sync-store.ts:602:      ':'
+  lib\integrations\sync-store.ts:603:    );
+  lib\integrations\sync-store.ts:604:
+  lib\integrations\sync-store.ts:796:
+  lib\integrations\sync-store.ts:797:      brand_id:
+> lib\integrations\sync-store.ts:798:        input.brandId,
+  lib\integrations\sync-store.ts:799:
+  lib\integrations\sync-store.ts:800:      connection_id:
+  lib\integrations\sync-store.ts:801:        input.connectionId,
+  lib\integrations\sync-store.ts:802:
+  lib\integrations\sync-store.ts:803:      provider:
+  lib\integrations\sync-store.ts:804:        input.provider,
+  lib\integrations\sync-store.ts:836:    workspaceId: string;
+  lib\integrations\sync-store.ts:837:
+> lib\integrations\sync-store.ts:838:    brandId: string;
+  lib\integrations\sync-store.ts:839:
+  lib\integrations\sync-store.ts:840:    connectionId: string;
+  lib\integrations\sync-store.ts:841:
+  lib\integrations\sync-store.ts:842:    provider: string;
+  lib\integrations\sync-store.ts:843:
+  lib\integrations\sync-store.ts:844:    entity: string;
+  lib\integrations\sync-store.ts:856:    [
+  lib\integrations\sync-store.ts:857:      input.workspaceId,
+> lib\integrations\sync-store.ts:858:      input.brandId,
+  lib\integrations\sync-store.ts:859:      input.provider,
+  lib\integrations\sync-store.ts:860:      input.entity,
+  lib\integrations\sync-store.ts:861:    ].join(
+  lib\integrations\sync-store.ts:862:      ':'
+  lib\integrations\sync-store.ts:863:    );
+  lib\integrations\sync-store.ts:864:
+  lib\integrations\sync-store.ts:999:
+  lib\integrations\sync-store.ts:1000:      brand_id:
+> lib\integrations\sync-store.ts:1001:        input.brandId,
+  lib\integrations\sync-store.ts:1002:
+  lib\integrations\sync-store.ts:1003:      connection_id:
+  lib\integrations\sync-store.ts:1004:        input.connectionId,
+  lib\integrations\sync-store.ts:1005:
+  lib\integrations\sync-store.ts:1006:      provider:
+  lib\integrations\sync-store.ts:1007:        input.provider,
+  lib\tenancy\context.ts:62:export async function resolveTenantContextById(
+  lib\tenancy\context.ts:63:  workspaceId: string,
+> lib\tenancy\context.ts:64:  brandId: string
+  lib\tenancy\context.ts:65:):
+  lib\tenancy\context.ts:66:  Promise<TenantContext> {
+  lib\tenancy\context.ts:67:
+  lib\tenancy\context.ts:68:  const projectId =
+  lib\tenancy\context.ts:69:    requireProjectId();
+  lib\tenancy\context.ts:70:
+  lib\tenancy\context.ts:78:
+  lib\tenancy\context.ts:79:
+> lib\tenancy\context.ts:80:  const normalizedBrandId =
+  lib\tenancy\context.ts:81:    String(
+> lib\tenancy\context.ts:82:      brandId
+  lib\tenancy\context.ts:83:      ||
+  lib\tenancy\context.ts:84:      ''
+  lib\tenancy\context.ts:85:    ).trim();
+  lib\tenancy\context.ts:86:
+  lib\tenancy\context.ts:87:
+  lib\tenancy\context.ts:88:  if (
+  lib\tenancy\context.ts:89:    !normalizedWorkspaceId
+  lib\tenancy\context.ts:90:    ||
+> lib\tenancy\context.ts:91:    !normalizedBrandId
+  lib\tenancy\context.ts:92:  ) {
+  lib\tenancy\context.ts:93:
+  lib\tenancy\context.ts:94:    throw new Error(
+  lib\tenancy\context.ts:95:      'Workspace and brand identity are required'
+  lib\tenancy\context.ts:96:    );
+  lib\tenancy\context.ts:97:
+  lib\tenancy\context.ts:158:
+  lib\tenancy\context.ts:159:        brand_id:
+> lib\tenancy\context.ts:160:          normalizedBrandId,
+  lib\tenancy\context.ts:161:
+  lib\tenancy\context.ts:162:      },
+  lib\tenancy\context.ts:163:
+  lib\tenancy\context.ts:164:    });
+  lib\tenancy\context.ts:165:
+  lib\tenancy\context.ts:166:
+  lib\tenancy\context.ts:172:
+  lib\tenancy\context.ts:173:    throw new Error(
+> lib\tenancy\context.ts:174:      `Growth OS tenant could not be resolved: ${normalizedWorkspaceId}/${normalizedBrandId}`
+  lib\tenancy\context.ts:175:    );
+  lib\tenancy\context.ts:176:
+  lib\tenancy\context.ts:177:  }
+  lib\tenancy\context.ts:178:
+  lib\tenancy\context.ts:179:
+  lib\tenancy\context.ts:180:  return {
+  lib\tenancy\context.ts:195:      ),
+  lib\tenancy\context.ts:196:
+> lib\tenancy\context.ts:197:    brandId:
+  lib\tenancy\context.ts:198:      String(
+  lib\tenancy\context.ts:199:        row.brand_id
+  lib\tenancy\context.ts:200:      ),
+  lib\tenancy\context.ts:201:
+  lib\tenancy\context.ts:202:    brandName:
+  lib\tenancy\context.ts:203:      String(
+  lib\tenancy\context.ts:264:
+  lib\tenancy\context.ts:265:
+> lib\tenancy\context.ts:266:  const brandId =
+  lib\tenancy\context.ts:267:    String(
+  lib\tenancy\context.ts:268:      process.env.GROWTHOS_DEFAULT_BRAND_ID
+  lib\tenancy\context.ts:269:      ||
+  lib\tenancy\context.ts:270:      ''
+  lib\tenancy\context.ts:271:    ).trim();
+  lib\tenancy\context.ts:272:
+  lib\tenancy\context.ts:275:    !workspaceId
+  lib\tenancy\context.ts:276:    ||
+> lib\tenancy\context.ts:277:    !brandId
+  lib\tenancy\context.ts:278:  ) {
+  lib\tenancy\context.ts:279:
+  lib\tenancy\context.ts:280:    throw new Error(
+  lib\tenancy\context.ts:281:      'Default Growth OS tenant is not configured'
+  lib\tenancy\context.ts:282:    );
+  lib\tenancy\context.ts:283:
+  lib\tenancy\context.ts:287:  return resolveTenantContextById(
+  lib\tenancy\context.ts:288:    workspaceId,
+> lib\tenancy\context.ts:289:    brandId
+  lib\tenancy\context.ts:290:  );
+  lib\tenancy\context.ts:291:
+  lib\tenancy\context.ts:292:}
+  lib\tenancy\control-plane.ts:40:  workspaceSlug: string;
+  lib\tenancy\control-plane.ts:41:
+> lib\tenancy\control-plane.ts:42:  brandId: string;
+  lib\tenancy\control-plane.ts:43:
+  lib\tenancy\control-plane.ts:44:  brandName: string;
+  lib\tenancy\control-plane.ts:45:
+  lib\tenancy\control-plane.ts:46:  brandSlug: string;
+  lib\tenancy\control-plane.ts:47:
+  lib\tenancy\control-plane.ts:48:  currency?: string;
+  lib\tenancy\control-plane.ts:286:
+  lib\tenancy\control-plane.ts:287:
+> lib\tenancy\control-plane.ts:288:  const brandId =
+  lib\tenancy\control-plane.ts:289:    String(
+> lib\tenancy\control-plane.ts:290:      input.brandId || ''
+  lib\tenancy\control-plane.ts:291:    ).trim();
+  lib\tenancy\control-plane.ts:292:
+  lib\tenancy\control-plane.ts:293:
+  lib\tenancy\control-plane.ts:294:  const brandName =
+  lib\tenancy\control-plane.ts:295:    String(
+  lib\tenancy\control-plane.ts:296:      input.brandName || ''
+  lib\tenancy\control-plane.ts:333:    !workspaceSlug
+  lib\tenancy\control-plane.ts:334:    ||
+> lib\tenancy\control-plane.ts:335:    !brandId
+  lib\tenancy\control-plane.ts:336:    ||
+  lib\tenancy\control-plane.ts:337:    !brandName
+  lib\tenancy\control-plane.ts:338:    ||
+  lib\tenancy\control-plane.ts:339:    !brandSlug
+  lib\tenancy\control-plane.ts:340:  ) {
+  lib\tenancy\control-plane.ts:341:
+  lib\tenancy\control-plane.ts:592:
+  lib\tenancy\control-plane.ts:593:      brand_id:
+> lib\tenancy\control-plane.ts:594:        brandId,
+  lib\tenancy\control-plane.ts:595:
+  lib\tenancy\control-plane.ts:596:      workspace_id:
+  lib\tenancy\control-plane.ts:597:        workspaceId,
+  lib\tenancy\control-plane.ts:598:
+  lib\tenancy\control-plane.ts:599:      brand_name:
+  lib\tenancy\control-plane.ts:600:        brandName,
+  lib\tenancy\control-plane.ts:620:    workspaceSlug,
+  lib\tenancy\control-plane.ts:621:
+> lib\tenancy\control-plane.ts:622:    brandId,
+  lib\tenancy\control-plane.ts:623:
+  lib\tenancy\control-plane.ts:624:    brandName,
+  lib\tenancy\control-plane.ts:625:
+  lib\tenancy\control-plane.ts:626:    brandSlug,
+  lib\tenancy\control-plane.ts:627:
+  lib\tenancy\control-plane.ts:628:    currency,
+  lib\tenancy\control-plane.ts:656:
+  lib\tenancy\control-plane.ts:657:
+> lib\tenancy\control-plane.ts:658:  const brandId =
+  lib\tenancy\control-plane.ts:659:    process.env.GROWTHOS_DEFAULT_BRAND_ID;
+  lib\tenancy\control-plane.ts:660:
+  lib\tenancy\control-plane.ts:661:
+  lib\tenancy\control-plane.ts:662:  const brandName =
+  lib\tenancy\control-plane.ts:663:    process.env.GROWTHOS_DEFAULT_BRAND_NAME;
+  lib\tenancy\control-plane.ts:664:
+  lib\tenancy\control-plane.ts:681:    !workspaceName
+  lib\tenancy\control-plane.ts:682:    ||
+> lib\tenancy\control-plane.ts:683:    !brandId
+  lib\tenancy\control-plane.ts:684:    ||
+  lib\tenancy\control-plane.ts:685:    !brandName
+  lib\tenancy\control-plane.ts:686:  ) {
+  lib\tenancy\control-plane.ts:687:
+  lib\tenancy\control-plane.ts:688:    throw new Error(
+  lib\tenancy\control-plane.ts:689:      'Growth OS development workspace configuration is incomplete'
+  lib\tenancy\control-plane.ts:702:      workspaceId,
+  lib\tenancy\control-plane.ts:703:
+> lib\tenancy\control-plane.ts:704:    brandId,
+  lib\tenancy\control-plane.ts:705:
+  lib\tenancy\control-plane.ts:706:    brandName,
+  lib\tenancy\control-plane.ts:707:
+  lib\tenancy\control-plane.ts:708:    brandSlug:
+> lib\tenancy\control-plane.ts:709:      brandId,
+  lib\tenancy\control-plane.ts:710:
+  lib\tenancy\control-plane.ts:711:    currency,
+  lib\tenancy\control-plane.ts:712:
+  lib\tenancy\control-plane.ts:713:    timezone,
+  lib\tenancy\control-plane.ts:714:
+  lib\tenancy\control-plane.ts:715:  });
+  lib\tenancy\types.ts:31:export type Brand = {
+  lib\tenancy\types.ts:32:
+> lib\tenancy\types.ts:33:  brandId: string;
+  lib\tenancy\types.ts:34:
+  lib\tenancy\types.ts:35:  workspaceId: string;
+  lib\tenancy\types.ts:36:
+  lib\tenancy\types.ts:37:  brandName: string;
+  lib\tenancy\types.ts:38:
+  lib\tenancy\types.ts:39:  brandSlug: string;
+  lib\tenancy\types.ts:56:  workspaceSlug: string;
+  lib\tenancy\types.ts:57:
+> lib\tenancy\types.ts:58:  brandId: string;
+  lib\tenancy\types.ts:59:
+  lib\tenancy\types.ts:60:  brandName: string;
+  lib\tenancy\types.ts:61:
+  lib\tenancy\types.ts:62:  brandSlug: string;
+  lib\tenancy\types.ts:63:
+  lib\tenancy\types.ts:64:  currency: string;
+  proxy.ts:196:
+  proxy.ts:197:if (
+> proxy.ts:198:  identity.brandId
+  proxy.ts:199:) {
+  proxy.ts:200:
+  proxy.ts:201:  requestHeaders.set(
+  proxy.ts:202:    'x-growthos-brand-id',
+> proxy.ts:203:    identity.brandId
+  proxy.ts:204:  );
+  proxy.ts:205:
+  proxy.ts:206:}
+  proxy.ts:207:
+  proxy.ts:208:
+  proxy.ts:209:if (
+
+
+
+
+============================================================
+SEARCH: x-growthos-workspace-id
+============================================================
+
+  proxy.ts:188:
+  proxy.ts:189:  requestHeaders.set(
+> proxy.ts:190:    'x-growthos-workspace-id',
+  proxy.ts:191:    identity.workspaceId
+  proxy.ts:192:  );
+  proxy.ts:193:
+  proxy.ts:194:}
+  proxy.ts:195:
+  proxy.ts:196:
+
+
+
+
+============================================================
+SEARCH: x-growthos-brand-id
+============================================================
+
+  proxy.ts:200:
+  proxy.ts:201:  requestHeaders.set(
+> proxy.ts:202:    'x-growthos-brand-id',
+  proxy.ts:203:    identity.brandId
+  proxy.ts:204:  );
+  proxy.ts:205:
+  proxy.ts:206:}
+  proxy.ts:207:
+  proxy.ts:208:
+
+
+
+
+============================================================
+SEARCH: x-growthos-tenant-id
+============================================================
+
+  proxy.ts:179:
+  proxy.ts:180:    requestHeaders.set(
+> proxy.ts:181:      'x-growthos-tenant-id',
+  proxy.ts:182:      identity.tenantId
+  proxy.ts:183:    );
+  proxy.ts:184:
+  proxy.ts:185:    if (
+  proxy.ts:186:  identity.workspaceId
+  proxy.ts:187:) {
+
+
+

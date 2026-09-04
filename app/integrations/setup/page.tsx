@@ -308,22 +308,25 @@ export default async function IntegrationSetupPage({
 
         <ShopifySetup
 
-          shopDomain={
-            shopDomain
-          }
+           connectionId={
+    connection.connection_id
+  }
 
-          shopName={
-            connection.provider_account_name
-            ||
-            account?.provider_account_name
-            ||
-            null
-          }
+  shopDomain={
+    shopDomain
+  }
 
-          clientId={
-            clientId
-          }
+  shopName={
+    connection.provider_account_name
+    ||
+    account?.provider_account_name
+    ||
+    null
+  }
 
+  clientId={
+    clientId
+  }
         />
 
       );

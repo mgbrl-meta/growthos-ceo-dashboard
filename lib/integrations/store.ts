@@ -2,10 +2,6 @@ import {
   bigquery,
 } from '@/lib/bigquery';
 
-import {
-  resolveTenantContext,
-} from '@/lib/tenancy/context';
-
 
 // ============================================================
 // TYPES
@@ -479,19 +475,6 @@ export async function ensureIntegrationStore() {
 
   integrationStorePromise =
     null;
-
-}
-
-
-// ============================================================
-// CURRENT TENANT
-// ============================================================
-
-export async function getIntegrationTenant() {
-
-  return (
-    await resolveTenantContext()
-  );
 
 }
 
@@ -2214,5 +2197,189 @@ export async function getShopifyIntegrationAccountByDomain(
   ) as
     StoredIntegrationAccount
     | null;
+
+}
+// ============================================================
+// MARK INTEGRATION SETUP READY
+//
+// Generic connector lifecycle:
+//
+// connected
+//      ↓
+// setup required
+//      ↓
+// setup ready
+//
+// SECURITY:
+//
+// workspace + brand + connection must all match.
+//
+// This prevents one authenticated tenant from modifying
+// another tenant's connector setup state.
+// ============================================================
+
+export async function markIntegrationSetupReady(
+  input: {
+
+    connectionId:
+      string;
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+  }
+) {
+
+  await ensureIntegrationStore();
+
+
+  const projectId =
+    requireProjectId();
+
+
+  const connectionId =
+    String(
+      input.connectionId
+      ||
+      ''
+    ).trim();
+
+
+  const workspaceId =
+    String(
+      input.workspaceId
+      ||
+      ''
+    ).trim();
+
+
+  const brandId =
+    String(
+      input.brandId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !connectionId
+    ||
+    !workspaceId
+    ||
+    !brandId
+  ) {
+
+    throw new Error(
+      'Integration setup identity is incomplete'
+    );
+
+  }
+
+
+  // ==========================================================
+  // UPDATE ACCOUNT METADATA
+  //
+  // Preserve all existing provider-specific metadata.
+  //
+  // Add:
+  //
+  // setup_status
+  // setup_completed_at
+  // ==========================================================
+
+  const query = `
+
+    UPDATE
+      \`${projectId}.${DATASET_ID}.integration_accounts\`
+
+    SET
+
+      metadata =
+        JSON_SET(
+
+          COALESCE(
+            metadata,
+            JSON '{}'
+          ),
+
+          '$.setup_status',
+          'ready',
+
+          '$.setup_completed_at',
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            CURRENT_TIMESTAMP()
+          )
+
+        ),
+
+      updated_at =
+        CURRENT_TIMESTAMP()
+
+    WHERE
+
+      connection_id =
+        @connection_id
+
+      AND workspace_id =
+        @workspace_id
+
+      AND brand_id =
+        @brand_id
+
+  `;
+
+
+  await bigquery.query({
+
+    query,
+
+    location:
+      LOCATION,
+
+    params: {
+
+      connection_id:
+        connectionId,
+
+      workspace_id:
+        workspaceId,
+
+      brand_id:
+        brandId,
+
+    },
+
+    types: {
+
+      connection_id:
+        'STRING',
+
+      workspace_id:
+        'STRING',
+
+      brand_id:
+        'STRING',
+
+    },
+
+  });
+
+
+  return {
+
+    connectionId,
+
+    workspaceId,
+
+    brandId,
+
+    setupStatus:
+      'ready',
+
+  };
 
 }

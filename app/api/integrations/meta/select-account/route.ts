@@ -1,4 +1,5 @@
 import {
+  NextRequest,
   NextResponse,
 } from 'next/server';
 
@@ -11,14 +12,14 @@ import {
 } from '@/lib/integrations/secrets';
 
 import {
-  resolveTenantContext,
-} from '@/lib/tenancy/context';
-
-import {
   getIntegrationConnection,
   upsertIntegrationAccount,
   upsertIntegrationConnection,
 } from '@/lib/integrations/store';
+
+import {
+  resolveRequestTenantContext,
+} from '@/lib/tenancy/request-context';
 
 
 export const dynamic =
@@ -31,34 +32,90 @@ export const runtime =
 // ============================================================
 // SELECT META AD ACCOUNT
 //
-// OAuth authorization gives Growth OS access to Meta.
+// POST /api/integrations/meta/select-account
 //
-// This route lets the current Growth OS brand select which
-// Meta ad account belongs to it.
+// ARCHITECTURE:
 //
-// Meta user
-//      ↓
-// available ad accounts
-//      ↓
-// selected account
-//      ↓
+// Growth OS dashboard
+//        ↓
+// authenticated active workspace + brand
+//        ↓
+// current brand's Meta connection
+//        ↓
+// Secret Manager credential
+//        ↓
+// fetch accounts from Meta again
+//        ↓
+// verify requested account is authorized
+//        ↓
 // integration_connection
-//      +
+//        +
 // integration_account
+//
+//
+// IMPORTANT:
+//
+// This action is ALWAYS initiated from Growth OS.
+//
+// It does NOT use:
+//
+// GROWTHOS_DEFAULT_WORKSPACE_ID
+// GROWTHOS_DEFAULT_BRAND_ID
+//
+// The active authenticated brand determines which Meta
+// connection is modified.
 // ============================================================
 
 export async function POST(
-  req: Request
+  request: NextRequest
 ) {
 
   try {
 
     // ========================================================
-    // REQUEST
+    // 1. AUTHENTICATED ACTIVE TENANT
     // ========================================================
 
-    const body =
-      await req.json();
+    const {
+      tenant,
+    } =
+      await resolveRequestTenantContext(
+        request
+      );
+
+
+    // ========================================================
+    // 2. REQUEST BODY
+    // ========================================================
+
+    let body:
+      any;
+
+
+    try {
+
+      body =
+        await request.json();
+
+    } catch {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'INVALID_REQUEST_BODY',
+
+        },
+        {
+          status:
+            400,
+        }
+      );
+
+    }
 
 
     const accountId =
@@ -78,7 +135,7 @@ export async function POST(
             false,
 
           error:
-            'account_id is required',
+            'ACCOUNT_ID_REQUIRED',
 
         },
         {
@@ -91,15 +148,13 @@ export async function POST(
 
 
     // ========================================================
-    // TENANT
-    // ========================================================
-
-    const tenant =
-      await resolveTenantContext();
-
-
-    // ========================================================
-    // CURRENT META CONNECTION
+    // 3. CURRENT META CONNECTION
+    //
+    // Strictly scoped to the currently active:
+    //
+    // workspace
+    // brand
+    // provider = meta_ads
     // ========================================================
 
     const connection =
@@ -120,15 +175,29 @@ export async function POST(
       !connection.secret_name
     ) {
 
-      throw new Error(
-        'Meta authorization does not exist'
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'META_NOT_AUTHORIZED',
+
+        },
+        {
+          status:
+            404,
+        }
       );
 
     }
 
 
     // ========================================================
-    // READ META CREDENTIAL
+    // 4. READ META CREDENTIAL
+    //
+    // Credential material remains in Secret Manager.
     // ========================================================
 
     const secret =
@@ -142,43 +211,81 @@ export async function POST(
       );
 
 
-    if (
-      !secret.access_token
-    ) {
+    const accessToken =
+      String(
+        secret?.access_token
+        ||
+        ''
+      ).trim();
+
+
+    if (!accessToken) {
 
       throw new Error(
-        'Meta credential contains no access token'
+        'META_CREDENTIAL_ACCESS_TOKEN_MISSING'
       );
 
     }
 
 
     // ========================================================
-    // VERIFY ACCOUNT BELONGS TO AUTHORIZED META USER
+    // 5. RE-FETCH ACCESSIBLE META ACCOUNTS
+    //
+    // SECURITY:
+    //
+    // Never trust account_id merely because the browser sent
+    // it.
+    //
+    // Re-query Meta and verify that the currently authorized
+    // Meta credential genuinely has access to that account.
     // ========================================================
 
     const accounts =
       await getMetaAdAccounts(
-        secret.access_token
+        accessToken
       );
 
 
+    // ========================================================
+    // 6. FIND REQUESTED ACCOUNT
+    //
+    // Meta may expose:
+    //
+    // id         = act_123456789
+    // account_id = 123456789
+    //
+    // Accept either representation from the UI.
+    // ========================================================
+
     const selected =
       accounts.find(
-        account =>
+        account => {
 
-          String(
-            account.id
-          ) ===
-          accountId
+          const id =
+            String(
+              account?.id
+              ||
+              ''
+            ).trim();
 
-          ||
 
-          String(
-            account.account_id
-          ) ===
-          accountId
+          const nativeAccountId =
+            String(
+              account?.account_id
+              ||
+              ''
+            ).trim();
 
+
+          return (
+            id ===
+              accountId
+            ||
+            nativeAccountId ===
+              accountId
+          );
+
+        }
       );
 
 
@@ -191,12 +298,12 @@ export async function POST(
             false,
 
           error:
-            'Selected Meta account is not available to this user',
+            'META_ACCOUNT_NOT_ACCESSIBLE',
 
         },
         {
           status:
-            400,
+            403,
         }
       );
 
@@ -204,9 +311,48 @@ export async function POST(
 
 
     // ========================================================
-    // UPDATE CONNECTION
+    // 7. CANONICAL META ACCOUNT ID
+    //
+    // Prefer Meta Graph's canonical account object ID.
+    // ========================================================
+
+    const providerAccountId =
+      String(
+        selected.id
+        ||
+        selected.account_id
+        ||
+        ''
+      ).trim();
+
+
+    if (!providerAccountId) {
+
+      throw new Error(
+        'META_SELECTED_ACCOUNT_ID_MISSING'
+      );
+
+    }
+
+
+    const providerAccountName =
+      String(
+        selected.name
+        ||
+        selected.account_id
+        ||
+        providerAccountId
+      ).trim();
+
+
+    // ========================================================
+    // 8. UPDATE META CONNECTION
     //
     // OAuth + account selection are now complete.
+    //
+    // needs_attention
+    //        ↓
+    // connected
     // ========================================================
 
     const connectionId =
@@ -240,15 +386,9 @@ export async function POST(
           ??
           null,
 
-        providerAccountId:
-          selected.id,
+        providerAccountId,
 
-        providerAccountName:
-          selected.name
-          ||
-          selected.account_id
-          ||
-          selected.id,
+        providerAccountName,
 
         secretName:
           connection.secret_name,
@@ -260,9 +400,9 @@ export async function POST(
 
 
     // ========================================================
-    // UPSERT PROVIDER ACCOUNT
+    // 9. REGISTER SELECTED META ACCOUNT
     //
-    // Same architecture now used by Shopify.
+    // Same provider-account architecture as Shopify.
     // ========================================================
 
     const integrationAccountId =
@@ -279,15 +419,9 @@ export async function POST(
         provider:
           'meta_ads',
 
-        providerAccountId:
-          selected.id,
+        providerAccountId,
 
-        providerAccountName:
-          selected.name
-          ||
-          selected.account_id
-          ||
-          selected.id,
+        providerAccountName,
 
         accountType:
           'ad_account',
@@ -308,7 +442,14 @@ export async function POST(
         metadata: {
 
           account_id:
-            selected.account_id,
+            selected.account_id
+            ??
+            null,
+
+          graph_account_id:
+            selected.id
+            ??
+            null,
 
           account_status:
             selected.account_status
@@ -324,7 +465,9 @@ export async function POST(
 
 
     // ========================================================
-    // SAFE RESPONSE
+    // 10. SAFE RESPONSE
+    //
+    // No credential material is returned.
     // ========================================================
 
     return NextResponse.json({
@@ -337,13 +480,15 @@ export async function POST(
         account: {
 
           id:
-            selected.id,
+            providerAccountId,
 
           accountId:
-            selected.account_id,
+            selected.account_id
+            ??
+            null,
 
           name:
-            selected.name,
+            providerAccountName,
 
           currency:
             selected.currency
@@ -357,7 +502,11 @@ export async function POST(
 
         },
 
+
         integration: {
+
+          provider:
+            'meta_ads',
 
           connectionId,
 
@@ -367,6 +516,17 @@ export async function POST(
             'connected',
 
         },
+
+      },
+
+
+      meta: {
+
+        workspaceId:
+          tenant.workspaceId,
+
+        brandId:
+          tenant.brandId,
 
       },
 
@@ -393,6 +553,103 @@ export async function POST(
     );
 
 
+    // ========================================================
+    // AUTHENTICATION FAILURE
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // TENANT FAILURE
+    // ========================================================
+
+    if (
+      message ===
+        'AUTHENTICATED_TENANT_CONTEXT_MISSING'
+      ||
+      message.includes(
+        'Growth OS tenant could not be resolved'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'TENANT_CONTEXT_INVALID',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // CREDENTIAL FAILURE
+    // ========================================================
+
+    if (
+      message.includes(
+        'META_CREDENTIAL'
+      )
+      ||
+      message.includes(
+        'Integration credential'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'META_CREDENTIAL_INVALID',
+
+        },
+        {
+          status:
+            500,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // INTERNAL FAILURE
+    // ========================================================
+
     return NextResponse.json(
       {
 
@@ -400,7 +657,7 @@ export async function POST(
           false,
 
         error:
-          message,
+          'Unable to select Meta account',
 
       },
       {

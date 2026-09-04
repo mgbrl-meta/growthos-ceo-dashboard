@@ -1,12 +1,13 @@
 import crypto from 'crypto';
 
 import {
+  NextRequest,
   NextResponse,
 } from 'next/server';
 
 import {
-  resolveTenantContext,
-} from '@/lib/tenancy/context';
+  resolveRequestTenantContext,
+} from '@/lib/tenancy/request-context';
 
 import {
   buildMetaOAuthUrl,
@@ -16,25 +17,53 @@ import {
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
+
 
 // ============================================================
 // META CONNECT
 //
 // GET /api/integrations/meta/connect
 //
-// 1. Resolve current tenant
-// 2. Generate anti-CSRF state
-// 3. Bind state to workspace + brand in HttpOnly cookies
-// 4. Redirect to Meta
+// 1. Authenticate current Growth OS request
+// 2. Resolve active workspace + brand from signed session
+// 3. Generate anti-CSRF state
+// 4. Bind state + workspace + brand in HttpOnly cookies
+// 5. Redirect to Meta OAuth
+//
+// IMPORTANT:
+//
+// This route does NOT use:
+//
+// GROWTHOS_DEFAULT_WORKSPACE_ID
+// GROWTHOS_DEFAULT_BRAND_ID
+//
+// Therefore Meta authorization always begins for the
+// currently active Growth OS brand.
 // ============================================================
 
-export async function GET() {
+export async function GET(
+  request: NextRequest
+) {
 
   try {
 
-    const tenant =
-      await resolveTenantContext();
+    // ========================================================
+    // 1. AUTHENTICATED TENANT
+    // ========================================================
 
+    const {
+      tenant,
+    } =
+      await resolveRequestTenantContext(
+        request
+      );
+
+
+    // ========================================================
+    // 2. ANTI-CSRF STATE
+    // ========================================================
 
     const state =
       crypto
@@ -45,6 +74,10 @@ export async function GET() {
           'hex'
         );
 
+
+    // ========================================================
+    // 3. META AUTHORIZATION URL
+    // ========================================================
 
     const oauthUrl =
       buildMetaOAuthUrl(
@@ -57,6 +90,15 @@ export async function GET() {
         oauthUrl
       );
 
+
+    // ========================================================
+    // 4. TEMPORARY OAUTH COOKIE OPTIONS
+    //
+    // Cookies survive the external Meta redirect and return
+    // to the callback.
+    //
+    // They expire quickly and are cleared after callback.
+    // ========================================================
 
     const cookieOptions = {
 
@@ -80,12 +122,25 @@ export async function GET() {
 
 
     // ========================================================
-    // SECURITY
+    // 5. FREEZE OAUTH TENANT CONTEXT
     //
-    // We bind authorization to the tenant that initiated it.
+    // This is critical for multi-brand Growth OS.
     //
-    // Later these values come from authenticated session state,
-    // but callback behavior remains the same.
+    // Example:
+    //
+    // user active brand = Brand B
+    //
+    // Meta authorization starts
+    //        ↓
+    // these cookies freeze:
+    //
+    // workspace = Brand B workspace
+    // brand     = Brand B
+    //
+    // callback MUST use these exact values.
+    //
+    // It must not use the user's later active session or
+    // environment defaults.
     // ========================================================
 
     response.cookies.set(
@@ -116,11 +171,85 @@ export async function GET() {
     error: any
   ) {
 
+    const message =
+      String(
+        error?.message
+        ||
+        'Unable to start Meta authorization'
+      );
+
+
     console.error(
       'META_CONNECT_ERROR',
-      error
+      {
+        message,
+      }
     );
 
+
+    // ========================================================
+    // AUTHENTICATION FAILURE
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // INVALID ACTIVE TENANT
+    // ========================================================
+
+    if (
+      message ===
+        'AUTHENTICATED_TENANT_CONTEXT_MISSING'
+      ||
+      message.includes(
+        'Growth OS tenant could not be resolved'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'TENANT_CONTEXT_INVALID',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // INTERNAL FAILURE
+    // ========================================================
 
     return NextResponse.json(
       {
@@ -129,8 +258,6 @@ export async function GET() {
           false,
 
         error:
-          error?.message
-          ||
           'Unable to start Meta authorization',
 
       },

@@ -30,34 +30,118 @@ export const runtime =
 
 
 // ============================================================
+// METADATA
+// ============================================================
+
+function normalizeMetadata(
+  value: unknown
+):
+
+  Record<
+    string,
+    any
+  > {
+
+  if (
+    value
+    &&
+    typeof value ===
+      'object'
+    &&
+    !Array.isArray(
+      value
+    )
+  ) {
+
+    return value as
+      Record<
+        string,
+        any
+      >;
+
+  }
+
+
+  if (
+    typeof value ===
+    'string'
+  ) {
+
+    try {
+
+      const parsed =
+        JSON.parse(
+          value
+        );
+
+
+      if (
+        parsed
+        &&
+        typeof parsed ===
+          'object'
+      ) {
+
+        return parsed;
+
+      }
+
+    } catch {
+
+      // Ignore invalid compatibility metadata.
+
+    }
+
+  }
+
+
+  return {};
+
+}
+
+
+// ============================================================
+// GROWTH OS APP URL
+// ============================================================
+
+function getGrowthOSAppUrl() {
+
+  return String(
+    process.env.GROWTHOS_APP_URL
+    ||
+    'http://localhost:3000'
+  )
+    .trim()
+    .replace(
+      /\/+$/,
+      ''
+    );
+
+}
+
+
+// ============================================================
 // SHOPIFY STANDALONE APP LAUNCH
 //
 // Shopify Admin
 //       ↓
-// merchant clicks Growth OS
+// signed Shopify launch
 //       ↓
-// Shopify signed launch request
+// verified shop
 //       ↓
-// verify HMAC + timestamp + shop
-//       ↓
-// locate existing Growth OS integration
-//       ↓
-// workspace + brand
-//       ↓
-// Growth OS session
-//       ↓
-// dashboard
+// integration account lookup
 //
-// If the shop has never been registered:
+// UNKNOWN SHOP:
+//       ↓
+// Shopify OAuth installation
 //
-// redirect into existing Shopify OAuth installation flow.
+// EXISTING SHOP + SETUP REQUIRED:
+//       ↓
+// connector setup page
 //
-// IMPORTANT:
-//
-// This is for the NON-EMBEDDED Growth OS application.
-//
-// It intentionally does NOT use App Bridge or Shopify ID
-// tokens.
+// EXISTING SHOP + SETUP READY:
+//       ↓
+// Growth OS dashboard
 // ============================================================
 
 export async function GET(
@@ -73,7 +157,7 @@ export async function GET(
 
 
     // ========================================================
-    // 1. SHOPIFY LAUNCH PARAMETERS
+    // 1. SHOPIFY PARAMETERS
     // ========================================================
 
     const shop =
@@ -106,9 +190,7 @@ export async function GET(
 
 
     // ========================================================
-    // 2. VERIFY SIGNED SHOPIFY LAUNCH
-    //
-    // Never trust ?shop= merely because it appears in the URL.
+    // 2. VERIFY SHOPIFY-SIGNED LAUNCH
     // ========================================================
 
     verifyShopifyOAuthHmac(
@@ -128,7 +210,7 @@ export async function GET(
 
 
     // ========================================================
-    // 3. FIND EXISTING SHOP → GROWTH OS MAPPING
+    // 3. SHOP → GROWTH OS ACCOUNT
     // ========================================================
 
     const account =
@@ -138,33 +220,17 @@ export async function GET(
 
 
     // ========================================================
-    // 4. NEW / UNREGISTERED SHOP
+    // 4. UNKNOWN SHOP
     //
-    // Reuse our already-working authorization-code flow.
-    //
-    // Before redirecting, mark this as an app-launch flow so
-    // callback can eventually return directly to dashboard.
+    // Send through canonical OAuth installation.
     // ========================================================
 
     if (!account) {
 
-      const appUrl =
-        String(
-          process.env.GROWTHOS_APP_URL
-          ||
-          'http://localhost:3000'
-        )
-          .trim()
-          .replace(
-            /\/+$/,
-            ''
-          );
-
-
       const installUrl =
         new URL(
           '/api/integrations/shopify/install',
-          appUrl
+          getGrowthOSAppUrl()
         );
 
 
@@ -215,7 +281,7 @@ export async function GET(
 
 
     // ========================================================
-    // 5. RESOLVE CANONICAL GROWTH OS TENANT
+    // 5. CANONICAL TENANT
     // ========================================================
 
     const tenant =
@@ -229,16 +295,7 @@ export async function GET(
 
 
     // ========================================================
-    // 6. CREATE SHOPIFY-AUTHENTICATED GROWTH OS SESSION
-    //
-    // For standalone Shopify entry, Shopify authenticates the
-    // merchant/store before launching the app.
-    //
-    // Brand access therefore comes from the verified Shopify
-    // installation, not from email/password.
-    //
-    // Later we can map individual Shopify staff identities if
-    // we need staff-level roles.
+    // 6. CREATE GROWTH OS SHOPIFY SESSION
     // ========================================================
 
     await setGrowthOsSessionCookie({
@@ -265,24 +322,78 @@ export async function GET(
 
 
     // ========================================================
-    // 7. DASHBOARD
+    // 7. CONNECTOR SETUP STATE
+    //
+    // Legacy existing installations have no setup_status.
+    //
+    // IMPORTANT:
+    //
+    // Missing status is treated as READY so Brillare and other
+    // established connections are not suddenly forced through
+    // onboarding.
+    //
+    // New installations explicitly receive:
+    //
+    // setup_status = required
     // ========================================================
 
-    const appUrl =
+    const metadata =
+      normalizeMetadata(
+        account.metadata
+      );
+
+
+    const setupStatus =
       String(
-        process.env.GROWTHOS_APP_URL
+        metadata.setup_status
         ||
-        'http://localhost:3000'
+        ''
       )
         .trim()
-        .replace(
-          /\/+$/,
-          ''
+        .toLowerCase();
+
+
+    // ========================================================
+    // 8. NEW INSTALL — SETUP REQUIRED
+    // ========================================================
+
+    if (
+      setupStatus ===
+      'required'
+    ) {
+
+      const setupUrl =
+        new URL(
+          '/integrations/setup',
+          getGrowthOSAppUrl()
         );
 
 
+      setupUrl.searchParams.set(
+        'connectionId',
+        account.connection_id
+      );
+
+
+      return NextResponse.redirect(
+        setupUrl
+      );
+
+    }
+
+
+    // ========================================================
+    // 9. NORMAL EXISTING STORE
+    //
+    // setup_status = ready
+    //
+    // OR
+    //
+    // legacy account with no setup_status.
+    // ========================================================
+
     return NextResponse.redirect(
-      `${appUrl}/`
+      `${getGrowthOSAppUrl()}/`
     );
 
 

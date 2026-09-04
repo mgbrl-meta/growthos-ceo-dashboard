@@ -1,4 +1,5 @@
 import {
+  NextRequest,
   NextResponse,
 } from 'next/server';
 
@@ -7,40 +8,75 @@ import {
 } from '@/lib/integrations/registry';
 
 import {
-  getIntegrationTenant,
   listIntegrationConnections,
 } from '@/lib/integrations/store';
+
+import {
+  resolveRequestTenantContext,
+} from '@/lib/tenancy/request-context';
 
 
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
+
 
 // ============================================================
 // GET INTEGRATIONS
 //
-// Registry = what Growth OS supports.
+// Registry:
+// what Growth OS supports.
 //
-// Connection store = what current workspace / brand
-// actually has connected.
+// Connection store:
+// what the authenticated workspace / brand actually has
+// connected.
 //
-// The response merges both.
+// IMPORTANT:
+//
+// Tenant context comes ONLY from the authenticated request:
+//
+// session
+//    ↓
+// workspaceId + brandId
+//    ↓
+// control plane validation
+//
+// This route does NOT use:
+//
+// GROWTHOS_DEFAULT_WORKSPACE_ID
+// GROWTHOS_DEFAULT_BRAND_ID
+//
+// Therefore brand switching changes the integration data
+// returned by this API.
 // ============================================================
 
-export async function GET() {
+export async function GET(
+  request: NextRequest
+) {
 
   try {
 
     // ========================================================
-    // TENANT
+    // 1. AUTHENTICATED TENANT
     // ========================================================
 
-    const tenant =
-      await getIntegrationTenant();
+    const {
+      tenant,
+    } =
+      await resolveRequestTenantContext(
+        request
+      );
 
 
     // ========================================================
-    // LIVE CONNECTIONS
+    // 2. LIVE CONNECTIONS
+    //
+    // Scoped strictly to:
+    //
+    // active workspace
+    // active brand
     // ========================================================
 
     const connections =
@@ -54,7 +90,9 @@ export async function GET() {
 
 
     // ========================================================
-    // CONNECTION LOOKUP
+    // 3. CONNECTION LOOKUP
+    //
+    // One connection record per provider for the active brand.
     // ========================================================
 
     const connectionMap =
@@ -76,7 +114,21 @@ export async function GET() {
 
 
     // ========================================================
-    // MERGE REGISTRY + CONNECTION STATE
+    // 4. MERGE PROVIDER REGISTRY + CONNECTION STATE
+    //
+    // Registry defines:
+    //
+    // - supported integrations
+    // - labels
+    // - UI metadata
+    //
+    // Connection store defines:
+    //
+    // - connection status
+    // - selected account
+    // - ingestion adapter
+    // - last sync
+    // - errors
     // ========================================================
 
     const integrations =
@@ -134,6 +186,9 @@ export async function GET() {
                 provider.connectionManaged
                 ||
                 false,
+
+              connectionId:
+                null,
 
             };
 
@@ -202,7 +257,7 @@ export async function GET() {
 
 
     // ========================================================
-    // RESPONSE
+    // 5. RESPONSE
     // ========================================================
 
     return NextResponse.json(
@@ -249,11 +304,94 @@ export async function GET() {
     error: any
   ) {
 
+    // ========================================================
+    // SAFE ERROR RESPONSE
+    //
+    // Do not expose arbitrary internal exception text.
+    // ========================================================
+
+    const message =
+      String(
+        error?.message
+        ||
+        'Failed to load integrations'
+      );
+
+
     console.error(
       'INTEGRATIONS_API_ERROR',
-      error
+      {
+        message,
+      }
     );
 
+
+    // ========================================================
+    // AUTH FAILURE
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // TENANT CONTEXT FAILURE
+    //
+    // A valid authenticated session exists, but its active
+    // workspace / brand cannot be resolved.
+    // ========================================================
+
+    if (
+      message ===
+        'AUTHENTICATED_TENANT_CONTEXT_MISSING'
+      ||
+      message.includes(
+        'Growth OS tenant could not be resolved'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'TENANT_CONTEXT_INVALID',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // INTERNAL FAILURE
+    // ========================================================
 
     return NextResponse.json(
       {
@@ -262,8 +400,6 @@ export async function GET() {
           false,
 
         error:
-          error?.message
-          ||
           'Failed to load integrations',
 
       },

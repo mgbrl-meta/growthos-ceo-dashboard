@@ -1,4 +1,5 @@
 import {
+  NextRequest,
   NextResponse,
 } from 'next/server';
 
@@ -11,12 +12,12 @@ import {
 } from '@/lib/integrations/secrets';
 
 import {
-  resolveTenantContext,
-} from '@/lib/tenancy/context';
-
-import {
   getIntegrationConnection,
 } from '@/lib/integrations/store';
+
+import {
+  resolveRequestTenantContext,
+} from '@/lib/tenancy/request-context';
 
 
 export const dynamic =
@@ -29,29 +30,58 @@ export const runtime =
 // ============================================================
 // META AD ACCOUNTS
 //
-// Current Growth OS tenant
+// GET /api/integrations/meta/accounts
+//
+// Growth OS dashboard
 //        ↓
-// Meta connection
+// authenticated active workspace + brand
 //        ↓
-// Secret Manager token
+// Meta integration_connection for that brand
 //        ↓
-// Meta /me/adaccounts
+// Secret Manager credential
+//        ↓
+// Meta Graph API
+//        ↓
+// accessible ad accounts
+//
+// IMPORTANT:
+//
+// This route is ALWAYS Growth OS initiated.
+//
+// It does NOT use:
+//
+// GROWTHOS_DEFAULT_WORKSPACE_ID
+// GROWTHOS_DEFAULT_BRAND_ID
+//
+// It uses only the active authenticated Growth OS tenant.
 // ============================================================
 
-export async function GET() {
+export async function GET(
+  request: NextRequest
+) {
 
   try {
 
     // ========================================================
-    // TENANT
+    // 1. AUTHENTICATED ACTIVE TENANT
     // ========================================================
 
-    const tenant =
-      await resolveTenantContext();
+    const {
+      tenant,
+    } =
+      await resolveRequestTenantContext(
+        request
+      );
 
 
     // ========================================================
-    // META CONNECTION
+    // 2. CURRENT META CONNECTION
+    //
+    // Strictly scoped to:
+    //
+    // active workspace
+    // active brand
+    // provider = meta_ads
     // ========================================================
 
     const connection =
@@ -66,6 +96,15 @@ export async function GET() {
       );
 
 
+    // ========================================================
+    // 3. META MUST ALREADY BE AUTHORIZED
+    //
+    // OAuth callback stores the Secret Manager pointer.
+    //
+    // If there is no connection or no credential pointer,
+    // account discovery cannot run.
+    // ========================================================
+
     if (
       !connection
       ||
@@ -79,7 +118,7 @@ export async function GET() {
             false,
 
           error:
-            'Meta is not authorized',
+            'META_NOT_AUTHORIZED',
 
         },
         {
@@ -92,7 +131,11 @@ export async function GET() {
 
 
     // ========================================================
-    // SECRET MANAGER
+    // 4. READ META CREDENTIAL
+    //
+    // Actual access token lives only in Secret Manager.
+    //
+    // Never return it to the browser.
     // ========================================================
 
     const secret =
@@ -106,39 +149,85 @@ export async function GET() {
       );
 
 
-    if (
-      !secret.access_token
-    ) {
+    const accessToken =
+      String(
+        secret?.access_token
+        ||
+        ''
+      ).trim();
+
+
+    if (!accessToken) {
 
       throw new Error(
-        'Meta credential contains no access token'
+        'META_CREDENTIAL_ACCESS_TOKEN_MISSING'
       );
 
     }
 
 
     // ========================================================
-    // META AD ACCOUNTS
+    // 5. DISCOVER META AD ACCOUNTS
+    //
+    // Meta user may have:
+    //
+    // one ad account
+    // multiple ad accounts
+    // agency access to many accounts
+    //
+    // Growth OS must let the user choose which account belongs
+    // to the active brand.
     // ========================================================
 
     const accounts =
       await getMetaAdAccounts(
-        secret.access_token
+        accessToken
       );
 
 
-    return NextResponse.json({
+    // ========================================================
+    // 6. SAFE RESPONSE
+    //
+    // No credential material is exposed.
+    // ========================================================
 
-      ok:
-        true,
+    return NextResponse.json(
+      {
 
-      data: {
+        ok:
+          true,
 
-        accounts,
+        data: {
 
-      },
+          accounts,
 
-    });
+        },
+
+        meta: {
+
+          workspaceId:
+            tenant.workspaceId,
+
+          brandId:
+            tenant.brandId,
+
+          provider:
+            'meta_ads',
+
+          connectionId:
+            connection.connection_id,
+
+          accountCount:
+            Array.isArray(
+              accounts
+            )
+              ? accounts.length
+              : 0,
+
+        },
+
+      }
+    );
 
 
   } catch (
@@ -161,6 +250,103 @@ export async function GET() {
     );
 
 
+    // ========================================================
+    // AUTHENTICATION FAILURE
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // TENANT FAILURE
+    // ========================================================
+
+    if (
+      message ===
+        'AUTHENTICATED_TENANT_CONTEXT_MISSING'
+      ||
+      message.includes(
+        'Growth OS tenant could not be resolved'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'TENANT_CONTEXT_INVALID',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // CREDENTIAL FAILURE
+    // ========================================================
+
+    if (
+      message.includes(
+        'META_CREDENTIAL'
+      )
+      ||
+      message.includes(
+        'Integration credential'
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'META_CREDENTIAL_INVALID',
+
+        },
+        {
+          status:
+            500,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // INTERNAL / META API FAILURE
+    // ========================================================
+
     return NextResponse.json(
       {
 
@@ -168,7 +354,7 @@ export async function GET() {
           false,
 
         error:
-          message,
+          'Unable to load Meta accounts',
 
       },
       {

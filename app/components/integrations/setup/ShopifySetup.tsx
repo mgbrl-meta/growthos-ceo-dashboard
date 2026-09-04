@@ -4,7 +4,11 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
-import IntegrationSetupShell from './IntegrationSetupShell';
+import IntegrationSetupShell
+  from './IntegrationSetupShell';
+
+import ShopifySetupCompleteButton
+  from './ShopifySetupCompleteButton';
 
 
 // ============================================================
@@ -12,6 +16,9 @@ import IntegrationSetupShell from './IntegrationSetupShell';
 // ============================================================
 
 type Props = {
+
+  connectionId:
+    string;
 
   shopDomain:
     string;
@@ -28,11 +35,16 @@ type Props = {
 // ============================================================
 // CONFIG
 //
-// Filename of:
+// Theme App Extension:
 //
-// extensions/attribution-cart-bridge/blocks/cart-bridge.liquid
+// extensions/
+//   attribution-cart-bridge/
+//     blocks/
+//       cart-bridge.liquid
 //
-// becomes the app-embed block handle.
+// Shopify app-embed block handle:
+//
+// cart-bridge
 // ============================================================
 
 const CART_BRIDGE_HANDLE =
@@ -41,9 +53,44 @@ const CART_BRIDGE_HANDLE =
 
 // ============================================================
 // SHOPIFY SETUP
+//
+// Generic Growth OS connector setup:
+//
+// integration_connection
+//        ↓
+// provider = shopify
+//        ↓
+// THIS COMPONENT
+//
+// Shopify-specific responsibility:
+//
+// ✓ OAuth completed
+// ✓ Store identity verified
+// ✓ Credential secured
+// ✓ Growth OS connection registered
+//
+// Remaining merchant action:
+//
+// Attribution Cart App Embed
+//        ↓
+// Theme Editor
+//        ↓
+// Enable
+//        ↓
+// Save
+//        ↓
+// Confirm completion
+//
+// After confirmation:
+//
+// setup_status = ready
+//        ↓
+// dashboard
 // ============================================================
 
 export default function ShopifySetup({
+
+  connectionId,
 
   shopDomain,
 
@@ -53,6 +100,27 @@ export default function ShopifySetup({
 
 }: Props) {
 
+
+  // ==========================================================
+  // SHOPIFY APP EMBED ACTIVATION URL
+  //
+  // Opens:
+  //
+  // Shopify Admin
+  //      ↓
+  // current theme
+  //      ↓
+  // App embeds
+  //      ↓
+  // Attribution Cart
+  //
+  // Merchant must still:
+  //
+  // 1. Enable the embed
+  // 2. Click Save
+  //
+  // Shopify does not allow us to silently activate it.
+  // ==========================================================
 
   const activationUrl =
     (
@@ -89,7 +157,7 @@ export default function ShopifySetup({
 
 
       {/* ====================================================
-          COMPLETED
+          COMPLETED CONNECTION STEPS
       ==================================================== */}
 
       <div
@@ -108,15 +176,18 @@ export default function ShopifySetup({
           completed
         />
 
+
         <SetupRow
           label="Store identity verified"
           completed
         />
 
+
         <SetupRow
           label="Growth OS connection registered"
           completed
         />
+
 
         <SetupRow
           label="Credential secured"
@@ -128,7 +199,7 @@ export default function ShopifySetup({
 
 
       {/* ====================================================
-          REQUIRED APP EMBED
+          REQUIRED SHOPIFY SETUP
       ==================================================== */}
 
       <div
@@ -146,37 +217,79 @@ export default function ShopifySetup({
         "
       >
 
+
+        {/* ==================================================
+            INSTRUCTION
+        ================================================== */}
+
         <div className="flex gap-3">
 
           <ShieldCheck
             size={21}
-            className="mt-0.5 shrink-0 text-violet-600"
+            className="
+              mt-0.5
+              shrink-0
+              text-violet-600
+            "
           />
 
 
           <div>
 
-            <div className="text-sm font-black text-slate-950">
+            <div
+              className="
+                text-sm
+                font-black
+                text-slate-950
+              "
+            >
               1 required setup step remaining
             </div>
 
 
-            <p className="mt-2 text-xs leading-5 text-slate-600">
+            <p
+              className="
+                mt-2
 
-              Enable the Attribution Cart app embed. Growth OS
-              uses it to capture Shopify&apos;s native cart token
-              and connect storefront journeys with orders
-              deterministically.
+                text-xs
+                leading-5
+
+                text-slate-600
+              "
+            >
+
+              Enable the Attribution Cart app embed.
+
+              Growth OS uses it to capture Shopify&apos;s
+              native cart identity and connect storefront
+              journeys with orders deterministically.
 
             </p>
 
 
-            <p className="mt-3 text-xs font-semibold text-slate-700">
+            <p
+              className="
+                mt-3
 
-              Shopify Theme Editor will open. Enable
-              <strong> Attribution Cart </strong>
-              and click
-              <strong> Save</strong>.
+                text-xs
+                font-semibold
+                leading-5
+
+                text-slate-700
+              "
+            >
+
+              Shopify Theme Editor will open.
+
+              Enable
+              <strong>
+                {' '}Attribution Cart{' '}
+              </strong>
+
+              and then click
+              <strong>
+                {' '}Save
+              </strong>.
 
             </p>
 
@@ -184,6 +297,10 @@ export default function ShopifySetup({
 
         </div>
 
+
+        {/* ==================================================
+            STEP 1 — OPEN SHOPIFY THEME EDITOR
+        ================================================== */}
 
         {activationUrl ? (
 
@@ -202,6 +319,7 @@ export default function ShopifySetup({
 
               flex
               w-full
+
               items-center
               justify-center
               gap-2
@@ -250,51 +368,83 @@ export default function ShopifySetup({
             "
           >
             Shopify activation link could not be generated.
+            Check the Shopify Client ID configuration.
           </div>
 
         )}
+
+
+        {/* ==================================================
+            STEP 2 — CONFIRM SETUP
+        ================================================== */}
+
+        <div
+          className="
+            mt-5
+
+            border-t
+            border-violet-100
+
+            pt-5
+          "
+        >
+
+          <div
+            className="
+              text-xs
+              font-black
+              text-slate-800
+            "
+          >
+            Already enabled and saved?
+          </div>
+
+
+          <p
+            className="
+              mt-1
+
+              text-xs
+              leading-5
+
+              text-slate-500
+            "
+          >
+
+            After saving the Attribution Cart embed in Shopify,
+            return here and confirm the setup.
+
+          </p>
+
+
+          <ShopifySetupCompleteButton
+
+            connectionId={
+              connectionId
+            }
+
+          />
+
+        </div>
+
 
       </div>
 
 
       {/* ====================================================
-          DASHBOARD
+          CONNECTED STORE
       ==================================================== */}
 
-      <a
-
-        href="/"
-
+      <div
         className="
-          mt-4
+          mt-5
 
-          flex
-          w-full
-          items-center
-          justify-center
+          text-center
 
-          rounded-xl
-
-          border
-          border-slate-200
-
-          px-5
-          py-3
-
-          text-sm
-          font-black
-          text-slate-800
-
-          transition
-
-          hover:bg-slate-50
+          text-[11px]
+          text-slate-400
         "
       >
-        Open Growth OS
-      </a>
-
-
-      <div className="mt-5 text-center text-[11px] text-slate-400">
         Connected store: {shopDomain}
       </div>
 
@@ -356,6 +506,7 @@ function SetupRow({
           h-6
           w-6
           shrink-0
+
           items-center
           justify-center
 
@@ -379,7 +530,13 @@ function SetupRow({
       </div>
 
 
-      <span className="text-xs font-semibold text-slate-700">
+      <span
+        className="
+          text-xs
+          font-semibold
+          text-slate-700
+        "
+      >
         {label}
       </span>
 
