@@ -25,6 +25,10 @@ import {
   resolveOrProvisionShopifyTenant,
 } from '@/lib/integrations/providers/shopify-installation';
 
+import {
+  setGrowthOsSessionCookie,
+} from '@/lib/auth/session';
+
 
 export const dynamic =
   'force-dynamic';
@@ -35,8 +39,6 @@ export const runtime =
 
 // ============================================================
 // SHOPIFY INSTALLATION / OAUTH CALLBACK
-//
-// STEP 1E
 //
 // Shopify authorization
 //        ↓
@@ -64,24 +66,30 @@ export const runtime =
 // integration_connection
 //        ↓
 // integration_account
+//        ↓
+// Growth OS Shopify session
+//        ↓
+// generic connector setup router
 //
 // RESULT:
 //
-// A Shopify installation becomes a fully registered
-// Growth OS provider connection.
+// Successful Shopify installation never shows raw JSON.
 //
-// IMPORTANT:
+// It redirects to:
 //
-// This route DOES NOT YET:
+// /integrations/setup?connectionId=...
 //
-// - enable App Embed automatically
-// - provision Web Pixel automatically
-// - register all Shopify webhooks
-// - initialize historical Admin API backfill
-// - initialize incremental sync
-// - initialize Pub/Sub routing
+// That page reads the stored provider and renders the correct
+// provider-specific setup experience.
 //
-// Those belong to the following installation/data-flow steps.
+// Shopify:
+//   App Embed / Cart Bridge instructions
+//
+// Custom Website:
+//   JS installation / verification
+//
+// Future:
+//   Meta / Google / other connector setup
 // ============================================================
 
 export async function GET(
@@ -147,8 +155,8 @@ export async function GET(
     //
     // /api/integrations/shopify/install
     //
-    // These bind this callback to the exact authorization
-    // request initiated by Growth OS.
+    // These bind this callback to the exact OAuth request
+    // initiated by Growth OS.
     // ========================================================
 
     const expectedState =
@@ -201,8 +209,8 @@ export async function GET(
     // ========================================================
     // 5. VERIFY ORIGINAL SHOP
     //
-    // Shopify must return exactly the store that initiated
-    // authorization.
+    // Shopify must return exactly the same store that
+    // initiated authorization.
     // ========================================================
 
     const verifiedShop =
@@ -215,7 +223,7 @@ export async function GET(
     // ========================================================
     // 6. VERIFY SHOPIFY HMAC
     //
-    // Proves Shopify signed the callback parameters.
+    // Proves the callback parameters were signed by Shopify.
     // ========================================================
 
     verifyShopifyOAuthHmac(
@@ -283,16 +291,13 @@ export async function GET(
     //       ↓
     //    reuse mapped workspace + brand
     //
-    // B. Current Brillare legacy adoption
+    // B. Current legacy adoption if still required
     //       ↓
-    //    reuse existing brillare workspace + brand
+    //    reuse existing workspace + brand
     //
     // C. Brand-new Shopify installation
     //       ↓
     //    automatically provision SaaS workspace + brand
-    //
-    // This removes the Brillare-only dependency from normal
-    // future Shopify installations.
     // ========================================================
 
     const tenant =
@@ -304,17 +309,16 @@ export async function GET(
     // ========================================================
     // 11. STORE SHOPIFY OFFLINE CREDENTIAL
     //
-    // Google Secret Manager stores:
+    // Secret Manager stores:
     //
     // access token
     // refresh token
     // scope
     // canonical Shopify identity
     // issued_at
-    // access-token expiry
-    // refresh-token expiry
+    // expiry metadata
     //
-    // BigQuery receives no token material.
+    // BigQuery receives only the Secret Manager pointer.
     // ========================================================
 
     const storedCredential =
@@ -335,33 +339,33 @@ export async function GET(
 
 
     // ========================================================
-    // 12. READ BACK + VERIFY STORED CREDENTIAL
+    // 12. READ-BACK + VERIFY STORED CREDENTIAL
     //
     // Proves:
     //
     // Secret Manager secret exists
-    // latest version can be read
-    // schema is valid
+    // latest version is readable
     // access token exists
-    // stored Shop GID matches
-    // stored domain matches
+    // Shop GID matches
+    // shop domain matches
     //
-    // No token value is returned.
+    // We intentionally do not retain the verification result
+    // because merchant-facing diagnostic JSON is no longer
+    // returned.
     // ========================================================
 
-    const verifiedStoredCredential =
-      await verifyStoredShopifyCredential({
+    await verifyStoredShopifyCredential({
 
-        secretName:
-          storedCredential.secretName,
+      secretName:
+        storedCredential.secretName,
 
-        expectedShopId:
-          canonicalShop.shopId,
+      expectedShopId:
+        canonicalShop.shopId,
 
-        expectedShopDomain:
-          canonicalShop.shopDomain,
+      expectedShopDomain:
+        canonicalShop.shopDomain,
 
-      });
+    });
 
 
     // ========================================================
@@ -399,192 +403,86 @@ export async function GET(
 
 
     // ========================================================
-    // 14. SAFE RESPONSE
+    // 14. CREATE GROWTH OS SHOPIFY SESSION
     //
-    // NEVER return:
+    // Shopify installation is now complete.
     //
-    // access token
-    // refresh token
-    // authorization code
-    // OAuth state
-    // HMAC
-    // Shopify client secret
-    // Secret Manager secret payload
-    // Secret Manager secret name
+    // The verified Shopify store determines:
+    //
+    // workspace
+    // brand
+    //
+    // No Growth OS email/password is required.
     // ========================================================
 
+    await setGrowthOsSessionCookie({
+
+      userId:
+        `shopify:${canonicalShop.shopId}`,
+
+      workspaceId:
+        tenant.workspaceId,
+
+      brandId:
+        tenant.brandId,
+
+      role:
+        'admin',
+
+      authMethod:
+        'shopify',
+
+      authSource:
+        'public',
+
+    });
+
+
+    // ========================================================
+    // 15. GENERIC CONNECTOR SETUP ROUTER
+    //
+    // IMPORTANT:
+    //
+    // The Shopify callback does NOT render Shopify-specific UI.
+    //
+    // It sends only the connection identity.
+    //
+    // /integrations/setup
+    //        ↓
+    // integration_connections
+    //        ↓
+    // provider
+    //        ↓
+    // ShopifySetup
+    // CustomWebSetup
+    // MetaSetup
+    // GoogleSetup
+    // future connectors
+    // ========================================================
+
+    const setupUrl =
+      new URL(
+        '/integrations/setup',
+        request.nextUrl.origin
+      );
+
+
+    setupUrl.searchParams.set(
+      'connectionId',
+      registration.connectionId
+    );
+
+
     const response =
-      NextResponse.json(
-        {
-
-          ok:
-            true,
-
-          step:
-            'SHOPIFY_INTEGRATION_REGISTERED',
-
-          shop: {
-
-            id:
-              canonicalShop.shopId,
-
-            domain:
-              canonicalShop.shopDomain,
-
-            name:
-              canonicalShop.shopName,
-
-          },
-
-          tenant: {
-
-            workspaceId:
-              tenant.workspaceId,
-
-            workspaceName:
-              tenant.workspaceName,
-
-            workspaceSlug:
-              tenant.workspaceSlug,
-
-            brandId:
-              tenant.brandId,
-
-            brandName:
-              tenant.brandName,
-
-            brandSlug:
-              tenant.brandSlug,
-
-            currency:
-              tenant.currency,
-
-            timezone:
-              tenant.timezone,
-
-          },
-
-          checks: {
-
-            code:
-              'EXCHANGED',
-
-            state:
-              'VERIFIED',
-
-            oauthShop:
-              'VERIFIED',
-
-            hmac:
-              'VERIFIED',
-
-            timestamp:
-              'VERIFIED',
-
-            canonicalShop:
-              'VERIFIED',
-
-            tenant:
-              'RESOLVED',
-
-            secretStored:
-              'VERIFIED',
-
-            secretReadBack:
-              'VERIFIED',
-
-            integrationConnection:
-              'REGISTERED',
-
-            integrationAccount:
-              'REGISTERED',
-
-          },
-
-          credential: {
-
-            mode:
-              'offline_expiring',
-
-            scope:
-              credential.scope,
-
-            expiresIn:
-              credential.expiresIn,
-
-            refreshTokenPresent:
-              Boolean(
-                credential.refreshToken
-              ),
-
-            refreshTokenExpiresIn:
-              credential.refreshTokenExpiresIn,
-
-          },
-
-          storage: {
-
-            provider:
-              'google_secret_manager',
-
-            stored:
-              true,
-
-            readBackVerified:
-              true,
-
-            schemaVersion:
-              verifiedStoredCredential
-                .schemaVersion,
-
-            credentialType:
-              verifiedStoredCredential
-                .credentialType,
-
-            accessTokenExpiresAt:
-              verifiedStoredCredential
-                .accessTokenExpiresAt,
-
-            refreshTokenPresent:
-              verifiedStoredCredential
-                .refreshTokenPresent,
-
-            refreshTokenExpiresAt:
-              verifiedStoredCredential
-                .refreshTokenExpiresAt,
-
-          },
-
-          integration: {
-
-            provider:
-              'shopify',
-
-            status:
-              'connected',
-
-            connectionMode:
-              'oauth',
-
-            ingestionAdapter:
-              'shopify_hybrid_v1',
-
-            connectionId:
-              registration.connectionId,
-
-            integrationAccountId:
-              registration.integrationAccountId,
-
-          },
-
-        }
+      NextResponse.redirect(
+        setupUrl
       );
 
 
     // ========================================================
-    // 15. CLEAR ONE-TIME OAUTH COOKIES
+    // 16. CLEAR ONE-TIME AUTH COOKIES
     //
-    // Successful OAuth state must never remain reusable.
+    // These must not remain reusable after successful OAuth.
     // ========================================================
 
     response.cookies.delete(
@@ -597,7 +495,13 @@ export async function GET(
     );
 
 
+    response.cookies.delete(
+      'growthos_shopify_launch_flow'
+    );
+
+
     return response;
+
 
   } catch (
     error: any
@@ -772,6 +676,14 @@ export async function GET(
 
     }
 
+
+    // ========================================================
+    // ERROR RESPONSE
+    //
+    // Engineering failures may return JSON.
+    //
+    // Successful merchant installations never do.
+    // ========================================================
 
     return NextResponse.json(
       {

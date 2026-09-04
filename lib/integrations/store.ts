@@ -1435,6 +1435,157 @@ export async function getIntegrationConnection(
 
 }
 
+// ============================================================
+// GET INTEGRATION CONNECTION BY ID
+//
+// Generic connector setup resolver.
+//
+// connection_id
+//      ↓
+// integration_connections
+//      ↓
+// provider
+// workspace
+// brand
+//
+// The caller MUST still verify that the authenticated
+// session owns the returned workspace + brand.
+// ============================================================
+
+export async function getIntegrationConnectionById(
+  connectionId: string
+) {
+
+  await ensureIntegrationStore();
+
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedConnectionId =
+    String(
+      connectionId
+      ||
+      ''
+    ).trim();
+
+
+  if (!normalizedConnectionId) {
+
+    throw new Error(
+      'Integration connection ID is required'
+    );
+
+  }
+
+
+  const query = `
+
+    SELECT
+
+      connection_id,
+
+      workspace_id,
+
+      brand_id,
+
+      provider,
+
+      connection_mode,
+
+      ingestion_adapter,
+
+      status,
+
+      provider_user_id,
+
+      provider_user_name,
+
+      provider_account_id,
+
+      provider_account_name,
+
+      secret_name,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        connected_at
+      )
+        AS connected_at,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        updated_at
+      )
+        AS updated_at,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        last_verified_at
+      )
+        AS last_verified_at,
+
+      FORMAT_TIMESTAMP(
+        '%Y-%m-%dT%H:%M:%SZ',
+        last_sync_at
+      )
+        AS last_sync_at,
+
+      error
+
+    FROM
+      \`${projectId}.${DATASET_ID}.integration_connections\`
+
+    WHERE
+
+      connection_id =
+        @connection_id
+
+    ORDER BY
+      updated_at DESC
+
+    LIMIT 1
+
+  `;
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        connection_id:
+          normalizedConnectionId,
+
+      },
+
+      types: {
+
+        connection_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows?.[0]
+    ??
+    null
+  ) as
+    StoredIntegrationConnection
+    | null;
+
+}
 
 // ============================================================
 // LIST CONNECTIONS FOR BRAND
