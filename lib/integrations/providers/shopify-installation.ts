@@ -384,6 +384,14 @@ export async function registerShopifyIntegration(
         ingestion_mode:
           'hybrid',
 
+  // --------------------------------------------------------
+  // CONNECTOR ONBOARDING STATE
+  //
+  // Every fresh/re-authorized Shopify installation must
+  // complete the storefront identity bridge setup before
+  // Growth OS treats the connector as fully ready.
+  // --------------------------------------------------------
+
         setup_status:
           'required',
 
@@ -391,9 +399,9 @@ export async function registerShopifyIntegration(
           new Date()
             .toISOString(),
 
-      },
+        },
 
-    });
+      });
 
 
   return {
