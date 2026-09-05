@@ -2383,3 +2383,241 @@ export async function markIntegrationSetupReady(
   };
 
 }
+
+// ============================================================
+// MARK SHOPIFY INSTALLATION UNINSTALLED
+//
+// Preserves:
+//
+// workspace
+// brand
+// integration account
+// historical data
+//
+// Changes operational state only:
+//
+// connection → disconnected
+// installation_status → uninstalled
+// setup_status → required
+//
+// The next Shopify launch must re-authorize.
+// ============================================================
+
+export async function markShopifyInstallationUninstalled(
+  shopDomain: string
+) {
+
+  await ensureIntegrationStore();
+
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedShopDomain =
+    String(
+      shopDomain
+      ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (!normalizedShopDomain) {
+
+    throw new Error(
+      'Shopify shop domain is required'
+    );
+
+  }
+
+
+  // ==========================================================
+  // FIND ACCOUNT
+  // ==========================================================
+
+  const account =
+    await getShopifyIntegrationAccountByDomain(
+      normalizedShopDomain
+    );
+
+
+  if (!account) {
+
+    // Webhooks may occasionally arrive after data has already
+    // been cleaned up. Treat as idempotent.
+    return {
+
+      found:
+        false,
+
+      shopDomain:
+        normalizedShopDomain,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // CONNECTION → DISCONNECTED
+  // ==========================================================
+
+  await bigquery.query({
+
+    query: `
+
+      UPDATE
+        \`${projectId}.${DATASET_ID}.integration_connections\`
+
+      SET
+
+        status =
+          'disconnected',
+
+        updated_at =
+          CURRENT_TIMESTAMP(),
+
+        last_verified_at =
+          CURRENT_TIMESTAMP(),
+
+        error =
+          'SHOPIFY_APP_UNINSTALLED'
+
+      WHERE
+
+        connection_id =
+          @connection_id
+
+        AND workspace_id =
+          @workspace_id
+
+        AND brand_id =
+          @brand_id
+
+        AND provider =
+          'shopify'
+
+    `,
+
+    location:
+      LOCATION,
+
+    params: {
+
+      connection_id:
+        account.connection_id,
+
+      workspace_id:
+        account.workspace_id,
+
+      brand_id:
+        account.brand_id,
+
+    },
+
+    types: {
+
+      connection_id:
+        'STRING',
+
+      workspace_id:
+        'STRING',
+
+      brand_id:
+        'STRING',
+
+    },
+
+  });
+
+
+  // ==========================================================
+  // ACCOUNT → UNINSTALLED / SETUP REQUIRED
+  // ==========================================================
+
+  await bigquery.query({
+
+    query: `
+
+      UPDATE
+        \`${projectId}.${DATASET_ID}.integration_accounts\`
+
+      SET
+
+        metadata =
+          JSON_SET(
+
+            COALESCE(
+              metadata,
+              JSON '{}'
+            ),
+
+            '$.installation_status',
+            'uninstalled',
+
+            '$.uninstalled_at',
+            FORMAT_TIMESTAMP(
+              '%Y-%m-%dT%H:%M:%SZ',
+              CURRENT_TIMESTAMP()
+            ),
+
+            '$.setup_status',
+            'required'
+
+          ),
+
+        updated_at =
+          CURRENT_TIMESTAMP()
+
+      WHERE
+
+        integration_account_id =
+          @integration_account_id
+
+    `,
+
+    location:
+      LOCATION,
+
+    params: {
+
+      integration_account_id:
+        account.integration_account_id,
+
+    },
+
+    types: {
+
+      integration_account_id:
+        'STRING',
+
+    },
+
+  });
+
+
+  return {
+
+    found:
+      true,
+
+    connectionId:
+      account.connection_id,
+
+    integrationAccountId:
+      account.integration_account_id,
+
+    workspaceId:
+      account.workspace_id,
+
+    brandId:
+      account.brand_id,
+
+    shopDomain:
+      normalizedShopDomain,
+
+  };
+
+}

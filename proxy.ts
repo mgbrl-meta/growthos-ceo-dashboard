@@ -49,6 +49,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/shopify/bootstrap',
   '/api/integrations/shopify/install',
   '/api/integrations/shopify/callback',
+  '/api/integrations/shopify/webhooks/app-uninstalled',
 ]);
 
 

@@ -30,17 +30,19 @@ export const runtime =
 
 
 // ============================================================
-// METADATA
+// METADATA NORMALIZER
+//
+// BigQuery JSON may arrive as:
+// - object
+// - serialized JSON string
+//
+// Normalize both into one safe object.
 // ============================================================
 
 function normalizeMetadata(
   value: unknown
 ):
-
-  Record<
-    string,
-    any
-  > {
+  Record<string, any> {
 
   if (
     value
@@ -54,17 +56,14 @@ function normalizeMetadata(
   ) {
 
     return value as
-      Record<
-        string,
-        any
-      >;
+      Record<string, any>;
 
   }
 
 
   if (
     typeof value ===
-    'string'
+      'string'
   ) {
 
     try {
@@ -80,9 +79,14 @@ function normalizeMetadata(
         &&
         typeof parsed ===
           'object'
+        &&
+        !Array.isArray(
+          parsed
+        )
       ) {
 
-        return parsed;
+        return parsed as
+          Record<string, any>;
 
       }
 
@@ -127,21 +131,48 @@ function getGrowthOSAppUrl() {
 //       ↓
 // signed Shopify launch
 //       ↓
-// verified shop
+// verify HMAC
+// verify timestamp
+// verify shop domain
 //       ↓
 // integration account lookup
 //
-// UNKNOWN SHOP:
+//
+// UNKNOWN SHOP
 //       ↓
 // Shopify OAuth installation
 //
-// EXISTING SHOP + SETUP REQUIRED:
+//
+// EXISTING + UNINSTALLED
+//       ↓
+// Shopify OAuth reinstallation
+//
+//
+// EXISTING + SETUP NOT READY
 //       ↓
 // connector setup page
 //
-// EXISTING SHOP + SETUP READY:
+//
+// EXISTING + READY
 //       ↓
 // Growth OS dashboard
+//
+//
+// IMPORTANT:
+//
+// Permanent fail-closed rules:
+//
+// installation_status = uninstalled
+//     → OAuth
+//
+// setup_status = ready
+//     → Dashboard
+//
+// setup_status = required
+//     → Setup
+//
+// setup_status missing / unknown
+//     → Setup
 // ============================================================
 
 export async function GET(
@@ -157,7 +188,7 @@ export async function GET(
 
 
     // ========================================================
-    // 1. SHOPIFY PARAMETERS
+    // 1. SHOPIFY LAUNCH PARAMETERS
     // ========================================================
 
     const shop =
@@ -167,7 +198,8 @@ export async function GET(
         )
         ||
         ''
-      );
+      )
+        .trim();
 
 
     const timestamp =
@@ -177,7 +209,8 @@ export async function GET(
         )
         ||
         ''
-      );
+      )
+        .trim();
 
 
     if (!shop) {
@@ -210,7 +243,16 @@ export async function GET(
 
 
     // ========================================================
-    // 3. SHOP → GROWTH OS ACCOUNT
+    // 3. RESOLVE SHOPIFY STORE IN GROWTH OS
+    //
+    // Shopify domain
+    //      ↓
+    // integration_accounts
+    //      ↓
+    // workspace
+    // brand
+    // connection
+    // metadata
     // ========================================================
 
     const account =
@@ -220,12 +262,204 @@ export async function GET(
 
 
     // ========================================================
-    // 4. UNKNOWN SHOP
+    // 4. UNKNOWN STORE → INSTALL
     //
-    // Send through canonical OAuth installation.
+    // No Growth OS account mapping exists yet.
+    //
+    // Send through canonical Shopify OAuth installation.
     // ========================================================
 
     if (!account) {
+
+      const installUrl =
+        new URL(
+          '/api/integrations/shopify/install',
+          getGrowthOSAppUrl()
+        );
+
+
+      installUrl.searchParams.set(
+        'shop',
+        verifiedShop
+      );
+
+
+      const response =
+        NextResponse.redirect(
+          installUrl
+        );
+
+
+      // ------------------------------------------------------
+      // Temporary launch-flow marker.
+      //
+      // Useful for installation lineage / compatibility.
+      // ------------------------------------------------------
+
+      response.cookies.set(
+
+        'growthos_shopify_launch_flow',
+
+        '1',
+
+        {
+
+          httpOnly:
+            true,
+
+          secure:
+            process.env.NODE_ENV ===
+            'production',
+
+          sameSite:
+            'lax',
+
+          path:
+            '/',
+
+          maxAge:
+            10 * 60,
+
+        }
+
+      );
+
+
+      return response;
+
+    }
+
+
+    // ========================================================
+    // 5. VALIDATE EXISTING ACCOUNT IDENTITY
+    // ========================================================
+
+    const connectionId =
+      String(
+        account.connection_id
+        ||
+        ''
+      )
+        .trim();
+
+
+    const workspaceId =
+      String(
+        account.workspace_id
+        ||
+        ''
+      )
+        .trim();
+
+
+    const brandId =
+      String(
+        account.brand_id
+        ||
+        ''
+      )
+        .trim();
+
+
+    const providerAccountId =
+      String(
+        account.provider_account_id
+        ||
+        ''
+      )
+        .trim();
+
+
+    if (!connectionId) {
+
+      throw new Error(
+        'SHOPIFY_LAUNCH_CONNECTION_ID_MISSING'
+      );
+
+    }
+
+
+    if (
+      !workspaceId
+      ||
+      !brandId
+    ) {
+
+      throw new Error(
+        'SHOPIFY_LAUNCH_TENANT_IDENTITY_MISSING'
+      );
+
+    }
+
+
+    if (!providerAccountId) {
+
+      throw new Error(
+        'SHOPIFY_LAUNCH_PROVIDER_ACCOUNT_ID_MISSING'
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. CANONICAL GROWTH OS TENANT
+    // ========================================================
+
+    const tenant =
+      await resolveTenantContextById(
+
+        workspaceId,
+
+        brandId
+
+      );
+
+
+    // ========================================================
+    // 7. CONNECTOR LIFECYCLE STATE
+    // ========================================================
+
+    const metadata =
+      normalizeMetadata(
+        account.metadata
+      );
+
+
+    const setupStatus =
+      String(
+        metadata.setup_status
+        ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+
+    const installationStatus =
+      String(
+        metadata.installation_status
+        ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+
+
+    // ========================================================
+    // 8. UNINSTALLED → REAUTHORIZE
+    //
+    // Historical Growth OS tenant/account mapping remains.
+    //
+    // But the Shopify installation is no longer active.
+    //
+    // Do NOT create a Growth OS session before Shopify
+    // reauthorization succeeds.
+    // ========================================================
+
+    if (
+      installationStatus ===
+        'uninstalled'
+    ) {
 
       const installUrl =
         new URL(
@@ -281,27 +515,21 @@ export async function GET(
 
 
     // ========================================================
-    // 5. CANONICAL TENANT
-    // ========================================================
-
-    const tenant =
-      await resolveTenantContextById(
-
-        account.workspace_id,
-
-        account.brand_id
-
-      );
-
-
-    // ========================================================
-    // 6. CREATE GROWTH OS SHOPIFY SESSION
+    // 9. CREATE TENANT-AWARE GROWTH OS SESSION
+    //
+    // At this point:
+    //
+    // Shopify launch is verified
+    // store exists in Growth OS
+    // installation is not explicitly uninstalled
+    //
+    // setup may still be required.
     // ========================================================
 
     await setGrowthOsSessionCookie({
 
       userId:
-        `shopify:${account.provider_account_id}`,
+        `shopify:${providerAccountId}`,
 
       workspaceId:
         tenant.workspaceId,
@@ -322,44 +550,26 @@ export async function GET(
 
 
     // ========================================================
-    // 7. CONNECTOR SETUP STATE
+    // 10. SETUP REQUIRED
     //
-    // Legacy existing installations have no setup_status.
+    // FAIL CLOSED.
     //
-    // IMPORTANT:
+    // ONLY explicit:
     //
-    // Missing status is treated as READY so Brillare and other
-    // established connections are not suddenly forced through
-    // onboarding.
+    // setup_status = ready
     //
-    // New installations explicitly receive:
+    // may enter the dashboard.
     //
-    // setup_status = required
-    // ========================================================
-
-    const metadata =
-      normalizeMetadata(
-        account.metadata
-      );
-
-
-    const setupStatus =
-      String(
-        metadata.setup_status
-        ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
-
-
-    // ========================================================
-    // 8. NEW INSTALL — SETUP REQUIRED
+    // Therefore:
+    //
+    // required → setup
+    // NULL     → setup
+    // unknown  → setup
     // ========================================================
 
     if (
-      setupStatus ===
-      'required'
+      setupStatus !==
+        'ready'
     ) {
 
       const setupUrl =
@@ -371,7 +581,7 @@ export async function GET(
 
       setupUrl.searchParams.set(
         'connectionId',
-        account.connection_id
+        connectionId
       );
 
 
@@ -383,13 +593,7 @@ export async function GET(
 
 
     // ========================================================
-    // 9. NORMAL EXISTING STORE
-    //
-    // setup_status = ready
-    //
-    // OR
-    //
-    // legacy account with no setup_status.
+    // 11. READY → DASHBOARD
     // ========================================================
 
     return NextResponse.redirect(
@@ -400,6 +604,18 @@ export async function GET(
   } catch (
     error: any
   ) {
+
+    // ========================================================
+    // SAFE ERROR HANDLING
+    //
+    // Never log:
+    //
+    // access token
+    // refresh token
+    // Shopify secret
+    // OAuth state
+    // HMAC
+    // ========================================================
 
     const message =
       String(
@@ -417,6 +633,30 @@ export async function GET(
     );
 
 
+    let status =
+      403;
+
+
+    if (
+      message.includes(
+        'CONNECTION_ID_MISSING'
+      )
+      ||
+      message.includes(
+        'TENANT_IDENTITY_MISSING'
+      )
+      ||
+      message.includes(
+        'PROVIDER_ACCOUNT_ID_MISSING'
+      )
+    ) {
+
+      status =
+        500;
+
+    }
+
+
     return NextResponse.json(
       {
 
@@ -426,13 +666,15 @@ export async function GET(
         authenticated:
           false,
 
+        step:
+          'SHOPIFY_APP_LAUNCH',
+
         error:
           message,
 
       },
       {
-        status:
-          403,
+        status,
       }
     );
 

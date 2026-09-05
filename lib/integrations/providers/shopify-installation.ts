@@ -384,6 +384,13 @@ export async function registerShopifyIntegration(
         ingestion_mode:
           'hybrid',
 
+        installation_status:
+          'installed',
+
+        installed_at:
+          new Date()
+            .toISOString(),  
+
   // --------------------------------------------------------
   // CONNECTOR ONBOARDING STATE
   //
