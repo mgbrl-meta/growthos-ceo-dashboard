@@ -12,6 +12,7 @@
   "dependencies": {
     "@google-cloud/bigquery": "^9.0.3",
     "@google-cloud/secret-manager": "^7.0.0",
+    "@google-cloud/storage": "^8.0.1",
     "express": "^5.1.0"
   }
 }

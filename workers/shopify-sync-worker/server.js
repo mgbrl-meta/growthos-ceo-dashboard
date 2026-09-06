@@ -22,6 +22,20 @@ import {
 } from './shopify-bulk-loader.js';
 
 import {
+  stageShopifyBulkResult,
+} from './shopify-gcs.js';
+
+import {
+  buildShopifyStageTableId,
+  loadShopifyBulkGcsToStage,
+} from './shopify-bq-stage.js';
+
+import {
+  analyzeShopifyBulkStage,
+  writeShopifyBulkStage,
+} from './shopify-bulk-warehouse.js';
+
+import {
   claimBackfillWindow,
   claimBackfillLoad,
   getBackfillWindow,
@@ -29,7 +43,6 @@ import {
   markBackfillResultReady,
   markBackfillBulkFailed,
   markBackfillLoadCompleted,
-  recoverStaleBackfillClaims,
   releaseBackfillWindowClaim,
   releaseBackfillLoadClaim,
 } from './shopify-backfill-state.js';
@@ -45,7 +58,8 @@ const app =
 
 app.use(
   express.json({
-    limit: '10mb',
+    limit:
+      '10mb',
   })
 );
 
@@ -115,6 +129,153 @@ function requireString(
 
 
 // ============================================================
+// SHOPIFY IDENTITY
+// ============================================================
+
+function requireShopifyIdentity(
+  input
+) {
+
+  return {
+
+    workspaceId:
+      requireString(
+        input?.workspaceId,
+        'SHOPIFY_JOB_WORKSPACE_MISSING'
+      ),
+
+    brandId:
+      requireString(
+        input?.brandId,
+        'SHOPIFY_JOB_BRAND_MISSING'
+      ),
+
+    connectionId:
+      requireString(
+        input?.connectionId,
+        'SHOPIFY_JOB_CONNECTION_MISSING'
+      ),
+
+    integrationAccountId:
+      requireString(
+        input?.integrationAccountId,
+        'SHOPIFY_JOB_ACCOUNT_MISSING'
+      ),
+
+    providerAccountId:
+      requireString(
+        input?.providerAccountId,
+        'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
+      ),
+
+  };
+
+}
+
+
+// ============================================================
+// BACKFILL IDENTITY
+// ============================================================
+
+function requireBackfillIdentity(
+  input
+) {
+
+  return {
+
+    workspaceId:
+      requireString(
+        input?.workspaceId,
+        'SHOPIFY_JOB_WORKSPACE_MISSING'
+      ),
+
+    brandId:
+      requireString(
+        input?.brandId,
+        'SHOPIFY_JOB_BRAND_MISSING'
+      ),
+
+    backfillRunId:
+      requireString(
+        input?.backfillRunId,
+        'SHOPIFY_BACKFILL_RUN_ID_MISSING'
+      ),
+
+    backfillWindowId:
+      requireString(
+        input?.backfillWindowId,
+        'SHOPIFY_BACKFILL_WINDOW_ID_MISSING'
+      ),
+
+    bulkOperationId:
+      requireString(
+        input?.bulkOperationId,
+        'SHOPIFY_BULK_OPERATION_ID_MISSING'
+      ),
+
+  };
+
+}
+
+
+// ============================================================
+// VERIFY WINDOW / BULK OPERATION
+// ============================================================
+
+async function verifyBackfillWindow(
+  input
+) {
+
+  const window =
+    await getBackfillWindow({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      backfillRunId:
+        input.backfillRunId,
+
+      backfillWindowId:
+        input.backfillWindowId,
+
+    });
+
+
+  if (!window) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_WINDOW_NOT_FOUND'
+    );
+
+  }
+
+
+  if (
+    String(
+      window.bulk_operation_id
+      ??
+      ''
+    )
+    !==
+    input.bulkOperationId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BULK_OPERATION_WINDOW_MISMATCH'
+    );
+
+  }
+
+
+  return window;
+
+}
+
+
+// ============================================================
 // DECODE PUB/SUB
 // ============================================================
 
@@ -157,16 +318,6 @@ function decodePubSubData(
 
 // ============================================================
 // VALIDATE SHOPIFY JOB
-//
-// Validation only.
-//
-// Must NOT:
-//
-// - query BigQuery
-// - call Shopify
-// - claim windows
-// - write state
-// - send HTTP responses
 // ============================================================
 
 function validateShopifyMessage(
@@ -202,7 +353,8 @@ function validateShopifyMessage(
   if (
     Number(
       payload.schemaVersion
-    ) !== 1
+    ) !==
+      1
   ) {
 
     throw new Error(
@@ -476,7 +628,7 @@ function validateShopifyMessage(
 
 
   // ==========================================================
-  // BACKFILL VALIDATION
+  // BACKFILL
   // ==========================================================
 
   if (
@@ -611,10 +763,6 @@ app.post(
 
     try {
 
-      // ======================================================
-      // PUB/SUB ENVELOPE
-      // ======================================================
-
       const message =
         req.body?.message;
 
@@ -628,19 +776,11 @@ app.post(
       }
 
 
-      // ======================================================
-      // DECODE
-      // ======================================================
-
       const payload =
         decodePubSubData(
           message.data
         );
 
-
-      // ======================================================
-      // VALIDATE
-      // ======================================================
 
       const job =
         validateShopifyMessage(
@@ -666,9 +806,6 @@ app.post(
               ??
               null,
 
-            eventType:
-              job.eventType,
-
             jobId:
               job.jobId,
 
@@ -677,15 +814,6 @@ app.post(
 
             brandId:
               job.brandId,
-
-            connectionId:
-              job.connectionId,
-
-            integrationAccountId:
-              job.integrationAccountId,
-
-            providerAccountId:
-              job.providerAccountId,
 
             durationMs:
               Date.now()
@@ -704,7 +832,7 @@ app.post(
 
 
       // ======================================================
-      // CURRENTLY ORDERS ONLY
+      // CURRENT IMPLEMENTATION: ORDERS
       // ======================================================
 
       if (
@@ -720,17 +848,13 @@ app.post(
 
 
       // ======================================================
-      // HISTORICAL BACKFILL
+      // HISTORICAL BACKFILL START
       // ======================================================
 
       if (
         job.syncType ===
           'backfill'
       ) {
-
-        // ====================================================
-        // CLAIM WINDOW
-        // ====================================================
 
         const claim =
           await claimBackfillWindow({
@@ -750,10 +874,6 @@ app.post(
           });
 
 
-        // ====================================================
-        // REDELIVERY / ALREADY CLAIMED
-        // ====================================================
-
         if (
           !claim.claimed
         ) {
@@ -769,12 +889,6 @@ app.post(
 
               jobId:
                 job.jobId,
-
-              workspaceId:
-                job.workspaceId,
-
-              brandId:
-                job.brandId,
 
               backfillRunId:
                 job.backfillRunId,
@@ -796,41 +910,10 @@ app.post(
           );
 
 
-          // ==================================================
-          // BULK OPERATION ALREADY EXISTS
-          //
-          // Normal Pub/Sub redelivery.
-          //
-          // The operation identity is already persisted, so
-          // another delivery must NOT start Shopify again.
-          // ==================================================
-
           if (
             claim.bulkOperationId
           ) {
 
-            console.log(
-              'SHOPIFY_BACKFILL_REDELIVERY_ACKNOWLEDGED',
-              {
-
-                jobId:
-                  job.jobId,
-
-                backfillRunId:
-                  job.backfillRunId,
-
-                backfillWindowId:
-                  job.backfillWindowId,
-
-                status:
-                  claim.status
-                  ??
-                  null,
-
-              }
-            );
-
-
             return res
               .status(204)
               .end();
@@ -838,114 +921,12 @@ app.post(
           }
 
 
-          // ==================================================
-          // STARTING WITHOUT BULK OPERATION ID
-          //
-          // IMPORTANT:
-          //
-          // Previously this threw:
-          //
-          // SHOPIFY_BACKFILL_WINDOW_ALREADY_CLAIMED
-          //
-          // which returned HTTP 500 and caused Pub/Sub to retry
-          // forever.
-          //
-          // We now ACK the duplicate message.
-          //
-          // A separate recovery process decides whether the
-          // stale claim should become retry_wait.
-          // ==================================================
-
-          if (
-            claim.status ===
-              'starting'
-          ) {
-
-            console.log(
-              'SHOPIFY_BACKFILL_STARTING_ACKNOWLEDGED',
-              {
-
-                pubsubMessageId:
-                  message.messageId
-                  ??
-                  null,
-
-                jobId:
-                  job.jobId,
-
-                workspaceId:
-                  job.workspaceId,
-
-                brandId:
-                  job.brandId,
-
-                backfillRunId:
-                  job.backfillRunId,
-
-                backfillWindowId:
-                  job.backfillWindowId,
-
-              }
-            );
-
-
-            return res
-              .status(204)
-              .end();
-
-          }
-
-
-          // ==================================================
-          // OTHER NON-RUNNABLE STATE
-          //
-          // Duplicate Pub/Sub delivery should not become a
-          // poison retry loop.
-          // ==================================================
-
-          console.log(
-            'SHOPIFY_BACKFILL_DELIVERY_IGNORED',
-            {
-
-              pubsubMessageId:
-                message.messageId
-                ??
-                null,
-
-              jobId:
-                job.jobId,
-
-              workspaceId:
-                job.workspaceId,
-
-              brandId:
-                job.brandId,
-
-              backfillRunId:
-                job.backfillRunId,
-
-              backfillWindowId:
-                job.backfillWindowId,
-
-              status:
-                claim.status
-                ??
-                null,
-
-            }
+          throw new Error(
+            'SHOPIFY_BACKFILL_WINDOW_ALREADY_CLAIMED'
           );
-
-
-          return res
-            .status(204)
-            .end();
 
         }
 
-
-        // ====================================================
-        // SECURE SHOPIFY CONTEXT
-        // ====================================================
 
         const runtime =
           await resolveShopifyRuntimeContext(
@@ -955,10 +936,6 @@ app.post(
 
         let operation;
 
-
-        // ====================================================
-        // START SHOPIFY BULK OPERATION
-        // ====================================================
 
         try {
 
@@ -982,12 +959,6 @@ app.post(
         } catch (
           error
         ) {
-
-          // ==================================================
-          // SHOPIFY OPERATION DID NOT START
-          //
-          // Release the claim so a future job may retry.
-          // ==================================================
 
           await releaseBackfillWindowClaim({
 
@@ -1016,10 +987,6 @@ app.post(
         }
 
 
-        // ====================================================
-        // RECORD BULK OPERATION
-        // ====================================================
-
         await markBackfillBulkStarted({
 
           workspaceId:
@@ -1043,10 +1010,6 @@ app.post(
         });
 
 
-        // ====================================================
-        // SAFE LOG
-        // ====================================================
-
         console.log(
           'SHOPIFY_BULK_OPERATION_STARTED',
           {
@@ -1065,32 +1028,11 @@ app.post(
             brandId:
               job.brandId,
 
-            connectionId:
-              job.connectionId,
-
-            integrationAccountId:
-              job.integrationAccountId,
-
-            providerAccountId:
-              job.providerAccountId,
-
-            entity:
-              job.entity,
-
-            syncType:
-              job.syncType,
-
             backfillRunId:
               job.backfillRunId,
 
             backfillWindowId:
               job.backfillWindowId,
-
-            windowFrom:
-              job.window.from,
-
-            windowTo:
-              job.window.to,
 
             bulkOperationId:
               operation.id,
@@ -1118,7 +1060,7 @@ app.post(
 
 
       // ======================================================
-      // MANUAL / NORMAL ORDERS
+      // NORMAL / INCREMENTAL ORDERS
       // ======================================================
 
       const runtime =
@@ -1192,34 +1134,18 @@ app.post(
           brandId:
             job.brandId,
 
-          connectionId:
-            job.connectionId,
-
-          integrationAccountId:
-            job.integrationAccountId,
-
-          providerAccountId:
-            job.providerAccountId,
-
           entity:
             'orders',
-
-          syncType:
-            job.syncType,
 
           recordsFetched:
             page.orders.length,
 
           hasNextPage:
-            page
-              .pageInfo
-              .hasNextPage,
+            page.pageInfo.hasNextPage,
 
           cursorPresent:
             Boolean(
-              page
-                .pageInfo
-                .endCursor
+              page.pageInfo.endCursor
             ),
 
           firstOrderId:
@@ -1278,7 +1204,7 @@ app.post(
       error
     ) {
 
-      const errorMessage =
+      const message =
         String(
           error?.message
           ||
@@ -1290,8 +1216,7 @@ app.post(
         'SHOPIFY_WORKER_MESSAGE_FAILED',
         {
 
-          message:
-            errorMessage,
+          message,
 
           durationMs:
             Date.now()
@@ -1321,8 +1246,7 @@ app.post(
 
 
 // ============================================================
-// Q3E-3
-// BACKFILL BULK OPERATION STATUS
+// BACKFILL STATUS
 // ============================================================
 
 app.post(
@@ -1345,101 +1269,21 @@ app.post(
         {};
 
 
-      const job = {
-
-        workspaceId:
-          requireString(
-            input.workspaceId,
-            'SHOPIFY_JOB_WORKSPACE_MISSING'
-          ),
-
-        brandId:
-          requireString(
-            input.brandId,
-            'SHOPIFY_JOB_BRAND_MISSING'
-          ),
-
-        connectionId:
-          requireString(
-            input.connectionId,
-            'SHOPIFY_JOB_CONNECTION_MISSING'
-          ),
-
-        integrationAccountId:
-          requireString(
-            input.integrationAccountId,
-            'SHOPIFY_JOB_ACCOUNT_MISSING'
-          ),
-
-        providerAccountId:
-          requireString(
-            input.providerAccountId,
-            'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
-          ),
-
-      };
-
-
-      const backfillRunId =
-        requireString(
-          input.backfillRunId,
-          'SHOPIFY_BACKFILL_RUN_ID_MISSING'
+      const job =
+        requireShopifyIdentity(
+          input
         );
 
 
-      const backfillWindowId =
-        requireString(
-          input.backfillWindowId,
-          'SHOPIFY_BACKFILL_WINDOW_ID_MISSING'
+      const identity =
+        requireBackfillIdentity(
+          input
         );
 
 
-      const bulkOperationId =
-        requireString(
-          input.bulkOperationId,
-          'SHOPIFY_BULK_OPERATION_ID_MISSING'
-        );
-
-
-      const window =
-        await getBackfillWindow({
-
-          workspaceId:
-            job.workspaceId,
-
-          brandId:
-            job.brandId,
-
-          backfillRunId,
-
-          backfillWindowId,
-
-        });
-
-
-      if (!window) {
-
-        throw new Error(
-          'SHOPIFY_BACKFILL_WINDOW_NOT_FOUND'
-        );
-
-      }
-
-
-      if (
-        String(
-          window.bulk_operation_id
-          ??
-          ''
-        ) !==
-        bulkOperationId
-      ) {
-
-        throw new Error(
-          'SHOPIFY_BULK_OPERATION_WINDOW_MISMATCH'
-        );
-
-      }
+      await verifyBackfillWindow(
+        identity
+      );
 
 
       const runtime =
@@ -1453,7 +1297,7 @@ app.post(
 
           runtime,
 
-          bulkOperationId
+          identity.bulkOperationId
 
         );
 
@@ -1479,14 +1323,16 @@ app.post(
         await markBackfillResultReady({
 
           workspaceId:
-            job.workspaceId,
+            identity.workspaceId,
 
           brandId:
-            job.brandId,
+            identity.brandId,
 
-          backfillRunId,
+          backfillRunId:
+            identity.backfillRunId,
 
-          backfillWindowId,
+          backfillWindowId:
+            identity.backfillWindowId,
 
           bulkOperationId:
             operation.id,
@@ -1523,14 +1369,16 @@ app.post(
         await markBackfillBulkFailed({
 
           workspaceId:
-            job.workspaceId,
+            identity.workspaceId,
 
           brandId:
-            job.brandId,
+            identity.brandId,
 
-          backfillRunId,
+          backfillRunId:
+            identity.backfillRunId,
 
-          backfillWindowId,
+          backfillWindowId:
+            identity.backfillWindowId,
 
           bulkOperationId:
             operation.id,
@@ -1559,14 +1407,16 @@ app.post(
         {
 
           workspaceId:
-            job.workspaceId,
+            identity.workspaceId,
 
           brandId:
-            job.brandId,
+            identity.brandId,
 
-          backfillRunId,
+          backfillRunId:
+            identity.backfillRunId,
 
-          backfillWindowId,
+          backfillWindowId:
+            identity.backfillWindowId,
 
           bulkOperationId:
             operation.id,
@@ -1588,16 +1438,8 @@ app.post(
               operation.url
             ),
 
-          partialDataUrlPresent:
-            Boolean(
-              operation.partialDataUrl
-            ),
-
           completedAt:
             operation.completedAt,
-
-          tokenRefreshed:
-            operation.tokenRefreshed,
 
           durationMs:
             Date.now()
@@ -1678,14 +1520,7 @@ app.post(
       console.error(
         'SHOPIFY_BACKFILL_STATUS_FAILED',
         {
-
           message,
-
-          durationMs:
-            Date.now()
-            -
-            startedAt,
-
         }
       );
 
@@ -1711,8 +1546,13 @@ app.post(
 
 
 // ============================================================
-// Q3E-4
-// LOAD SHOPIFY BULK JSONL
+// LEGACY JSONL → 250-ROW WRITER
+//
+// Keep temporarily as fallback / benchmark.
+//
+// New full-history path uses:
+//
+// GCS → BigQuery stage → bulk warehouse.
 // ============================================================
 
 app.post(
@@ -1743,113 +1583,43 @@ app.post(
         {};
 
 
-      const job = {
-
-        workspaceId:
-          requireString(
-            input.workspaceId,
-            'SHOPIFY_JOB_WORKSPACE_MISSING'
-          ),
-
-        brandId:
-          requireString(
-            input.brandId,
-            'SHOPIFY_JOB_BRAND_MISSING'
-          ),
-
-        connectionId:
-          requireString(
-            input.connectionId,
-            'SHOPIFY_JOB_CONNECTION_MISSING'
-          ),
-
-        integrationAccountId:
-          requireString(
-            input.integrationAccountId,
-            'SHOPIFY_JOB_ACCOUNT_MISSING'
-          ),
-
-        providerAccountId:
-          requireString(
-            input.providerAccountId,
-            'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
-          ),
-
-      };
-
-
-      const backfillRunId =
-        requireString(
-          input.backfillRunId,
-          'SHOPIFY_BACKFILL_RUN_ID_MISSING'
+      const job =
+        requireShopifyIdentity(
+          input
         );
 
 
-      const backfillWindowId =
-        requireString(
-          input.backfillWindowId,
-          'SHOPIFY_BACKFILL_WINDOW_ID_MISSING'
-        );
-
-
-      const bulkOperationId =
-        requireString(
-          input.bulkOperationId,
-          'SHOPIFY_BULK_OPERATION_ID_MISSING'
+      const identity =
+        requireBackfillIdentity(
+          input
         );
 
 
       stateInput = {
 
         workspaceId:
-          job.workspaceId,
+          identity.workspaceId,
 
         brandId:
-          job.brandId,
+          identity.brandId,
 
-        backfillRunId,
+        backfillRunId:
+          identity.backfillRunId,
 
-        backfillWindowId,
+        backfillWindowId:
+          identity.backfillWindowId,
 
-        bulkOperationId,
+        bulkOperationId:
+          identity.bulkOperationId,
 
       };
 
 
       const window =
-        await getBackfillWindow(
-          stateInput
+        await verifyBackfillWindow(
+          identity
         );
 
-
-      if (!window) {
-
-        throw new Error(
-          'SHOPIFY_BACKFILL_WINDOW_NOT_FOUND'
-        );
-
-      }
-
-
-      if (
-        String(
-          window.bulk_operation_id
-          ??
-          ''
-        ) !==
-        bulkOperationId
-      ) {
-
-        throw new Error(
-          'SHOPIFY_BULK_OPERATION_WINDOW_MISMATCH'
-        );
-
-      }
-
-
-      // ======================================================
-      // IDEMPOTENT COMPLETED CALL
-      // ======================================================
 
       if (
         window.status ===
@@ -1877,16 +1647,12 @@ app.post(
         );
 
 
-      // ======================================================
-      // GET FRESH SIGNED RESULT URL
-      // ======================================================
-
       const operation =
         await getBulkOperation(
 
           runtime,
 
-          bulkOperationId
+          identity.bulkOperationId
 
         );
 
@@ -1911,10 +1677,6 @@ app.post(
 
       }
 
-
-      // ======================================================
-      // CLAIM LOAD
-      // ======================================================
 
       const loadClaim =
         await claimBackfillLoad(
@@ -1957,10 +1719,6 @@ app.post(
         true;
 
 
-      // ======================================================
-      // STREAM JSONL
-      // ======================================================
-
       const load =
         await loadOrdersBulkJsonl({
 
@@ -1984,10 +1742,6 @@ app.post(
 
         });
 
-
-      // ======================================================
-      // MARK COMPLETE
-      // ======================================================
 
       await markBackfillLoadCompleted({
 
@@ -2019,26 +1773,17 @@ app.post(
           brandId:
             job.brandId,
 
-          backfillRunId,
+          backfillRunId:
+            identity.backfillRunId,
 
-          backfillWindowId,
+          backfillWindowId:
+            identity.backfillWindowId,
 
-          bulkOperationId,
-
-          linesReceived:
-            load.linesReceived,
+          bulkOperationId:
+            identity.bulkOperationId,
 
           ordersReceived:
             load.ordersReceived,
-
-          ignoredLines:
-            load.ignoredLines,
-
-          batches:
-            load.batches,
-
-          batchSize:
-            load.batchSize,
 
           warehouseChanged:
             load.changed,
@@ -2147,14 +1892,7 @@ app.post(
       console.error(
         'SHOPIFY_BACKFILL_JSONL_LOAD_FAILED',
         {
-
           message,
-
-          durationMs:
-            Date.now()
-            -
-            startedAt,
-
         }
       );
 
@@ -2180,33 +1918,15 @@ app.post(
 
 
 // ============================================================
-// Q3E-5A
-// RECOVER STALE BACKFILL CLAIMS
+// Q3E-6B-2
 //
-// Temporary private endpoint.
+// SHOPIFY SIGNED JSONL → GCS
 //
-// Finds:
-//
-// status = starting
-// bulk_operation_id = NULL
-// stale beyond recovery threshold
-//
-// and converts:
-//
-// starting
-//    ↓
-// retry_wait
-//
-// IMPORTANT:
-//
-// This endpoint does NOT start Shopify.
-// It only repairs operational state.
-//
-// Q3E-5B will republish retry_wait windows.
+// No BigQuery warehouse changes.
 // ============================================================
 
 app.post(
-  '/internal/shopify/recover-stale-backfills',
+  '/internal/shopify/backfill-stage',
 
   async (
     req,
@@ -2225,40 +1945,123 @@ app.post(
         {};
 
 
-      const workspaceId =
-        requireString(
-          input.workspaceId,
-          'SHOPIFY_JOB_WORKSPACE_MISSING'
+      const job =
+        requireShopifyIdentity(
+          input
         );
 
 
-      const brandId =
-        requireString(
-          input.brandId,
-          'SHOPIFY_JOB_BRAND_MISSING'
+      const identity =
+        requireBackfillIdentity(
+          input
         );
 
 
-      const result =
-        await recoverStaleBackfillClaims({
+      await verifyBackfillWindow(
+        identity
+      );
 
-          workspaceId,
 
-          brandId,
+      const runtime =
+        await resolveShopifyRuntimeContext(
+          job
+        );
+
+
+      const operation =
+        await getBulkOperation(
+
+          runtime,
+
+          identity.bulkOperationId
+
+        );
+
+
+      if (
+        operation.status !==
+          'COMPLETED'
+      ) {
+
+        throw new Error(
+          `SHOPIFY_BULK_NOT_READY_${operation.status}`
+        );
+
+      }
+
+
+      if (!operation.url) {
+
+        throw new Error(
+          'SHOPIFY_BULK_RESULT_URL_MISSING'
+        );
+
+      }
+
+
+      const staged =
+        await stageShopifyBulkResult({
+
+          resultUrl:
+            operation.url,
+
+          workspaceId:
+            job.workspaceId,
+
+          brandId:
+            job.brandId,
+
+          integrationAccountId:
+            job.integrationAccountId,
+
+          entity:
+            'orders',
+
+          backfillRunId:
+            identity.backfillRunId,
+
+          backfillWindowId:
+            identity.backfillWindowId,
+
+          bulkOperationId:
+            identity.bulkOperationId,
+
+          expectedFileSize:
+            operation.fileSize,
 
         });
 
 
       console.log(
-        'SHOPIFY_STALE_BACKFILLS_RECOVERED',
+        'SHOPIFY_BACKFILL_GCS_STAGED',
         {
 
-          workspaceId,
+          workspaceId:
+            job.workspaceId,
 
-          brandId,
+          brandId:
+            job.brandId,
 
-          recovered:
-            result.recovered,
+          backfillRunId:
+            identity.backfillRunId,
+
+          backfillWindowId:
+            identity.backfillWindowId,
+
+          bulkOperationId:
+            identity.bulkOperationId,
+
+          reused:
+            staged.reused,
+
+          gcsUri:
+            staged.gcsUri,
+
+          sizeBytes:
+            staged.sizeBytes,
+
+          sizeMatchesExpected:
+            staged.sizeMatchesExpected,
 
           durationMs:
             Date.now()
@@ -2276,8 +2079,7 @@ app.post(
           ok:
             true,
 
-          recovered:
-            result.recovered,
+          staged,
 
           durationMs:
             Date.now()
@@ -2295,12 +2097,389 @@ app.post(
         String(
           error?.message
           ||
-          'Unable to recover stale Shopify backfills'
+          'Unable to stage Shopify Bulk result'
         );
 
 
       console.error(
-        'SHOPIFY_STALE_BACKFILL_RECOVERY_FAILED',
+        'SHOPIFY_BACKFILL_GCS_STAGE_FAILED',
+        {
+          message,
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_BACKFILL_GCS_STAGE_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// Q3E-6B-3
+//
+// GCS → LOSSLESS BIGQUERY STAGE
+//
+// One JSONL line = one payload_raw STRING.
+//
+// No RAW/STATE changes.
+// ============================================================
+
+app.post(
+  '/internal/shopify/backfill-stage-load',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const input =
+        req.body
+        ??
+        {};
+
+
+      const identity =
+        requireBackfillIdentity(
+          input
+        );
+
+
+      const gcsUri =
+        requireString(
+          input.gcsUri,
+          'SHOPIFY_STAGE_GCS_URI_MISSING'
+        );
+
+
+      await verifyBackfillWindow(
+        identity
+      );
+
+
+      const staged =
+        await loadShopifyBulkGcsToStage({
+
+          gcsUri,
+
+          backfillRunId:
+            identity.backfillRunId,
+
+          backfillWindowId:
+            identity.backfillWindowId,
+
+        });
+
+
+      console.log(
+        'SHOPIFY_BACKFILL_BIGQUERY_STAGED',
+        {
+
+          workspaceId:
+            identity.workspaceId,
+
+          brandId:
+            identity.brandId,
+
+          backfillRunId:
+            identity.backfillRunId,
+
+          backfillWindowId:
+            identity.backfillWindowId,
+
+          table:
+            staged.fullyQualifiedTable,
+
+          rowsLoaded:
+            staged.rowsLoaded,
+
+          schemaMode:
+            staged.schemaMode,
+
+          sourceSizeBytes:
+            staged.sourceSizeBytes,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          staged,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          'Unable to load Shopify staging table'
+        );
+
+
+      console.error(
+        'SHOPIFY_BACKFILL_BIGQUERY_STAGE_FAILED',
+        {
+          message,
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_BACKFILL_BIGQUERY_STAGE_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// Q3E-6B-4
+//
+// LOSSLESS STAGE → CANONICAL WAREHOUSE
+//
+// DEFAULT:
+// commit = false
+//
+// Analysis-only.
+//
+// Writes require:
+// commit = true
+//
+// IMPORTANT:
+//
+// Do NOT use commit=true until canonical compatibility test
+// shows rawHashMissing = 0 for our existing 18,111-order file.
+// ============================================================
+
+app.post(
+  '/internal/shopify/backfill-warehouse',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const input =
+        req.body
+        ??
+        {};
+
+
+      const identity =
+        requireBackfillIdentity(
+          input
+        );
+
+
+      const window =
+        await verifyBackfillWindow(
+          identity
+        );
+
+
+      const integrationAccountId =
+        requireString(
+          window.integration_account_id,
+          'SHOPIFY_BACKFILL_INTEGRATION_ACCOUNT_MISSING'
+        );
+
+
+      const stageTableId =
+        buildShopifyStageTableId({
+
+          backfillRunId:
+            identity.backfillRunId,
+
+          backfillWindowId:
+            identity.backfillWindowId,
+
+        });
+
+
+      const commit =
+        input.commit ===
+          true;
+
+
+      const result =
+        commit
+
+          ?
+            await writeShopifyBulkStage({
+
+              workspaceId:
+                identity.workspaceId,
+
+              brandId:
+                identity.brandId,
+
+              integrationAccountId,
+
+              stageTableId,
+
+            })
+
+          :
+            await analyzeShopifyBulkStage({
+
+              workspaceId:
+                identity.workspaceId,
+
+              brandId:
+                identity.brandId,
+
+              integrationAccountId,
+
+              stageTableId,
+
+            });
+
+
+      console.log(
+        'SHOPIFY_BACKFILL_WAREHOUSE_RESULT',
+        {
+
+          workspaceId:
+            identity.workspaceId,
+
+          brandId:
+            identity.brandId,
+
+          backfillRunId:
+            identity.backfillRunId,
+
+          backfillWindowId:
+            identity.backfillWindowId,
+
+          bulkOperationId:
+            identity.bulkOperationId,
+
+          commit,
+
+          received:
+            result.received,
+
+          rawHashPresent:
+            result.rawHashPresent
+            ??
+            null,
+
+          rawHashMissing:
+            result.rawHashMissing
+            ??
+            null,
+
+          changed:
+            result.changed
+            ??
+            null,
+
+          loaded:
+            result.loaded
+            ??
+            null,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          commit,
+
+          result,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          'Shopify bulk warehouse failed'
+        );
+
+
+      console.error(
+        'SHOPIFY_BACKFILL_WAREHOUSE_FAILED',
         {
 
           message,
@@ -2322,7 +2501,7 @@ app.post(
             false,
 
           error:
-            'SHOPIFY_STALE_BACKFILL_RECOVERY_FAILED',
+            'SHOPIFY_BACKFILL_WAREHOUSE_FAILED',
 
           message,
 

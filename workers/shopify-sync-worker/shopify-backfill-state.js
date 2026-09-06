@@ -3,6 +3,10 @@ import {
 } from '@google-cloud/bigquery';
 
 
+// ============================================================
+// CONFIG
+// ============================================================
+
 const PROJECT_ID =
   String(
     process.env.GCP_PROJECT_ID
@@ -50,24 +54,10 @@ const bigquery =
 // ============================================================
 // RUN DML
 //
-// IMPORTANT:
+// We need the real BigQuery Job because:
+// statistics.query.numDmlAffectedRows
 //
-// bigquery.query() is convenient for normal queries but we
-// need the actual BigQuery Job here because:
-//
-// numDmlAffectedRows
-//
-// is stored in the query-job metadata.
-//
-// Therefore:
-//
-// createQueryJob
-//      ↓
-// wait for completion
-//      ↓
-// getMetadata
-//      ↓
-// numDmlAffectedRows
+// is used for conditional state transitions.
 // ============================================================
 
 async function runDml(
@@ -87,7 +77,7 @@ async function runDml(
     });
 
 
-  // Wait for DML execution to complete.
+  // Wait until the DML operation finishes.
   await job.getQueryResults();
 
 
@@ -126,7 +116,22 @@ async function runDml(
 
 
 // ============================================================
-// GET WINDOW
+// GET BACKFILL WINDOW
+// ============================================================
+// ============================================================
+// GET BACKFILL WINDOW
+//
+// The backfill window is the authoritative execution context.
+//
+// Callers should NOT need to resend:
+//
+// - connection_id
+// - integration_account_id
+// - provider_account_id
+// - entity
+// - historical range
+//
+// Those identities were persisted when the plan was created.
 // ============================================================
 
 export async function getBackfillWindow(
@@ -143,22 +148,39 @@ export async function getBackfillWindow(
         SELECT
 
           backfill_window_id,
-
           backfill_run_id,
 
           workspace_id,
-
           brand_id,
+
+          connection_id,
+          integration_account_id,
+          provider_account_id,
+
+          entity,
+
+          window_start,
+          window_end,
 
           status,
 
           bulk_operation_id,
-
           bulk_operation_status,
 
+          bulk_object_count,
+          bulk_file_size_bytes,
+
+          records_received,
+          records_loaded,
+          records_skipped,
+
           attempt_count,
+          next_retry_at,
 
           started_at,
+          result_ready_at,
+          loading_started_at,
+          completed_at,
 
           updated_at,
 
@@ -204,6 +226,22 @@ export async function getBackfillWindow(
 
       },
 
+      types: {
+
+        backfill_window_id:
+          'STRING',
+
+        backfill_run_id:
+          'STRING',
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+      },
+
     });
 
 
@@ -218,13 +256,15 @@ export async function getBackfillWindow(
 // CLAIM BACKFILL WINDOW
 //
 // queued
-//     ↓
+// retry_wait
+// dispatching
+//      ↓
 // starting
 //
-// The conditional UPDATE gives us the claim.
+// dispatching is included because Q3E-5B reserves a window
+// before publishing its Pub/Sub message.
 //
-// Only a row still in queued/retry_wait and without a recorded
-// Shopify operation may be claimed.
+// Conditional UPDATE is the concurrency lock.
 // ============================================================
 
 export async function claimBackfillWindow(
@@ -253,6 +293,9 @@ export async function claimBackfillWindow(
               CURRENT_TIMESTAMP()
             ),
 
+          next_retry_at =
+            NULL,
+
           updated_at =
             CURRENT_TIMESTAMP(),
 
@@ -276,7 +319,8 @@ export async function claimBackfillWindow(
           AND status IN
             (
               'queued',
-              'retry_wait'
+              'retry_wait',
+              'dispatching'
             )
 
           AND bulk_operation_id
@@ -327,7 +371,7 @@ export async function claimBackfillWindow(
   // ==========================================================
   // NOT CLAIMED
   //
-  // Determine why.
+  // Determine existing state for idempotency / retry handling.
   // ==========================================================
 
   const existing =
@@ -378,14 +422,16 @@ export async function claimBackfillWindow(
 
 
 // ============================================================
-// RELEASE CLAIM
+// RELEASE BACKFILL START CLAIM
 //
-// Used ONLY when Shopify Bulk Operation itself failed before
-// Shopify returned an operation ID.
+// Used only when Shopify Bulk Operation did NOT successfully
+// start.
 //
 // starting
-//     ↓
+//      ↓
 // queued
+//
+// Pub/Sub may safely retry.
 // ============================================================
 
 export async function releaseBackfillWindowClaim(
@@ -404,6 +450,9 @@ export async function releaseBackfillWindowClaim(
 
           status =
             'queued',
+
+          next_retry_at =
+            NULL,
 
           error =
             @error,
@@ -470,18 +519,16 @@ export async function releaseBackfillWindowClaim(
 
 
 // ============================================================
-// MARK BULK STARTED
+// MARK SHOPIFY BULK STARTED
 //
 // starting
-//     ↓
+//      ↓
 // running
 //
-// Shopify Bulk Operation ID is now persisted.
+// This persists the Shopify Bulk Operation ID.
 //
-// IMPORTANT:
-//
-// Run counters are modified only if THIS invocation performs
-// the state transition.
+// Run counters move only when THIS invocation performs the
+// transition.
 // ============================================================
 
 export async function markBackfillBulkStarted(
@@ -569,7 +616,7 @@ export async function markBackfillBulkStarted(
   ) {
 
     // ========================================================
-    // RUN COUNTERS
+    // UPDATE PARENT RUN
     // ========================================================
 
     await runDml({
@@ -645,7 +692,7 @@ export async function markBackfillBulkStarted(
 
 
   // ==========================================================
-  // POSSIBLE IDEMPOTENT REDELIVERY
+  // IDEMPOTENT REDELIVERY
   // ==========================================================
 
   const existing =
@@ -677,6 +724,7 @@ export async function markBackfillBulkStarted(
 
 }
 
+
 // ============================================================
 // MARK RESULT READY
 //
@@ -684,12 +732,7 @@ export async function markBackfillBulkStarted(
 //      ↓
 // result_ready
 //
-// IMPORTANT:
-//
-// The signed Shopify JSONL URL is intentionally NOT stored
-// in BigQuery.
-//
-// It expires and grants temporary access to exported data.
+// Shopify signed JSONL URL is intentionally NOT stored.
 // ============================================================
 
 export async function markBackfillResultReady(
@@ -719,7 +762,10 @@ export async function markBackfillResultReady(
             @bulk_file_size_bytes,
 
           result_ready_at =
-            CURRENT_TIMESTAMP(),
+            COALESCE(
+              result_ready_at,
+              CURRENT_TIMESTAMP()
+            ),
 
           updated_at =
             CURRENT_TIMESTAMP(),
@@ -807,7 +853,7 @@ export async function markBackfillResultReady(
 
 
 // ============================================================
-// MARK BULK FAILED
+// MARK BULK OPERATION FAILED
 // ============================================================
 
 export async function markBackfillBulkFailed(
@@ -841,6 +887,9 @@ export async function markBackfillBulkFailed(
 
           updated_at =
             CURRENT_TIMESTAMP(),
+
+          next_retry_at =
+            NULL,
 
           error =
             @error
@@ -922,7 +971,7 @@ export async function markBackfillBulkFailed(
 
 
   // ==========================================================
-  // UPDATE RUN COUNTERS ONLY ON FIRST FAILURE TRANSITION
+  // UPDATE RUN COUNTERS ON FIRST FAILURE ONLY
   // ==========================================================
 
   if (
@@ -964,6 +1013,26 @@ export async function markBackfillBulkFailed(
 
               ELSE
                 status
+
+            END,
+
+          completed_at =
+            CASE
+
+              WHEN
+                completed_windows
+                +
+                failed_windows
+                +
+                1
+                >=
+                total_windows
+
+              THEN
+                CURRENT_TIMESTAMP()
+
+              ELSE
+                completed_at
 
             END,
 
@@ -1009,14 +1078,20 @@ export async function markBackfillBulkFailed(
   };
 
 }
+
+
 // ============================================================
-// CLAIM RESULT FOR LOADING
+// CLAIM JSONL RESULT FOR LOADING
 //
 // result_ready
+// retry_wait
 //      ↓
 // loading
 //
-// Only one worker may process the JSONL.
+// retry_wait is allowed here only when the caller provides the
+// existing bulk_operation_id.
+//
+// This lets failed JSONL loads replay safely.
 // ============================================================
 
 export async function claimBackfillLoad(
@@ -1037,7 +1112,10 @@ export async function claimBackfillLoad(
             'loading',
 
           loading_started_at =
-            CURRENT_TIMESTAMP(),
+            COALESCE(
+              loading_started_at,
+              CURRENT_TIMESTAMP()
+            ),
 
           next_retry_at =
             NULL,
@@ -1140,99 +1218,108 @@ export async function claimBackfillLoad(
 
 
 // ============================================================
-// RELEASE FAILED LOAD
+// RELEASE FAILED JSONL LOAD
 //
 // loading
 //      ↓
 // retry_wait
 //
-// The JSONL can safely be replayed because writeShopifyOrders
-// is hash/dedupe protected.
+// Replaying JSONL is safe because the canonical writer hashes
+// and deduplicates Orders.
 // ============================================================
 
 export async function releaseBackfillLoadClaim(
   input
 ) {
 
-  await runDml({
+  const result =
+    await runDml({
 
-    query: `
+      query: `
 
-      UPDATE
-        \`${PROJECT_ID}.${OPS_DATASET}.shopify_backfill_windows\`
+        UPDATE
+          \`${PROJECT_ID}.${OPS_DATASET}.shopify_backfill_windows\`
 
-      SET
+        SET
 
-        status =
-          'retry_wait',
+          status =
+            'retry_wait',
 
-        next_retry_at =
-          TIMESTAMP_ADD(
+          next_retry_at =
+            TIMESTAMP_ADD(
+              CURRENT_TIMESTAMP(),
+              INTERVAL 1 MINUTE
+            ),
+
+          updated_at =
             CURRENT_TIMESTAMP(),
-            INTERVAL 1 MINUTE
+
+          error =
+            @error
+
+        WHERE
+
+          backfill_window_id =
+            @backfill_window_id
+
+          AND backfill_run_id =
+            @backfill_run_id
+
+          AND workspace_id =
+            @workspace_id
+
+          AND brand_id =
+            @brand_id
+
+          AND bulk_operation_id =
+            @bulk_operation_id
+
+          AND status =
+            'loading'
+
+      `,
+
+      params: {
+
+        error:
+          String(
+            input.error
+            ||
+            'SHOPIFY_BULK_LOAD_FAILED'
           ),
 
-        updated_at =
-          CURRENT_TIMESTAMP(),
+        backfill_window_id:
+          input.backfillWindowId,
 
-        error =
-          @error
+        backfill_run_id:
+          input.backfillRunId,
 
-      WHERE
+        workspace_id:
+          input.workspaceId,
 
-        backfill_window_id =
-          @backfill_window_id
+        brand_id:
+          input.brandId,
 
-        AND backfill_run_id =
-          @backfill_run_id
+        bulk_operation_id:
+          input.bulkOperationId,
 
-        AND workspace_id =
-          @workspace_id
+      },
 
-        AND brand_id =
-          @brand_id
+    });
 
-        AND bulk_operation_id =
-          @bulk_operation_id
 
-        AND status =
-          'loading'
+  return {
 
-    `,
+    released:
+      result.affectedRows === 1,
 
-    params: {
-
-      error:
-        String(
-          input.error
-          ||
-          'SHOPIFY_BULK_LOAD_FAILED'
-        ),
-
-      backfill_window_id:
-        input.backfillWindowId,
-
-      backfill_run_id:
-        input.backfillRunId,
-
-      workspace_id:
-        input.workspaceId,
-
-      brand_id:
-        input.brandId,
-
-      bulk_operation_id:
-        input.bulkOperationId,
-
-    },
-
-  });
+  };
 
 }
 
 
 // ============================================================
-// COMPLETE LOAD
+// COMPLETE JSONL LOAD
 //
 // loading
 //      ↓
@@ -1307,21 +1394,21 @@ export async function markBackfillLoadCompleted(
         records_received:
           Number(
             input.recordsReceived
-            ||
+            ??
             0
           ),
 
         records_loaded:
           Number(
             input.recordsLoaded
-            ||
+            ??
             0
           ),
 
         records_skipped:
           Number(
             input.recordsSkipped
-            ||
+            ??
             0
           ),
 
@@ -1345,6 +1432,10 @@ export async function markBackfillLoadCompleted(
     });
 
 
+  // ==========================================================
+  // NOT TRANSITIONED
+  // ==========================================================
+
   if (
     result.affectedRows !== 1
   ) {
@@ -1355,6 +1446,7 @@ export async function markBackfillLoadCompleted(
       );
 
 
+    // Idempotent replay after successful completion.
     if (
       existing?.status ===
         'completed'
@@ -1378,7 +1470,7 @@ export async function markBackfillLoadCompleted(
 
 
   // ==========================================================
-  // UPDATE RUN
+  // UPDATE PARENT RUN
   // ==========================================================
 
   await runDml({
@@ -1457,7 +1549,10 @@ export async function markBackfillLoadCompleted(
           END,
 
         updated_at =
-          CURRENT_TIMESTAMP()
+          CURRENT_TIMESTAMP(),
+
+        error =
+          NULL
 
       WHERE
 
@@ -1477,7 +1572,7 @@ export async function markBackfillLoadCompleted(
       records_loaded:
         Number(
           input.recordsLoaded
-          ||
+          ??
           0
         ),
 
@@ -1504,115 +1599,30 @@ export async function markBackfillLoadCompleted(
 
 }
 
-// ============================================================
-// RECOVER STALE STARTING CLAIMS
-//
-// Problem:
-//
-// Worker claims:
-//
-// queued
-//   ↓
-// starting
-//
-// If the process crashes before Shopify returns / before the
-// operation ID is persisted, the window can remain:
-//
-// status = starting
-// bulk_operation_id = NULL
-//
-// We must NOT blindly start Shopify again on Pub/Sub
-// redelivery.
-//
-// Instead:
-//
-// starting + no operation + stale
-//          ↓
-// retry_wait
-//
-// Q3E-5B orchestrator will republish retry_wait windows.
-// ============================================================
-
-export async function recoverStaleBackfillClaims(
-  input
-) {
-
-  const result =
-    await runDml({
-
-      query: `
-
-        UPDATE
-          \`${PROJECT_ID}.${OPS_DATASET}.shopify_backfill_windows\`
-
-        SET
-
-          status =
-            'retry_wait',
-
-          next_retry_at =
-            CURRENT_TIMESTAMP(),
-
-          error =
-            'STALE_STARTING_CLAIM_RECOVERED',
-
-          updated_at =
-            CURRENT_TIMESTAMP()
-
-        WHERE
-
-          workspace_id =
-            @workspace_id
-
-          AND brand_id =
-            @brand_id
-
-          AND status =
-            'starting'
-
-          AND bulk_operation_id
-            IS NULL
-
-          AND updated_at <
-            TIMESTAMP_SUB(
-              CURRENT_TIMESTAMP(),
-              INTERVAL 10 MINUTE
-            )
-
-      `,
-
-      params: {
-
-        workspace_id:
-          input.workspaceId,
-
-        brand_id:
-          input.brandId,
-
-      },
-
-    });
-
-
-  return {
-
-    recovered:
-      result.affectedRows,
-
-  };
-
-}
 
 // ============================================================
 // Q3E-5A
-// RECOVER STALE STARTING CLAIMS
+// RECOVER STALE BACKFILL CLAIMS
 //
-// starting + NULL operation + stale
-//                 ↓
-//             retry_wait
+// Handles:
 //
-// We never automatically assume a fresh "starting" claim is
-// abandoned. The 10-minute threshold protects an active worker.
+// dispatching
+// starting
+//
+// but ONLY:
+//
+// bulk_operation_id IS NULL
+//
+// and only after 10 minutes.
+//
+// This prevents an abandoned reservation/claim from blocking a
+// backfill forever.
+//
+// dispatching / starting
+//          ↓
+//      retry_wait
+//
+// Q3E-5B orchestrator can then republish the window.
 // ============================================================
 
 export async function recoverStaleBackfillClaims(
@@ -1636,7 +1646,7 @@ export async function recoverStaleBackfillClaims(
             CURRENT_TIMESTAMP(),
 
           error =
-            'STALE_STARTING_CLAIM_RECOVERED',
+            'STALE_BACKFILL_CLAIM_RECOVERED',
 
           updated_at =
             CURRENT_TIMESTAMP()
@@ -1649,8 +1659,11 @@ export async function recoverStaleBackfillClaims(
           AND brand_id =
             @brand_id
 
-          AND status =
-            'starting'
+          AND status IN
+            (
+              'starting',
+              'dispatching'
+            )
 
           AND bulk_operation_id
             IS NULL

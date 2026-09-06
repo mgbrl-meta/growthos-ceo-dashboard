@@ -3,14 +3,13 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import {
   Activity,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleGauge,
   Database,
   GitBranch,
@@ -18,6 +17,8 @@ import {
   Lock,
   Megaphone,
   PackageSearch,
+  Pin,
+  PinOff,
   Plug,
   Repeat2,
   Search,
@@ -50,6 +51,13 @@ type Props = {
       module: string,
       subTab: string
     ) => void;
+
+  // ----------------------------------------------------------
+  // sidebarOpen now means:
+  //
+  // TRUE  = sidebar is pinned open
+  // FALSE = sidebar uses hover expansion
+  // ----------------------------------------------------------
 
   sidebarOpen:
     boolean;
@@ -171,17 +179,6 @@ type NavigationGroup = {
 
 // ============================================================
 // NAVIGATION CONFIGURATION
-//
-// toolId:
-//
-// null
-//   = always available
-//
-// string
-//   = controlled from Global Settings
-//
-// Giving every navigation item the same explicit shape prevents
-// TypeScript from inferring incompatible unions.
 // ============================================================
 
 const groups:
@@ -420,10 +417,6 @@ const groups:
 
   // ==========================================================
   // DATA SOURCES
-  //
-  // Platform-level pages.
-  //
-  // These are not controlled by plan/tool settings.
   // ==========================================================
 
   {
@@ -519,16 +512,6 @@ const groups:
         icon:
           Database,
 
-        // ------------------------------------------------------
-        // IMPORTANT:
-        //
-        // This was previously missing.
-        //
-        // Every navigation item must have toolId so TypeScript
-        // doesn't create a union where toolId exists only on
-        // some item types.
-        // ------------------------------------------------------
-
         toolId:
           null,
 
@@ -566,15 +549,183 @@ export default function AppSidebar({
 
 
   // ==========================================================
+  // HOVER EXPANSION
+  // ==========================================================
+
+  const [
+    hovered,
+    setHovered,
+  ] =
+    useState(
+      false
+    );
+
+
+  const openTimer =
+    useRef<
+      ReturnType<
+        typeof setTimeout
+      >
+      |
+      null
+    >(
+      null
+    );
+
+
+  const closeTimer =
+    useRef<
+      ReturnType<
+        typeof setTimeout
+      >
+      |
+      null
+    >(
+      null
+    );
+
+
+  // ----------------------------------------------------------
+  // Expanded when:
+  //
+  // 1. User has pinned sidebar
+  // OR
+  // 2. Cursor is currently inside sidebar
+  // ----------------------------------------------------------
+
+  const expanded =
+    sidebarOpen ||
+    hovered;
+
+
+  function clearTimers() {
+
+    if (
+      openTimer.current
+    ) {
+
+      clearTimeout(
+        openTimer.current
+      );
+
+      openTimer.current =
+        null;
+
+    }
+
+
+    if (
+      closeTimer.current
+    ) {
+
+      clearTimeout(
+        closeTimer.current
+      );
+
+      closeTimer.current =
+        null;
+
+    }
+
+  }
+
+
+  function handleMouseEnter() {
+
+    if (
+      sidebarOpen
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      closeTimer.current
+    ) {
+
+      clearTimeout(
+        closeTimer.current
+      );
+
+      closeTimer.current =
+        null;
+
+    }
+
+
+    openTimer.current =
+      setTimeout(
+        () => {
+
+          setHovered(
+            true
+          );
+
+        },
+        120
+      );
+
+  }
+
+
+  function handleMouseLeave() {
+
+    if (
+      sidebarOpen
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      openTimer.current
+    ) {
+
+      clearTimeout(
+        openTimer.current
+      );
+
+      openTimer.current =
+        null;
+
+    }
+
+
+    closeTimer.current =
+      setTimeout(
+        () => {
+
+          setHovered(
+            false
+          );
+
+        },
+        350
+      );
+
+  }
+
+
+  useEffect(
+    () => {
+
+      return () => {
+
+        clearTimers();
+
+      };
+
+    },
+    []
+  );
+
+
+  // ==========================================================
   // SETTINGS STATE
-  //
-  // V1:
-  //
-  // Read from localStorage.
-  //
-  // Later:
-  //
-  // Replace with global settings API/provider.
   // ==========================================================
 
   const [
@@ -613,12 +764,6 @@ export default function AppSidebar({
             STORAGE_KEY
           );
 
-
-      // -------------------------------------------------------
-      // No saved settings yet.
-      //
-      // Preserve existing Growth OS behaviour.
-      // -------------------------------------------------------
 
       if (!raw) {
 
@@ -678,12 +823,6 @@ export default function AppSidebar({
       readSettings();
 
 
-      // -------------------------------------------------------
-      // SAME-TAB UPDATES
-      //
-      // GrowthSettings dispatches this event after Save Changes.
-      // -------------------------------------------------------
-
       function handleSettingsUpdate(
         event: Event
       ) {
@@ -712,10 +851,6 @@ export default function AppSidebar({
 
       }
 
-
-      // -------------------------------------------------------
-      // CROSS-TAB / CROSS-WINDOW STORAGE UPDATE
-      // -------------------------------------------------------
 
       function handleStorage() {
 
@@ -811,16 +946,6 @@ export default function AppSidebar({
 
   // ==========================================================
   // TOOL ACCESS
-  //
-  // visible:
-  //
-  // false
-  //   = tool disabled by workspace admin
-  //
-  // allowed:
-  //
-  // false
-  //   = tool enabled but current plan too low
   // ==========================================================
 
   function getToolState(
@@ -828,10 +953,6 @@ export default function AppSidebar({
       string |
       null
   ) {
-
-    // --------------------------------------------------------
-    // Platform pages are always available.
-    // --------------------------------------------------------
 
     if (!toolId) {
 
@@ -857,12 +978,6 @@ export default function AppSidebar({
       );
 
 
-    // --------------------------------------------------------
-    // No saved configuration for this tool yet.
-    //
-    // Preserve existing app behaviour.
-    // --------------------------------------------------------
-
     if (!tool) {
 
       return {
@@ -880,12 +995,6 @@ export default function AppSidebar({
 
     }
 
-
-    // --------------------------------------------------------
-    // Disabled tool:
-    //
-    // Remove from navigation entirely.
-    // --------------------------------------------------------
 
     if (!tool.enabled) {
 
@@ -936,14 +1045,6 @@ export default function AppSidebar({
 
   // ==========================================================
   // SAFETY GUARD
-  //
-  // Example:
-  //
-  // User is currently inside Google OS.
-  //
-  // Then admin disables Google OS in Settings.
-  //
-  // We must not leave hidden Google UI mounted.
   // ==========================================================
 
   useEffect(
@@ -969,26 +1070,11 @@ export default function AppSidebar({
           }
 
 
-          // ---------------------------------------------------
-          // IMPORTANT:
-          //
-          // getToolState always returns an access object.
-          //
-          // null toolId is intentionally supported and means
-          // "platform page / always available".
-          // ---------------------------------------------------
-
           const access =
             getToolState(
               item.toolId
             );
 
-
-          // ---------------------------------------------------
-          // DISABLED MODULE
-          //
-          // Return to Command Center.
-          // ---------------------------------------------------
 
           if (
             !access.visible
@@ -1002,12 +1088,6 @@ export default function AppSidebar({
 
           }
 
-
-          // ---------------------------------------------------
-          // ENABLED BUT PLAN LOCKED
-          //
-          // Send to global settings.
-          // ---------------------------------------------------
 
           if (
             !access.allowed
@@ -1055,11 +1135,6 @@ export default function AppSidebar({
       );
 
 
-    // --------------------------------------------------------
-    // Disabled modules shouldn't normally render at all,
-    // but keep this defensive guard.
-    // --------------------------------------------------------
-
     if (
       !access.visible
     ) {
@@ -1069,10 +1144,6 @@ export default function AppSidebar({
     }
 
 
-    // --------------------------------------------------------
-    // Tool exists but current plan does not permit access.
-    // --------------------------------------------------------
-
     if (
       !access.allowed
     ) {
@@ -1080,16 +1151,6 @@ export default function AppSidebar({
       setActiveTab(
         'Settings'
       );
-
-
-      if (!sidebarOpen) {
-
-        setSidebarOpen(
-          true
-        );
-
-      }
-
 
       return;
 
@@ -1100,20 +1161,6 @@ export default function AppSidebar({
       module
     );
 
-
-    // --------------------------------------------------------
-    // When sidebar is collapsed, reopen it so child navigation
-    // becomes visible.
-    // --------------------------------------------------------
-
-    if (!sidebarOpen) {
-
-      setSidebarOpen(
-        true
-      );
-
-    }
-
   }
 
 
@@ -1123,235 +1170,314 @@ export default function AppSidebar({
 
   return (
 
-    <aside
-      className={`
-        sticky
-        top-0
-        z-50
+    // ========================================================
+    // FIXED 68PX LAYOUT SLOT
+    //
+    // This wrapper always consumes exactly 68px.
+    //
+    // The actual sidebar inside can grow to 230px without
+    // changing the dashboard width.
+    // ========================================================
+
+    <div
+      className="
+        relative
         h-screen
+        w-[68px]
         shrink-0
-
-        border-r
-        border-slate-800
-
-        bg-[#0e1420]
-
-        text-white
-
-        transition-all
-        duration-300
-
-        ${
-          sidebarOpen
-            ? 'w-[230px]'
-            : 'w-[68px]'
-        }
-      `}
+      "
     >
 
-
-      {/* =====================================================
-          SIDEBAR OPEN / CLOSE
-      ===================================================== */}
-
-      <button
-        type="button"
-
-        onClick={() =>
-          setSidebarOpen(
-            !sidebarOpen
-          )
+      <aside
+        onMouseEnter={
+          handleMouseEnter
         }
 
-        title={
-          sidebarOpen
-            ? 'Collapse sidebar'
-            : 'Open sidebar'
+        onMouseLeave={
+          handleMouseLeave
         }
 
-        className="
-          absolute
-          -right-3.5
-          top-[22px]
-          z-[100]
+        className={`
+          fixed
+          left-0
+          top-0
+          z-50
 
-          flex
-          h-7
-          w-7
-          items-center
-          justify-center
+          h-screen
 
-          rounded-full
+          overflow-hidden
 
-          border
-          border-slate-200
+          border-r
+          border-slate-800
 
-          bg-white
+          bg-[#0e1420]
 
-          text-slate-600
+          text-white
 
-          shadow-md
+          transition-[width,box-shadow]
+          duration-200
+          ease-out
 
-          transition
+          ${
+            expanded
+              ? `
+                w-[230px]
 
-          hover:bg-slate-50
-          hover:text-slate-950
-        "
+                shadow-[14px_0_32px_rgba(15,23,42,0.18)]
+              `
+              : `
+                w-[68px]
+              `
+          }
+        `}
       >
 
-        {sidebarOpen ? (
-
-          <ChevronLeft
-            size={15}
-            strokeWidth={2.3}
-          />
-
-        ) : (
-
-          <ChevronRight
-            size={15}
-            strokeWidth={2.3}
-          />
-
-        )}
-
-      </button>
+        <div className="flex h-full flex-col">
 
 
-      <div className="flex h-full flex-col">
+          {/* =================================================
+              BRAND
+          ================================================= */}
 
+          <div
+            className="
+              flex
+              h-[70px]
+              shrink-0
+              items-center
 
-        {/* ===================================================
-            BRAND
-        =================================================== */}
+              border-b
+              border-white/5
 
-        <div
-          className={`
-            flex
-            h-[70px]
-            items-center
-
-            border-b
-            border-white/5
-
-            ${
-              sidebarOpen
-                ? 'px-4'
-                : 'justify-center'
-            }
-          `}
-        >
-
-          <div className="flex items-center gap-3">
-
+              px-4
+            "
+          >
 
             <div
               className="
                 flex
-                h-9
-                w-9
-                shrink-0
+                min-w-0
+                flex-1
                 items-center
-                justify-center
-
-                rounded-xl
-
-                bg-gradient-to-br
-                from-violet-500
-                to-blue-500
-
-                text-sm
-                font-black
-                text-white
-
-                shadow-lg
-                shadow-violet-950/40
+                gap-3
               "
             >
-              G
-            </div>
 
 
-            {sidebarOpen && (
+              <div
+                className="
+                  flex
+                  h-9
+                  w-9
+                  shrink-0
+                  items-center
+                  justify-center
 
-              <div>
+                  rounded-xl
 
-                <div className="text-[15px] font-black tracking-[-0.03em]">
+                  bg-gradient-to-br
+                  from-violet-500
+                  to-blue-500
+
+                  text-sm
+                  font-black
+                  text-white
+
+                  shadow-lg
+                  shadow-violet-950/40
+                "
+              >
+                G
+              </div>
+
+
+              <div
+                className={`
+                  min-w-0
+                  whitespace-nowrap
+
+                  transition-all
+                  duration-150
+
+                  ${
+                    expanded
+                      ? `
+                        translate-x-0
+                        opacity-100
+                      `
+                      : `
+                        pointer-events-none
+                        -translate-x-1
+                        opacity-0
+                      `
+                  }
+                `}
+              >
+
+                <div
+                  className="
+                    text-[15px]
+                    font-black
+                    tracking-[-0.03em]
+                  "
+                >
                   Growth OS
                 </div>
 
 
-                <div className="text-[10px] font-medium text-slate-500">
+                <div
+                  className="
+                    text-[10px]
+                    font-medium
+                    text-slate-500
+                  "
+                >
                   Business Intelligence
                 </div>
 
               </div>
 
+            </div>
+
+
+            {/* ===============================================
+                PIN / UNPIN
+            =============================================== */}
+
+            {expanded && (
+
+              <button
+                type="button"
+
+                onClick={() => {
+
+                  setSidebarOpen(
+                    !sidebarOpen
+                  );
+
+
+                  if (
+                    sidebarOpen
+                  ) {
+
+                    setHovered(
+                      false
+                    );
+
+                  }
+
+                }}
+
+                title={
+                  sidebarOpen
+                    ? 'Unpin sidebar'
+                    : 'Pin sidebar'
+                }
+
+                className="
+                  ml-2
+                  flex
+                  h-8
+                  w-8
+                  shrink-0
+                  items-center
+                  justify-center
+
+                  rounded-lg
+
+                  text-slate-500
+
+                  transition
+
+                  hover:bg-white/[0.06]
+                  hover:text-white
+                "
+              >
+
+                {sidebarOpen ? (
+
+                  <PinOff
+                    size={15}
+                    strokeWidth={1.9}
+                  />
+
+                ) : (
+
+                  <Pin
+                    size={15}
+                    strokeWidth={1.9}
+                  />
+
+                )}
+
+              </button>
+
             )}
 
           </div>
 
-        </div>
+
+          {/* =================================================
+              NAVIGATION
+          ================================================= */}
+
+          <div
+            className="
+              flex-1
+              overflow-y-auto
+              overflow-x-hidden
+
+              px-2
+              py-4
+            "
+          >
 
 
-        {/* ===================================================
-            NAVIGATION
-        =================================================== */}
-
-        <div className="flex-1 overflow-y-auto px-2 py-4">
+            {groups.map(
+              group => {
 
 
-          {groups.map(
-            group => {
+                const visibleItems =
+                  group.items.filter(
+                    item =>
+                      getToolState(
+                        item.toolId
+                      ).visible
+                  );
 
 
-              // ------------------------------------------------
-              // Remove disabled tools before rendering.
-              // ------------------------------------------------
+                if (
+                  visibleItems.length ===
+                  0
+                ) {
 
-              const visibleItems =
-                group.items.filter(
-                  item =>
-                    getToolState(
-                      item.toolId
-                    ).visible
-                );
+                  return null;
+
+                }
 
 
-              // ------------------------------------------------
-              // Don't render an empty group heading.
-              // ------------------------------------------------
+                return (
 
-              if (
-                visibleItems.length ===
-                0
-              ) {
+                  <div
+                    key={
+                      group.label
+                    }
 
-                return null;
-
-              }
+                    className="mb-5"
+                  >
 
 
-              return (
-
-                <div
-                  key={
-                    group.label
-                  }
-
-                  className="mb-5"
-                >
-
-
-                  {/* =========================================
-                      GROUP LABEL
-                  ========================================= */}
-
-                  {sidebarOpen && (
+                    {/* =======================================
+                        GROUP LABEL
+                    ======================================= */}
 
                     <div
-                      className="
+                      className={`
                         mb-2
+                        h-[12px]
+
+                        whitespace-nowrap
+
                         px-3
 
                         text-[9px]
@@ -1360,148 +1486,191 @@ export default function AppSidebar({
                         tracking-[0.17em]
 
                         text-slate-600
-                      "
+
+                        transition-opacity
+                        duration-150
+
+                        ${
+                          expanded
+                            ? 'opacity-100'
+                            : 'opacity-0'
+                        }
+                      `}
                     >
                       {group.label}
                     </div>
 
-                  )}
+
+                    <div className="space-y-1">
 
 
-                  <div className="space-y-1">
+                      {visibleItems.map(
+                        item => {
+
+                          const Icon =
+                            item.icon;
 
 
-                    {visibleItems.map(
-                      item => {
-
-                        const Icon =
-                          item.icon;
+                          const active =
+                            activeTab ===
+                            item.name;
 
 
-                        const active =
-                          activeTab ===
-                          item.name;
-
-
-                        const activeSubTab =
-                          activeSubTabs[
-                            item.name
-                          ];
-
-
-                        const access =
-                          getToolState(
-                            item.toolId
-                          );
-
-
-                        return (
-
-                          <div
-                            key={
+                          const activeSubTab =
+                            activeSubTabs[
                               item.name
-                            }
-                          >
+                            ];
 
 
-                            {/* =============================
-                                MODULE
-                            ============================= */}
+                          const access =
+                            getToolState(
+                              item.toolId
+                            );
 
-                            <button
-                              type="button"
 
-                              title={
+                          return (
 
-                                access.allowed
-
-                                  ? item.label
-
-                                  : `${item.label} — ${prettyPlan(
-                                      access.requiredPlan
-                                    )} plan required`
-
+                            <div
+                              key={
+                                item.name
                               }
-
-                              onClick={() =>
-                                selectModule(
-                                  item.name,
-                                  item.toolId
-                                )
-                              }
-
-                              className={`
-                                flex
-                                w-full
-                                items-center
-
-                                rounded-xl
-
-                                transition-all
-                                duration-200
-
-                                ${
-                                  sidebarOpen
-                                    ? 'gap-3 px-3 py-2.5'
-                                    : 'justify-center py-2.5'
-                                }
-
-                                ${
-                                  active
-
-                                    ? `
-                                      bg-white
-                                      text-slate-950
-                                      shadow-sm
-                                    `
-
-                                    : access.allowed
-
-                                      ? `
-                                        text-slate-400
-
-                                        hover:bg-white/[0.06]
-                                        hover:text-white
-                                      `
-
-                                      : `
-                                        text-slate-600
-
-                                        hover:bg-white/[0.04]
-                                        hover:text-slate-400
-                                      `
-                                }
-                              `}
                             >
 
 
-                              <Icon
-                                size={17}
+                              {/* ===========================
+                                  MODULE
+                              =========================== */}
 
-                                strokeWidth={
-                                  active
-                                    ? 2.4
-                                    : 1.8
+                              <button
+                                type="button"
+
+                                title={
+
+                                  access.allowed
+
+                                    ? item.label
+
+                                    : `${item.label} — ${prettyPlan(
+                                        access.requiredPlan
+                                      )} plan required`
+
                                 }
-                              />
+
+                                onClick={() =>
+                                  selectModule(
+                                    item.name,
+                                    item.toolId
+                                  )
+                                }
+
+                                className={`
+                                  flex
+                                  h-[38px]
+                                  w-full
+                                  items-center
+
+                                  rounded-xl
+
+                                  transition-colors
+                                  duration-150
+
+                                  ${
+                                    expanded
+                                      ? `
+                                        gap-3
+                                        px-3
+                                      `
+                                      : `
+                                        justify-center
+                                      `
+                                  }
+
+                                  ${
+                                    active
+
+                                      ? `
+                                        bg-white
+                                        text-slate-950
+                                        shadow-sm
+                                      `
+
+                                      : access.allowed
+
+                                        ? `
+                                          text-slate-400
+
+                                          hover:bg-white/[0.06]
+                                          hover:text-white
+                                        `
+
+                                        : `
+                                          text-slate-600
+
+                                          hover:bg-white/[0.04]
+                                          hover:text-slate-400
+                                        `
+                                  }
+                                `}
+                              >
 
 
-                              {sidebarOpen && (
+                                <Icon
+                                  size={17}
 
-                                <>
+                                  className="shrink-0"
 
-                                  <span className="text-[13px] font-semibold">
+                                  strokeWidth={
+                                    active
+                                      ? 2.4
+                                      : 1.8
+                                  }
+                                />
+
+
+                                <div
+                                  className={`
+                                    flex
+                                    min-w-0
+                                    flex-1
+                                    items-center
+
+                                    whitespace-nowrap
+
+                                    transition-opacity
+                                    duration-150
+
+                                    ${
+                                      expanded
+                                        ? `
+                                          opacity-100
+                                        `
+                                        : `
+                                          pointer-events-none
+                                          opacity-0
+                                        `
+                                    }
+                                  `}
+                                >
+
+                                  <span
+                                    className="
+                                      text-[13px]
+                                      font-semibold
+                                    "
+                                  >
                                     {item.label}
                                   </span>
 
-
-                                  {/* PLAN LOCK */}
 
                                   {!access.allowed ? (
 
                                     <Lock
                                       size={13}
-                                      className="ml-auto text-slate-600"
+                                      className="
+                                        ml-auto
+                                        shrink-0
+                                        text-slate-600
+                                      "
                                     />
 
                                   ) : (
@@ -1514,6 +1683,8 @@ export default function AppSidebar({
 
                                         className={`
                                           ml-auto
+                                          shrink-0
+
                                           transition-transform
 
                                           ${
@@ -1528,336 +1699,401 @@ export default function AppSidebar({
 
                                   )}
 
-                                </>
+                                </div>
 
-                              )}
-
-                            </button>
+                              </button>
 
 
-                            {/* =============================
-                                SUB NAVIGATION
+                              {/* ===========================
+                                  SUB NAVIGATION
+                              =========================== */}
 
-                                Render only for active,
-                                accessible module.
-                            ============================= */}
+                              {expanded &&
+                                active &&
+                                access.allowed &&
+                                item.children.length >
+                                  0 && (
 
-                            {sidebarOpen &&
-                              active &&
-                              access.allowed &&
-                              item.children.length >
-                                0 && (
+                                <div
+                                  className="
+                                    ml-[22px]
+                                    mt-1
 
-                              <div
-                                className="
-                                  ml-[22px]
-                                  mt-1
+                                    border-l
+                                    border-white/10
 
-                                  border-l
-                                  border-white/10
+                                    pl-3
+                                  "
+                                >
 
-                                  pl-3
-                                "
-                              >
-
-                                <div className="space-y-0.5">
+                                  <div className="space-y-0.5">
 
 
-                                  {item.children.map(
-                                    subTab => {
+                                    {item.children.map(
+                                      subTab => {
 
-                                      const selected =
-                                        activeSubTab ===
-                                        subTab;
+                                        const selected =
+                                          activeSubTab ===
+                                          subTab;
 
 
-                                      return (
+                                        return (
 
-                                        <button
-                                          key={
-                                            subTab
-                                          }
-
-                                          type="button"
-
-                                          onClick={() =>
-                                            setActiveSubTab(
-                                              item.name,
+                                          <button
+                                            key={
                                               subTab
-                                            )
-                                          }
-
-                                          className={`
-                                            relative
-
-                                            flex
-                                            w-full
-                                            items-center
-
-                                            rounded-lg
-
-                                            px-2.5
-                                            py-1.5
-
-                                            text-left
-                                            text-[11px]
-
-                                            transition
-
-                                            ${
-                                              selected
-
-                                                ? `
-                                                  bg-violet-500/10
-
-                                                  font-bold
-
-                                                  text-violet-300
-                                                `
-
-                                                : `
-                                                  font-medium
-
-                                                  text-slate-500
-
-                                                  hover:bg-white/[0.04]
-                                                  hover:text-slate-200
-                                                `
                                             }
-                                          `}
-                                        >
+
+                                            type="button"
+
+                                            onClick={() =>
+                                              setActiveSubTab(
+                                                item.name,
+                                                subTab
+                                              )
+                                            }
+
+                                            className={`
+                                              relative
+
+                                              flex
+                                              w-full
+                                              items-center
+
+                                              rounded-lg
+
+                                              px-2.5
+                                              py-1.5
+
+                                              text-left
+                                              text-[11px]
+
+                                              transition
+
+                                              ${
+                                                selected
+
+                                                  ? `
+                                                    bg-violet-500/10
+
+                                                    font-bold
+
+                                                    text-violet-300
+                                                  `
+
+                                                  : `
+                                                    font-medium
+
+                                                    text-slate-500
+
+                                                    hover:bg-white/[0.04]
+                                                    hover:text-slate-200
+                                                  `
+                                              }
+                                            `}
+                                          >
 
 
-                                          {selected && (
+                                            {selected && (
 
-                                            <span
-                                              className="
-                                                absolute
-                                                -left-[13px]
+                                              <span
+                                                className="
+                                                  absolute
+                                                  -left-[13px]
 
-                                                h-4
-                                                w-[2px]
+                                                  h-4
+                                                  w-[2px]
 
-                                                rounded-full
+                                                  rounded-full
 
-                                                bg-violet-400
-                                              "
-                                            />
+                                                  bg-violet-400
+                                                "
+                                              />
 
-                                          )}
+                                            )}
 
 
-                                          {subTab}
+                                            {subTab}
 
-                                        </button>
+                                          </button>
 
-                                      );
+                                        );
 
-                                    }
-                                  )}
+                                      }
+                                    )}
+
+                                  </div>
 
                                 </div>
 
-                              </div>
+                              )}
 
-                            )}
+                            </div>
 
-                          </div>
+                          );
 
-                        );
+                        }
+                      )}
 
-                      }
-                    )}
+                    </div>
 
                   </div>
 
-                </div>
-
-              );
-
-            }
-          )}
-
-        </div>
-
-
-        {/* ===================================================
-            GLOBAL SETTINGS
-        =================================================== */}
-
-        <div className="border-t border-white/5 p-2">
-
-
-          <button
-            type="button"
-
-            title="Settings"
-
-            onClick={() => {
-
-              setActiveTab(
-                'Settings'
-              );
-
-
-              if (!sidebarOpen) {
-
-                setSidebarOpen(
-                  true
                 );
 
               }
+            )}
 
-            }}
+          </div>
 
-            className={`
-              flex
-              w-full
-              items-center
 
-              rounded-xl
+          {/* =================================================
+              GLOBAL SETTINGS
+          ================================================= */}
 
-              transition
-
-              ${
-                sidebarOpen
-                  ? 'gap-3 px-3 py-2.5'
-                  : 'justify-center py-2.5'
-              }
-
-              ${
-                activeTab ===
-                  'Settings'
-
-                  ? `
-                    bg-white
-                    text-slate-950
-                  `
-
-                  : `
-                    text-slate-400
-
-                    hover:bg-white/[0.06]
-                    hover:text-white
-                  `
-              }
-            `}
+          <div
+            className="
+              shrink-0
+              border-t
+              border-white/5
+              p-2
+            "
           >
 
 
-            <Settings
-              size={17}
+            <button
+              type="button"
 
-              strokeWidth={
-                activeTab ===
+              title="Settings"
+
+              onClick={() =>
+                setActiveTab(
                   'Settings'
-                  ? 2.4
-                  : 1.8
+                )
               }
-            />
+
+              className={`
+                flex
+                h-[38px]
+                w-full
+                items-center
+
+                rounded-xl
+
+                transition-colors
+                duration-150
+
+                ${
+                  expanded
+                    ? `
+                      gap-3
+                      px-3
+                    `
+                    : `
+                      justify-center
+                    `
+                }
+
+                ${
+                  activeTab ===
+                    'Settings'
+
+                    ? `
+                      bg-white
+                      text-slate-950
+                    `
+
+                    : `
+                      text-slate-400
+
+                      hover:bg-white/[0.06]
+                      hover:text-white
+                    `
+                }
+              `}
+            >
 
 
-            {sidebarOpen && (
+              <Settings
+                size={17}
 
-              <span className="text-[13px] font-semibold">
+                className="shrink-0"
+
+                strokeWidth={
+                  activeTab ===
+                    'Settings'
+                    ? 2.4
+                    : 1.8
+                }
+              />
+
+
+              <span
+                className={`
+                  whitespace-nowrap
+
+                  text-[13px]
+                  font-semibold
+
+                  transition-opacity
+                  duration-150
+
+                  ${
+                    expanded
+                      ? `
+                        opacity-100
+                      `
+                      : `
+                        pointer-events-none
+                        opacity-0
+                      `
+                  }
+                `}
+              >
                 Settings
               </span>
 
-            )}
+            </button>
 
-          </button>
-
-        </div>
+          </div>
 
 
-        {/* ===================================================
-            STATUS
-        =================================================== */}
+          {/* =================================================
+              STATUS
+          ================================================= */}
 
-        <div className="border-t border-white/5 p-3">
+          <div
+            className="
+              shrink-0
 
+              border-t
+              border-white/5
 
-          {sidebarOpen ? (
-
-            <div
-              className="
-                rounded-xl
-
-                border
-                border-white/[0.06]
-
-                bg-white/[0.03]
-
-                p-3
-              "
-            >
-
-              <div className="flex items-center gap-2">
+              p-3
+            "
+          >
 
 
-                <span className="relative flex h-2 w-2">
+            {expanded ? (
 
-                  <span
-                    className="
-                      absolute
+              <div
+                className="
+                  rounded-xl
 
-                      inline-flex
+                  border
+                  border-white/[0.06]
 
-                      h-full
-                      w-full
+                  bg-white/[0.03]
 
-                      animate-ping
+                  p-3
+                "
+              >
 
-                      rounded-full
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-2
 
-                      bg-emerald-400
-
-                      opacity-50
-                    "
-                  />
+                    whitespace-nowrap
+                  "
+                >
 
 
                   <span
                     className="
                       relative
-
-                      inline-flex
-
+                      flex
                       h-2
                       w-2
-
-                      rounded-full
-
-                      bg-emerald-500
+                      shrink-0
                     "
-                  />
+                  >
 
-                </span>
+                    <span
+                      className="
+                        absolute
+
+                        inline-flex
+
+                        h-full
+                        w-full
+
+                        animate-ping
+
+                        rounded-full
+
+                        bg-emerald-400
+
+                        opacity-50
+                      "
+                    />
 
 
-                <span className="text-[11px] font-semibold text-slate-300">
-                  Live data connected
-                </span>
+                    <span
+                      className="
+                        relative
+
+                        inline-flex
+
+                        h-2
+                        w-2
+
+                        rounded-full
+
+                        bg-emerald-500
+                      "
+                    />
+
+                  </span>
+
+
+                  <span
+                    className="
+                      text-[11px]
+                      font-semibold
+                      text-slate-300
+                    "
+                  >
+                    Live data connected
+                  </span>
+
+                </div>
 
               </div>
 
-            </div>
+            ) : (
 
-          ) : (
+              <div
+                className="
+                  flex
+                  justify-center
+                  py-2
+                "
+              >
 
-            <div className="flex justify-center py-2">
+                <span
+                  className="
+                    h-2
+                    w-2
 
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    rounded-full
 
-            </div>
+                    bg-emerald-500
+                  "
+                />
 
-          )}
+              </div>
+
+            )}
+
+          </div>
 
         </div>
 
-      </div>
+      </aside>
 
-    </aside>
+    </div>
 
   );
 

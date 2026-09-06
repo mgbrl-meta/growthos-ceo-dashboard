@@ -234,7 +234,7 @@ export default function GrowthOSDashboard() {
     sidebarOpen,
     setSidebarOpen,
   ] = useState(
-    true
+    false
   );
 
 
