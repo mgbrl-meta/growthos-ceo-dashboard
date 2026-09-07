@@ -1320,9 +1320,9 @@ export default function AppSidebar({
           overflow-hidden
 
           border-r
-          border-slate-800
+          border-slate-700/70
 
-          bg-[#0e1420]
+          bg-[#111827]
 
           text-white
 
@@ -1445,7 +1445,7 @@ export default function AppSidebar({
                   className="
                     text-[10px]
                     font-medium
-                    text-slate-500
+                    text-slate-400
                   "
                 >
                   Business Intelligence
@@ -1744,14 +1744,14 @@ export default function AppSidebar({
                                       : access.allowed
 
                                         ? `
-                                          text-slate-400
+                                          text-slate-300
 
-                                          hover:bg-white/[0.06]
+                                          hover:bg-white/[0.08]
                                           hover:text-white
                                         `
 
                                         : `
-                                          text-slate-600
+                                          text-slate-500
 
                                           hover:bg-white/[0.04]
                                           hover:text-slate-400
@@ -1947,10 +1947,10 @@ export default function AppSidebar({
                                                   : `
                                                     font-medium
 
-                                                    text-slate-500
+                                                    text-slate-400
 
-                                                    hover:bg-white/[0.04]
-                                                    hover:text-slate-200
+                                                    hover:bg-white/[0.06]
+                                                    hover:text-white
                                                   `
                                               }
                                             `}
@@ -2154,9 +2154,9 @@ export default function AppSidebar({
                   rounded-xl
 
                   border
-                  border-white/[0.06]
+                  border-white/[0.10]
 
-                  bg-white/[0.03]
+                  bg-white/[0.05]
 
                   p-3
                 "
