@@ -27,6 +27,7 @@ COPY shopify-gcs.js ./
 COPY shopify-bq-stage.js ./
 COPY shopify-bulk-warehouse.js ./
 COPY shopify-backfill-processor.js ./
+COPY shopify-backfill-supervisor.js ./
 
 
 # ============================================================

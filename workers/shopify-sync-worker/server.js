@@ -51,6 +51,10 @@ import {
   processShopifyBackfillWindow,
 } from './shopify-backfill-processor.js';
 
+import {
+  superviseShopifyBackfills,
+} from './shopify-backfill-supervisor.js';
+
 
 // ============================================================
 // APP
@@ -2651,6 +2655,114 @@ app.post(
   }
 );
 
+// ============================================================
+// Q3E-6C-2
+// AUTOMATIC SHOPIFY BACKFILL SUPERVISOR
+//
+// Intended caller:
+// Google Cloud Scheduler with OIDC.
+//
+// No browser/session identity is required.
+//
+// Execution is derived entirely from the persisted control
+// plane.
+// ============================================================
+
+app.post(
+  '/internal/shopify/backfill-supervise',
+
+  async (
+    _req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const result =
+        await superviseShopifyBackfills();
+
+
+      console.log(
+        'SHOPIFY_BACKFILL_SUPERVISOR_RESULT',
+        {
+
+          staleDispatchesRecovered:
+            result.staleDispatchesRecovered,
+
+          processedCount:
+            result.processedCount,
+
+          dispatchedCount:
+            result.dispatchedCount,
+
+          durationMs:
+            result.durationMs,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          'Shopify backfill supervisor failed'
+        );
+
+
+      console.error(
+        'SHOPIFY_BACKFILL_SUPERVISOR_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_BACKFILL_SUPERVISOR_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
 
 // ============================================================
 // START
