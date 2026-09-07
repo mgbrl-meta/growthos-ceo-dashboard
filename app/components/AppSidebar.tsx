@@ -17,8 +17,6 @@ import {
   Lock,
   Megaphone,
   PackageSearch,
-  Pin,
-  PinOff,
   Plug,
   Repeat2,
   Search,
@@ -52,12 +50,8 @@ type Props = {
       subTab: string
     ) => void;
 
-  // ----------------------------------------------------------
-  // sidebarOpen now means:
-  //
-  // TRUE  = sidebar is pinned open
-  // FALSE = sidebar uses hover expansion
-  // ----------------------------------------------------------
+  // TRUE  = fixed / always expanded
+  // FALSE = cursor / hover expansion
 
   sidebarOpen:
     boolean;
@@ -110,11 +104,15 @@ type PlatformSettings = {
 
 
 // ============================================================
-// SETTINGS STORAGE
+// STORAGE
 // ============================================================
 
 const STORAGE_KEY =
   'growth_os_global_settings_v1';
+
+
+const SIDEBAR_MODE_KEY =
+  'growth_os_sidebar_mode_v1';
 
 
 // ============================================================
@@ -588,15 +586,123 @@ export default function AppSidebar({
   // ----------------------------------------------------------
   // Expanded when:
   //
-  // 1. User has pinned sidebar
-  // OR
-  // 2. Cursor is currently inside sidebar
+  // sidebarOpen = fixed mode
+  // hovered     = cursor mode temporary expansion
   // ----------------------------------------------------------
 
   const expanded =
     sidebarOpen ||
     hovered;
 
+
+  // ==========================================================
+  // RESTORE SAVED SIDEBAR MODE
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      try {
+
+        const savedMode =
+          window.localStorage.getItem(
+            SIDEBAR_MODE_KEY
+          );
+
+
+        if (
+          savedMode ===
+          'fixed'
+        ) {
+
+          setSidebarOpen(
+            true
+          );
+
+        }
+
+
+        if (
+          savedMode ===
+          'cursor'
+        ) {
+
+          setSidebarOpen(
+            false
+          );
+
+        }
+
+      } catch (
+        error
+      ) {
+
+        console.error(
+          'SIDEBAR_MODE_READ_ERROR',
+          error
+        );
+
+      }
+
+    },
+    [
+      setSidebarOpen,
+    ]
+  );
+
+
+  // ==========================================================
+  // TOGGLE SIDEBAR MODE
+  // ==========================================================
+
+  function toggleSidebarMode() {
+
+    const nextFixed =
+      !sidebarOpen;
+
+
+    setSidebarOpen(
+      nextFixed
+    );
+
+
+    // --------------------------------------------------------
+    // When changing from fixed -> cursor while the mouse is
+    // already inside the sidebar, keep it open until mouse
+    // leaves. This prevents an abrupt collapse under cursor.
+    // --------------------------------------------------------
+
+    setHovered(
+      !nextFixed
+    );
+
+
+    try {
+
+      window.localStorage.setItem(
+        SIDEBAR_MODE_KEY,
+        nextFixed
+          ? 'fixed'
+          : 'cursor'
+      );
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        'SIDEBAR_MODE_SAVE_ERROR',
+        error
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // TIMER HELPERS
+  // ==========================================================
 
   function clearTimers() {
 
@@ -813,8 +919,6 @@ export default function AppSidebar({
 
   // ==========================================================
   // INITIAL SETTINGS LOAD
-  // +
-  // LIVE SETTINGS UPDATE EVENTS
   // ==========================================================
 
   useEffect(
@@ -1171,12 +1275,10 @@ export default function AppSidebar({
   return (
 
     // ========================================================
-    // FIXED 68PX LAYOUT SLOT
+    // FIXED 64PX LAYOUT SLOT
     //
-    // This wrapper always consumes exactly 68px.
-    //
-    // The actual sidebar inside can grow to 230px without
-    // changing the dashboard width.
+    // The page always reserves 64px.
+    // Expanded sidebar overlays to 220px.
     // ========================================================
 
     <div
@@ -1189,6 +1291,7 @@ export default function AppSidebar({
     >
 
       <aside
+
         onMouseEnter={
           handleMouseEnter
         }
@@ -1220,11 +1323,13 @@ export default function AppSidebar({
 
           ${
             expanded
+
               ? `
                 w-[220px]
 
                 shadow-[14px_0_32px_rgba(15,23,42,0.18)]
               `
+
               : `
                 w-[64px]
               `
@@ -1301,10 +1406,12 @@ export default function AppSidebar({
 
                   ${
                     expanded
+
                       ? `
                         translate-x-0
                         opacity-100
                       `
+
                       : `
                         pointer-events-none
                         -translate-x-1
@@ -1341,74 +1448,100 @@ export default function AppSidebar({
 
 
             {/* ===============================================
-                PIN / UNPIN
+                SIDEBAR MODE TOGGLE
             =============================================== */}
 
             {expanded && (
 
               <button
+
                 type="button"
 
-                onClick={() => {
+                role="switch"
 
-                  setSidebarOpen(
-                    !sidebarOpen
-                  );
+                aria-checked={
+                  sidebarOpen
+                }
 
-
-                  if (
-                    sidebarOpen
-                  ) {
-
-                    setHovered(
-                      false
-                    );
-
-                  }
-
-                }}
+                aria-label="Toggle fixed sidebar"
 
                 title={
                   sidebarOpen
-                    ? 'Unpin sidebar'
-                    : 'Pin sidebar'
+                    ? 'Switch to cursor mode'
+                    : 'Keep sidebar fixed'
                 }
 
-                className="
+                onClick={
+                  toggleSidebarMode
+                }
+
+                className={`
+                  relative
+
                   ml-2
+
                   flex
-                  h-8
-                  w-8
+                  h-5
+                  w-9
                   shrink-0
                   items-center
-                  justify-center
 
-                  rounded-lg
+                  rounded-full
 
-                  text-slate-500
+                  p-[2px]
 
-                  transition
+                  transition-colors
+                  duration-200
 
-                  hover:bg-white/[0.06]
-                  hover:text-white
-                "
+                  focus:outline-none
+                  focus:ring-2
+                  focus:ring-violet-400/30
+
+                  ${
+                    sidebarOpen
+
+                      ? `
+                        bg-violet-500
+                      `
+
+                      : `
+                        bg-white/15
+
+                        hover:bg-white/20
+                      `
+                  }
+                `}
               >
 
-                {sidebarOpen ? (
+                <span
+                  className={`
+                    block
 
-                  <PinOff
-                    size={15}
-                    strokeWidth={1.9}
-                  />
+                    h-4
+                    w-4
 
-                ) : (
+                    rounded-full
 
-                  <Pin
-                    size={15}
-                    strokeWidth={1.9}
-                  />
+                    bg-white
 
-                )}
+                    shadow-sm
+
+                    transition-transform
+                    duration-200
+
+                    ${
+                      sidebarOpen
+
+                        ? `
+                          translate-x-4
+                        `
+
+                        : `
+                          translate-x-0
+                        `
+                    }
+                  `}
+                />
 
               </button>
 
@@ -1459,11 +1592,13 @@ export default function AppSidebar({
                 return (
 
                   <div
+
                     key={
                       group.label
                     }
 
                     className="mb-3"
+
                   >
 
 
@@ -1542,6 +1677,7 @@ export default function AppSidebar({
                               =========================== */}
 
                               <button
+
                                 type="button"
 
                                 title={
@@ -1576,10 +1712,12 @@ export default function AppSidebar({
 
                                   ${
                                     expanded
+
                                       ? `
                                         gap-3
                                         px-3
                                       `
+
                                       : `
                                         justify-center
                                       `
@@ -1615,7 +1753,10 @@ export default function AppSidebar({
 
 
                                 <Icon
-                                  size={17}
+
+                                  size={
+                                    17
+                                  }
 
                                   className="shrink-0"
 
@@ -1624,6 +1765,7 @@ export default function AppSidebar({
                                       ? 2.4
                                       : 1.8
                                   }
+
                                 />
 
 
@@ -1641,9 +1783,11 @@ export default function AppSidebar({
 
                                     ${
                                       expanded
+
                                         ? `
                                           opacity-100
                                         `
+
                                         : `
                                           pointer-events-none
                                           opacity-0
@@ -1665,12 +1809,17 @@ export default function AppSidebar({
                                   {!access.allowed ? (
 
                                     <Lock
-                                      size={13}
+
+                                      size={
+                                        13
+                                      }
+
                                       className="
                                         ml-auto
                                         shrink-0
                                         text-slate-600
                                       "
+
                                     />
 
                                   ) : (
@@ -1679,7 +1828,10 @@ export default function AppSidebar({
                                       0 && (
 
                                       <ChevronDown
-                                        size={14}
+
+                                        size={
+                                          14
+                                        }
 
                                         className={`
                                           ml-auto
@@ -1693,6 +1845,7 @@ export default function AppSidebar({
                                               : ''
                                           }
                                         `}
+
                                       />
 
                                     )
@@ -1740,6 +1893,7 @@ export default function AppSidebar({
                                         return (
 
                                           <button
+
                                             key={
                                               subTab
                                             }
@@ -1854,14 +2008,16 @@ export default function AppSidebar({
           <div
             className="
               shrink-0
+
               border-t
               border-white/5
+
               p-2
             "
           >
 
-
             <button
+
               type="button"
 
               title="Settings"
@@ -1885,10 +2041,12 @@ export default function AppSidebar({
 
                 ${
                   expanded
+
                     ? `
                       gap-3
                       px-3
                     `
+
                     : `
                       justify-center
                     `
@@ -1915,7 +2073,10 @@ export default function AppSidebar({
 
 
               <Settings
-                size={17}
+
+                size={
+                  17
+                }
 
                 className="shrink-0"
 
@@ -1925,6 +2086,7 @@ export default function AppSidebar({
                     ? 2.4
                     : 1.8
                 }
+
               />
 
 
@@ -1940,9 +2102,11 @@ export default function AppSidebar({
 
                   ${
                     expanded
+
                       ? `
                         opacity-100
                       `
+
                       : `
                         pointer-events-none
                         opacity-0
