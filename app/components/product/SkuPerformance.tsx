@@ -74,13 +74,13 @@ export default function SkuPerformance({
 
   return (
     <div className="bg-white p-4 rounded-lg border">
-      <h2 className="text-lg font-semibold mb-4">SKU Performance</h2>
+      <h2 className="text-[14px] font-semibold mb-2.5">SKU Performance</h2>
 
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-3 text-[10px] text-gray-500">
         Showing {processedData.length} of {data.length} SKUs
       </p>
 
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-3 mb-2.5">
         <button
           onClick={() => setSortBy('revenue')}
           className={`px-3 py-1 rounded ${sortBy === 'revenue' ? 'bg-black text-white' : 'bg-gray-200'
@@ -139,7 +139,7 @@ export default function SkuPerformance({
       </div>
 
       <div className="overflow-auto">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full text-[11px]">
           <thead className="text-left border-b">
             <tr>
               <th className="p-2">SKU</th>
@@ -159,7 +159,7 @@ export default function SkuPerformance({
 
                 <td className="p-2">
                   {row.product_title}
-                  <div className="text-xs text-gray-400">
+                  <div className="text-[10px] text-gray-400">
                     {row.variant_title}
                   </div>
                 </td>
@@ -180,7 +180,7 @@ export default function SkuPerformance({
 
                 <td className="p-2">
                   <span
-                    className={`px-2 py-1 rounded text-xs ${row.sku_status === 'Winner'
+                    className={`px-2 py-1 rounded text-[10px] ${row.sku_status === 'Winner'
                       ? 'bg-green-100 text-green-700'
                       : row.sku_status === 'Declining'
                         ? 'bg-red-100 text-red-700'

@@ -164,7 +164,7 @@ export default function ShopifySetup({
         className="
           overflow-hidden
 
-          rounded-2xl
+          rounded-lg
 
           border
           border-slate-200
@@ -204,16 +204,16 @@ export default function ShopifySetup({
 
       <div
         className="
-          mt-6
+          mt-3
 
-          rounded-2xl
+          rounded-lg
 
           border
           border-violet-100
 
           bg-violet-50
 
-          p-5
+          p-3
         "
       >
 
@@ -238,8 +238,8 @@ export default function ShopifySetup({
 
             <div
               className="
-                text-sm
-                font-black
+                text-[11px]
+                font-semibold
                 text-slate-950
               "
             >
@@ -251,7 +251,7 @@ export default function ShopifySetup({
               className="
                 mt-2
 
-                text-xs
+                text-[10px]
                 leading-5
 
                 text-slate-600
@@ -271,7 +271,7 @@ export default function ShopifySetup({
               className="
                 mt-3
 
-                text-xs
+                text-[10px]
                 font-semibold
                 leading-5
 
@@ -315,7 +315,7 @@ export default function ShopifySetup({
             rel="noopener noreferrer"
 
             className="
-              mt-5
+              mt-3
 
               flex
               w-full
@@ -328,11 +328,11 @@ export default function ShopifySetup({
 
               bg-slate-950
 
-              px-5
-              py-3
+              px-3
+              py-2
 
-              text-sm
-              font-black
+              text-[11px]
+              font-semibold
               text-white
 
               transition
@@ -353,16 +353,16 @@ export default function ShopifySetup({
 
           <div
             className="
-              mt-5
+              mt-3
 
               rounded-xl
 
               bg-red-50
 
-              px-4
-              py-3
+              px-3
+              py-2
 
-              text-xs
+              text-[10px]
               font-semibold
               text-red-700
             "
@@ -380,7 +380,7 @@ export default function ShopifySetup({
 
         <div
           className="
-            mt-5
+            mt-3
 
             border-t
             border-violet-100
@@ -391,8 +391,8 @@ export default function ShopifySetup({
 
           <div
             className="
-              text-xs
-              font-black
+              text-[10px]
+              font-semibold
               text-slate-800
             "
           >
@@ -404,7 +404,7 @@ export default function ShopifySetup({
             className="
               mt-1
 
-              text-xs
+              text-[10px]
               leading-5
 
               text-slate-500
@@ -437,7 +437,7 @@ export default function ShopifySetup({
 
       <div
         className="
-          mt-5
+          mt-3
 
           text-center
 
@@ -489,8 +489,8 @@ function SetupRow({
         items-center
         gap-3
 
-        px-4
-        py-3
+        px-3
+        py-2
 
         ${
           last
@@ -532,7 +532,7 @@ function SetupRow({
 
       <span
         className="
-          text-xs
+          text-[10px]
           font-semibold
           text-slate-700
         "

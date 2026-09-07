@@ -591,28 +591,28 @@ export default function Settings() {
   };
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-7 shadow-xl">
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
         Engine Settings
       </p>
 
-      <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+      <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
         Retention Brain Configuration
       </h2>
 
-      <p className="mt-2 max-w-3xl text-sm text-slate-500">
+      <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
         These settings define how Retention OS ranks opportunities, hypotheses,
         actions and learnings.
       </p>
 
-      <div className="mt-6 space-y-5">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-lg font-black text-slate-950">Business Goal</h3>
+      <div className="mt-3 space-y-3">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="text-[14px] font-semibold text-slate-950">Business Goal</h3>
 
           <select
             value={businessGoal}
             onChange={(e) => setBusinessGoal(e.target.value)}
-            className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"
+            className="mt-2.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold"
           >
             <option>Contribution Profit</option>
             <option>LTV Growth</option>
@@ -621,14 +621,14 @@ export default function Settings() {
           </select>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-lg font-black text-slate-950">
+            <h3 className="text-[14px] font-semibold text-slate-950">
               Opportunity Scoring Weights
             </h3>
 
             <span
-              className={`rounded-full px-3 py-1 text-xs font-black ${totalWeight === 100
+              className={`rounded-full px-3 py-1 text-[10px] font-semibold ${totalWeight === 100
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-red-100 text-red-700'
                 }`}
@@ -637,7 +637,7 @@ export default function Settings() {
             </span>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
+          <div className="mt-2.5 grid gap-2.5 md:grid-cols-4">
             <NumberInput label="Profit Weight" value={profitWeight} setValue={setProfitWeight} />
             <NumberInput label="LTV Weight" value={ltvWeight} setValue={setLtvWeight} />
             <NumberInput label="Confidence Weight" value={confidenceWeight} setValue={setConfidenceWeight} />
@@ -645,10 +645,10 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-lg font-black text-slate-950">Channel Capacity</h3>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="text-[14px] font-semibold text-slate-950">Channel Capacity</h3>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
+          <div className="mt-2.5 grid gap-2.5 md:grid-cols-4">
             <NumberInput label="WhatsApp / Month" value={whatsappCapacity} setValue={setWhatsappCapacity} />
             <NumberInput label="Email / Month" value={emailCapacity} setValue={setEmailCapacity} />
             <NumberInput label="SMS or RCS / Month" value={smsCapacity} setValue={setSmsCapacity} />
@@ -656,13 +656,13 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-lg font-black text-slate-950">Learning Window</h3>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="text-[14px] font-semibold text-slate-950">Learning Window</h3>
 
           <select
             value={learningWindow}
             onChange={(e) => setLearningWindow(Number(e.target.value))}
-            className="mt-4 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold"
+            className="mt-2.5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold"
           >
             <option value={14}>14 Days</option>
             <option value={30}>30 Days</option>
@@ -671,24 +671,24 @@ export default function Settings() {
           </select>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-lg font-black text-slate-950">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="text-[14px] font-semibold text-slate-950">
             Confidence Thresholds
           </h3>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div className="mt-2.5 grid gap-2.5 md:grid-cols-3">
             <NumberInput label="Low" value={lowConfidence} setValue={setLowConfidence} />
             <NumberInput label="Medium" value={mediumConfidence} setValue={setMediumConfidence} />
             <NumberInput label="High" value={highConfidence} setValue={setHighConfidence} />
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h3 className="text-lg font-black text-slate-950">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <h3 className="text-[14px] font-semibold text-slate-950">
             Strategic Priorities
           </h3>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="mt-2.5 grid gap-2.5 md:grid-cols-2">
             <Slider label="Winback" value={winback} setValue={setWinback} />
             <Slider label="Cross Sell" value={crossSell} setValue={setCrossSell} />
             <Slider label="Replenishment" value={replenishment} setValue={setReplenishment} />
@@ -698,37 +698,37 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
-          <div className="flex items-start justify-between gap-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <div className="flex items-start justify-between gap-2.5">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700">
                 Product Mapping Alerts
               </p>
 
-              <h3 className="mt-2 text-xl font-black text-slate-950">
+              <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
                 {unmappedProducts.length} Products Need Mapping
               </h3>
 
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-[11px] text-slate-600">
                 These SKUs exist in Shopify orders but are not mapped to category,
                 routine and role.
               </p>
 
               {loadingProducts && (
-                <p className="mt-2 text-xs font-bold text-amber-700">
+                <p className="mt-2 text-[10px] font-bold text-amber-700">
                   Loading product mapping data...
                 </p>
               )}
             </div>
 
-            <span className="rounded-full bg-amber-200 px-3 py-1 text-xs font-black text-amber-800">
+            <span className="rounded-full bg-amber-200 px-3 py-1 text-[10px] font-semibold text-amber-800">
               Needs Input
             </span>
           </div>
 
-          <div className="mt-5 overflow-x-auto rounded-2xl border border-amber-200 bg-white">
-            <table className="w-full min-w-[1450px] text-left text-sm">
-              <thead className="bg-amber-100 text-xs uppercase tracking-widest text-amber-800">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-amber-200 bg-white">
+            <table className="w-full min-w-[1450px] text-left text-[11px]">
+              <thead className="bg-amber-100 text-[10px] uppercase tracking-widest text-amber-800">
                 <tr>
                   <th className="p-4">SKU</th>
                   <th className="p-4">Product</th>
@@ -752,7 +752,7 @@ export default function Settings() {
               <tbody>
                 {unmappedProducts.map((row: any, index: number) => (
                   <tr key={`unmapped-${row.sku}-${index}`} className="border-t border-amber-100">
-                    <td className="p-4 font-black">{row.sku}</td>
+                    <td className="p-4 font-semibold">{row.sku}</td>
                     <td className="p-4 min-w-[240px]">{row.product_title}</td>
 
                     <td className="p-4 min-w-[120px]">
@@ -904,7 +904,7 @@ export default function Settings() {
                       <button
                         onClick={() => saveProductMapping(row.sku)}
                         disabled={savingSku === row.sku}
-                        className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+                        className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-40"
                       >
                         {savingSku === row.sku ? 'Saving...' : 'Save Mapping'}
                       </button>
@@ -915,7 +915,7 @@ export default function Settings() {
                 {unmappedProducts.length === 0 && (
                   <tr>
                     <td
-                      className="p-6 text-sm font-bold text-slate-500"
+                      className="p-3.5 text-[11px] font-bold text-slate-500"
                       colSpan={16}
                     >
                       No unmapped products found.
@@ -927,32 +927,32 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Existing Product Mappings
               </p>
 
-              <h3 className="mt-2 text-xl font-black text-slate-950">
+              <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
                 {mappedProducts.length} Products Mapped
               </h3>
 
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-[11px] text-slate-500">
                 Edit already mapped products and update Retention OS product intelligence.
               </p>
             </div>
 
             <button
               onClick={loadProductData}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-[10px] font-semibold text-slate-700"
             >
               Refresh
             </button>
           </div>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[2150px] text-left text-sm">
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[2150px] text-left text-[11px]">
               <thead>
                 <tr className="border-b">
                   <th className="p-3">SKU</th>
@@ -976,7 +976,7 @@ export default function Settings() {
               <tbody>
                 {mappedProducts.map((row: any, index: number) => (
                   <tr key={`mapped-${row.sku}-${index}`} className="border-b align-top">
-                    <td className="p-3 font-black">{row.sku}</td>
+                    <td className="p-3 font-semibold">{row.sku}</td>
 
                     <td className="p-3 min-w-[260px]">
                       {row.product_title}
@@ -1151,7 +1151,7 @@ export default function Settings() {
                       <button
                         onClick={() => updateMappedProduct(row.sku)}
                         disabled={savingMappedSku === row.sku}
-                        className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+                        className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-40"
                       >
                         {savingMappedSku === row.sku
                           ? 'Updating...'
@@ -1163,7 +1163,7 @@ export default function Settings() {
 
                 {mappedProducts.length === 0 && (
                   <tr>
-                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={15}>
+                    <td className="p-3.5 text-[11px] font-bold text-slate-500" colSpan={15}>
                       No mapped products yet.
                     </td>
                   </tr>
@@ -1174,25 +1174,25 @@ export default function Settings() {
         </div>
 
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Routine Master
               </p>
 
-              <h3 className="mt-2 text-xl font-black text-slate-950">
+              <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
                 {routineMaster.length} Routine Products Mapped
               </h3>
 
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-[11px] text-slate-500">
                 Assign mapped products into routine logic so Retention OS can calculate routine completion.
               </p>
             </div>
           </div>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[1200px] text-left text-sm">
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[1200px] text-left text-[11px]">
               <thead>
                 <tr className="border-b">
                   <th className="p-3">SKU</th>
@@ -1215,7 +1215,7 @@ export default function Settings() {
 
                   return (
                     <tr key={`${row.sku}-${row.routine}`} className="border-b">
-                      <td className="p-3 font-black">{row.sku}</td>
+                      <td className="p-3 font-semibold">{row.sku}</td>
                       <td className="p-3">{row.product_title}</td>
                       <td className="p-3">{row.routine}</td>
                       <td className="p-3">{row.role}</td>
@@ -1224,7 +1224,7 @@ export default function Settings() {
                         <button
                           onClick={() => saveRoutineMapping(row)}
                           disabled={alreadyMapped || savingRoutineSku === row.sku}
-                          className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+                          className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-40"
                         >
                           {alreadyMapped
                             ? 'Mapped'
@@ -1239,7 +1239,7 @@ export default function Settings() {
 
                 {mappedProducts.length === 0 && (
                   <tr>
-                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={6}>
+                    <td className="p-3.5 text-[11px] font-bold text-slate-500" colSpan={6}>
                       Map products first to create routine logic.
                     </td>
                   </tr>
@@ -1249,16 +1249,16 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700">
             Retention OS Health
           </p>
 
-          <h3 className="mt-2 text-xl font-black text-slate-950">
+          <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
             Settings Readiness
           </h3>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-5">
+          <div className="mt-3 grid gap-2.5 md:grid-cols-5">
             <HealthCard
               label="Unmapped"
               value={settingsHealth?.unmapped_products || 0}
@@ -1286,37 +1286,37 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Customer Journey Configuration
           </p>
 
-          <h3 className="mt-2 text-xl font-black text-slate-950">
+          <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
             Stage 1 Foundation Settings
           </h3>
 
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-[11px] text-slate-500">
             Configure how Retention OS defines real customers, journey stages and journey health.
           </p>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <label className="block rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          <div className="mt-3 grid gap-2.5 md:grid-cols-2">
+            <label className="block rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Order Qualification Mode
               </p>
 
               <select
                 value={getGlobalSetting('order_mode', 'DELIVERED_ORDERS')}
                 onChange={(e) => updateGlobalSetting('order_mode', e.target.value)}
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold"
               >
                 <option value="ALL_ORDERS">All Orders</option>
                 <option value="DELIVERED_ORDERS">Delivered Orders</option>
               </select>
             </label>
 
-            <label className="block rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+            <label className="block rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
                 Customer Identity Mode
               </p>
 
@@ -1325,7 +1325,7 @@ export default function Settings() {
                 onChange={(e) =>
                   updateGlobalSetting('customer_identity_mode', e.target.value)
                 }
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold"
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold"
               >
                 <option value="SHOPIFY_CUSTOMER">Shopify Customer</option>
                 <option value="MASTER_CUSTOMER" disabled>
@@ -1335,14 +1335,14 @@ export default function Settings() {
             </label>
           </div>
 
-          <div className="mt-6">
-            <h4 className="text-sm font-black text-slate-950">
+          <div className="mt-3">
+            <h4 className="text-[11px] font-semibold text-slate-950">
               Journey Stage Rules
             </h4>
 
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
+            <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[900px] text-left text-[11px]">
+                <thead className="bg-slate-100 text-[10px] uppercase tracking-widest text-slate-500">
                   <tr>
                     <th className="p-4">Stage</th>
                     <th className="p-4">Min Orders</th>
@@ -1355,7 +1355,7 @@ export default function Settings() {
                 <tbody>
                   {journeySettings.map((row: any) => (
                     <tr key={row.stage_name} className="border-t border-slate-100">
-                      <td className="p-4 font-black">{row.stage_name}</td>
+                      <td className="p-4 font-semibold">{row.stage_name}</td>
 
                       <td className="p-4">
                         <input
@@ -1424,14 +1424,14 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="mt-6">
-            <h4 className="text-sm font-black text-slate-950">
+          <div className="mt-3">
+            <h4 className="text-[11px] font-semibold text-slate-950">
               Journey Health Rules
             </h4>
 
-            <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full min-w-[700px] text-left text-sm">
-                <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
+            <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[700px] text-left text-[11px]">
+                <thead className="bg-slate-100 text-[10px] uppercase tracking-widest text-slate-500">
                   <tr>
                     <th className="p-4">Health</th>
                     <th className="p-4">Min Days Since Last Order</th>
@@ -1443,7 +1443,7 @@ export default function Settings() {
                 <tbody>
                   {journeyHealthSettings.map((row: any) => (
                     <tr key={row.health_name} className="border-t border-slate-100">
-                      <td className="p-4 font-black">{row.health_name}</td>
+                      <td className="p-4 font-semibold">{row.health_name}</td>
 
                       <td className="p-4">
                         <input
@@ -1501,28 +1501,28 @@ export default function Settings() {
           <button
             onClick={saveJourneyConfiguration}
             disabled={savingJourney}
-            className="mt-5 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:opacity-40"
+            className="mt-3 rounded-lg bg-slate-950 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40"
           >
             {savingJourney ? 'Saving Journey...' : 'Save Journey Configuration'}
           </button>
         </div>
 
-        <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-700">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-700">
             Confidence Suggestions
           </p>
 
-          <h3 className="mt-2 text-xl font-black text-slate-950">
+          <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
             {confidenceSuggestions.length} Engine Confidence Updates Suggested
           </h3>
 
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-[11px] text-slate-600">
             These suggestions are generated from actual learning accuracy.
           </p>
 
-          <div className="mt-5 overflow-x-auto rounded-2xl border border-blue-200 bg-white">
-            <table className="w-full min-w-[1000px] text-left text-sm">
-              <thead className="bg-blue-100 text-xs uppercase tracking-widest text-blue-800">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-blue-200 bg-white">
+            <table className="w-full min-w-[1000px] text-left text-[11px]">
+              <thead className="bg-blue-100 text-[10px] uppercase tracking-widest text-blue-800">
                 <tr>
                   <th className="p-4">Opportunity</th>
                   <th className="p-4">Current</th>
@@ -1536,9 +1536,9 @@ export default function Settings() {
               <tbody>
                 {confidenceSuggestions.map((row: any) => (
                   <tr key={row.opportunity_type} className="border-t border-blue-100">
-                    <td className="p-4 font-black">{row.opportunity_type}</td>
+                    <td className="p-4 font-semibold">{row.opportunity_type}</td>
                     <td className="p-4">{row.current_confidence}%</td>
-                    <td className="p-4 font-black text-blue-700">
+                    <td className="p-4 font-semibold text-blue-700">
                       {row.suggested_confidence}%
                     </td>
                     <td className="p-4">
@@ -1549,7 +1549,7 @@ export default function Settings() {
                       <button
                         onClick={() => applyConfidenceSuggestion(row)}
                         disabled={applyingConfidenceType === row.opportunity_type}
-                        className="rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+                        className="rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-40"
                       >
                         {applyingConfidenceType === row.opportunity_type
                           ? 'Applying...'
@@ -1561,7 +1561,7 @@ export default function Settings() {
 
                 {confidenceSuggestions.length === 0 && (
                   <tr>
-                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={6}>
+                    <td className="p-3.5 text-[11px] font-bold text-slate-500" colSpan={6}>
                       No confidence suggestions yet.
                     </td>
                   </tr>
@@ -1571,17 +1571,17 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Confidence Change Log
           </p>
 
-          <h3 className="mt-2 text-xl font-black text-slate-950">
+          <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
             Recent Confidence Updates
           </h3>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[900px] text-left text-[11px]">
               <thead>
                 <tr className="border-b">
                   <th className="p-3">Opportunity</th>
@@ -1595,9 +1595,9 @@ export default function Settings() {
               <tbody>
                 {confidenceChangeLog.map((row: any) => (
                   <tr key={row.change_id} className="border-b">
-                    <td className="p-3 font-black">{row.opportunity_type}</td>
+                    <td className="p-3 font-semibold">{row.opportunity_type}</td>
                     <td className="p-3">{row.old_confidence}%</td>
-                    <td className="p-3 font-black text-blue-700">
+                    <td className="p-3 font-semibold text-blue-700">
                       {row.new_confidence}%
                     </td>
                     <td className="p-3">{row.reason}</td>
@@ -1611,7 +1611,7 @@ export default function Settings() {
 
                 {confidenceChangeLog.length === 0 && (
                   <tr>
-                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={5}>
+                    <td className="p-3.5 text-[11px] font-bold text-slate-500" colSpan={5}>
                       No confidence changes logged yet.
                     </td>
                   </tr>
@@ -1621,23 +1621,23 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+        <div className="rounded-xl border border-slate-200 bg-white p-3">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
               Opportunity Settings
             </p>
 
-            <h3 className="mt-2 text-xl font-black text-slate-950">
+            <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
               Retention Opportunity Assumptions
             </h3>
 
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-[11px] text-slate-500">
               Edit estimated AOV, profit, confidence and difficulty used by opportunity engines.
             </p>
           </div>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left text-[11px]">
               <thead>
                 <tr className="border-b">
                   <th className="p-3">Opportunity</th>
@@ -1653,7 +1653,7 @@ export default function Settings() {
               <tbody>
                 {opportunitySettings.map((row: any) => (
                   <tr key={row.opportunity_type} className="border-b">
-                    <td className="p-3 font-black">{row.opportunity_type}</td>
+                    <td className="p-3 font-semibold">{row.opportunity_type}</td>
 
                     <td className="p-3">
                       <input
@@ -1739,7 +1739,7 @@ export default function Settings() {
                       <button
                         onClick={() => saveOpportunitySetting(row)}
                         disabled={savingOpportunityType === row.opportunity_type}
-                        className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white disabled:opacity-40"
+                        className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-40"
                       >
                         {savingOpportunityType === row.opportunity_type
                           ? 'Saving...'
@@ -1751,7 +1751,7 @@ export default function Settings() {
 
                 {opportunitySettings.length === 0 && (
                   <tr>
-                    <td className="p-6 text-sm font-bold text-slate-500" colSpan={7}>
+                    <td className="p-3.5 text-[11px] font-bold text-slate-500" colSpan={7}>
                       No opportunity settings found.
                     </td>
                   </tr>
@@ -1763,7 +1763,7 @@ export default function Settings() {
 
         <button
           onClick={saveSettings}
-          className="rounded-2xl bg-slate-950 px-6 py-4 text-sm font-black text-white shadow-lg"
+          className="rounded-lg bg-slate-950 px-3 py-2.5 text-[11px] font-semibold text-white shadow-sm"
         >
           Save Settings
         </button>
@@ -1783,7 +1783,7 @@ function NumberInput({
 }) {
   return (
     <label className="block">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
 
@@ -1791,7 +1791,7 @@ function NumberInput({
         type="number"
         value={value}
         onChange={(e) => setValue(Number(e.target.value || 0))}
-        className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black"
+        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold"
       />
     </label>
   );
@@ -1807,10 +1807,10 @@ function Slider({
   setValue: (value: number) => void;
 }) {
   return (
-    <label className="block rounded-2xl border border-slate-200 bg-white p-4">
+    <label className="block rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-black text-slate-700">{label}</p>
-        <p className="text-xs font-black text-blue-600">{value}</p>
+        <p className="text-[10px] font-semibold text-slate-700">{label}</p>
+        <p className="text-[10px] font-semibold text-blue-600">{value}</p>
       </div>
 
       <input
@@ -1833,11 +1833,11 @@ function HealthCard({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-200 bg-white p-4">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">
+    <div className="rounded-lg border border-emerald-200 bg-white p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-700">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-black text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">
         {Number(value || 0).toLocaleString('en-IN')}
       </p>
     </div>

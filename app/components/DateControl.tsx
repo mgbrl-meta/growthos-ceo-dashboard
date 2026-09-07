@@ -383,7 +383,7 @@ export default function DateControl({
 
         className="
           flex
-          h-10
+          h-8
           items-center
           gap-2
           rounded-xl
@@ -391,7 +391,7 @@ export default function DateControl({
           border-slate-200
           bg-white
           px-3.5
-          text-xs
+          text-[10px]
           font-bold
           text-slate-700
           shadow-sm
@@ -443,15 +443,15 @@ export default function DateControl({
           className="
             absolute
             right-0
-            top-[48px]
+            top-[40px]
             z-[10000]
-            w-[620px]
+            w-[560px]
             overflow-hidden
-            rounded-2xl
+            rounded-lg
             border
             border-slate-200
             bg-white
-            shadow-2xl
+            shadow-sm
             shadow-slate-900/10
           "
         >
@@ -468,8 +468,8 @@ export default function DateControl({
               justify-between
               border-b
               border-slate-100
-              px-5
-              py-4
+              px-3
+              py-2.5
             "
           >
 
@@ -477,8 +477,8 @@ export default function DateControl({
 
               <p
                 className="
-                  text-sm
-                  font-black
+                  text-[11px]
+                  font-semibold
                   text-slate-950
                 "
               >
@@ -536,7 +536,7 @@ export default function DateControl({
               POPUP BODY
           ================================================= */}
 
-          <div className="grid grid-cols-[170px_1fr]">
+          <div className="grid grid-cols-[150px_1fr]">
 
 
             {/* ===============================================
@@ -557,7 +557,7 @@ export default function DateControl({
                   mb-2
                   px-2
                   text-[9px]
-                  font-black
+                  font-semibold
                   uppercase
                   tracking-[0.15em]
                   text-slate-400
@@ -601,7 +601,7 @@ export default function DateControl({
                           px-2.5
                           py-2
                           text-left
-                          text-xs
+                          text-[10px]
                           transition
 
                           ${
@@ -609,7 +609,7 @@ export default function DateControl({
 
                               ? `
                                 bg-white
-                                font-black
+                                font-semibold
                                 text-slate-950
                                 shadow-sm
                               `
@@ -654,7 +654,7 @@ export default function DateControl({
                 CUSTOM PERIODS
             =============================================== */}
 
-            <div className="p-5">
+            <div className="p-3">
 
 
               {/* CURRENT PERIOD */}
@@ -724,7 +724,7 @@ export default function DateControl({
 
               <div
                 className="
-                  mt-5
+                  mt-3
                   rounded-xl
                   bg-slate-50
                   px-3
@@ -757,8 +757,8 @@ export default function DateControl({
               border-t
               border-slate-100
               bg-white
-              px-5
-              py-3
+              px-3
+              py-2
             "
           >
 
@@ -793,8 +793,8 @@ export default function DateControl({
                   border
                   border-slate-200
                   bg-white
-                  px-4
-                  text-xs
+                  px-3
+                  text-[10px]
                   font-bold
                   text-slate-600
                   transition
@@ -821,9 +821,9 @@ export default function DateControl({
                   h-9
                   rounded-lg
                   bg-slate-950
-                  px-5
-                  text-xs
-                  font-black
+                  px-3
+                  text-[10px]
+                  font-semibold
                   text-white
                   transition
 
@@ -891,7 +891,7 @@ function DateSection({
         className="
           mb-3
           text-[10px]
-          font-black
+          font-semibold
           uppercase
           tracking-[0.12em]
           text-slate-500
@@ -915,7 +915,7 @@ function DateSection({
         />
 
 
-        <span className="text-xs text-slate-300">
+        <span className="text-[10px] text-slate-300">
           →
         </span>
 
@@ -961,7 +961,7 @@ function DateInput({
     <div
       className="
         flex
-        h-10
+        h-8
         items-center
         gap-2
         rounded-lg
@@ -1000,7 +1000,7 @@ function DateInput({
           min-w-0
           flex-1
           bg-transparent
-          text-xs
+          text-[10px]
           font-semibold
           text-slate-800
           outline-none

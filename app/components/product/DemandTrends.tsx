@@ -100,10 +100,10 @@ export default function DemandTrends({
   if (loading) return <div className="p-4">Loading Demand Trends...</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="bg-white p-4 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-1">Revenue Trend</h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <h2 className="text-[14px] font-semibold mb-1">Revenue Trend</h2>
+        <p className="text-[10px] text-gray-500 mb-2.5">
           Current period vs compare period with 7-day moving average
         </p>
 
@@ -132,8 +132,8 @@ export default function DemandTrends({
       </div>
 
       <div className="bg-white p-4 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-1">Units Trend</h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <h2 className="text-[14px] font-semibold mb-1">Units Trend</h2>
+        <p className="text-[10px] text-gray-500 mb-2.5">
           Current period vs compare period with 7-day moving average
         </p>
 
@@ -162,8 +162,8 @@ export default function DemandTrends({
       </div>
 
       <div className="bg-white p-4 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-1">Top SKU Trends</h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <h2 className="text-[14px] font-semibold mb-1">Top SKU Trends</h2>
+        <p className="text-[10px] text-gray-500 mb-2.5">
           Top 5 SKUs by revenue in selected period
         </p>
 
@@ -188,10 +188,10 @@ export default function DemandTrends({
       </div>
 
       <div className="bg-white p-4 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-1">
+        <h2 className="text-[14px] font-semibold mb-1">
           Demand Distribution Shift
         </h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <p className="text-[10px] text-gray-500 mb-2.5">
           Top 5 SKU revenue vs rest of portfolio
         </p>
 
@@ -216,18 +216,18 @@ export default function DemandTrends({
           </AreaChart>
         </ResponsiveContainer>
 
-        <div className="mt-4 rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Top SKU Share Movement</p>
-          <p className="text-lg font-semibold">
+        <div className="mt-2.5 rounded-lg border p-3">
+          <p className="text-[10px] text-gray-500">Top SKU Share Movement</p>
+          <p className="text-[14px] font-semibold">
             {pct(insights?.top_share_start)} → {pct(insights?.top_share_end)}
           </p>
         </div>
       </div>
 
       <div className="bg-white p-4 rounded-lg border">
-        <h2 className="text-lg font-semibold mb-4">Trend Insights</h2>
+        <h2 className="text-[14px] font-semibold mb-2.5">Trend Insights</h2>
 
-        <div className="space-y-3 text-sm">
+        <div className="space-y-3 text-[11px]">
           <div className="rounded-lg border p-3">
             Demand revenue is{' '}
             <span className="font-semibold">

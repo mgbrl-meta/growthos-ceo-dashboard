@@ -1,5 +1,7 @@
 "use client";
 
+
+import { GosCampaignPicker, GosDataTile, GosDecisionRow, GosLoadingCard, GosMiniStat, GosPanel, GosStatusBadge } from '../ui/GrowthUI';
 import { useEffect, useState } from "react";
 
 type MetaParams = {
@@ -132,7 +134,7 @@ export default function MetaCreativeAnalysis({
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <CampaignPicker
           campaigns={campaigns}
           value={selectedCampaign}
@@ -146,7 +148,7 @@ export default function MetaCreativeAnalysis({
 
   if (rows.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <CampaignPicker
           campaigns={campaigns}
           value={selectedCampaign}
@@ -200,14 +202,14 @@ export default function MetaCreativeAnalysis({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <CampaignPicker
         campaigns={campaigns}
         value={selectedCampaign}
         onChange={setSelectedCampaign}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-5">
         <DataTile
           label="Campaign ROAS"
           value={formatNumber(baseline.campaign_roas)}
@@ -228,12 +230,12 @@ export default function MetaCreativeAnalysis({
       </div>
 
       <Panel title="Section 1: Daily 4PI Funnel Analysis">
-        <p className="mb-5 text-sm font-semibold leading-6 text-slate-600">
+        <p className="mb-3 text-[11px] font-semibold leading-6 text-slate-600">
           This analysis uses daily creative behavior only. Frequency defines
           TOF, MOF, BOF. CPM and CPA are compared against campaign average.
         </p>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
           <FourPiFunnelBox
             title="TOF Creatives"
             subtitle="Frequency 1.00–1.15"
@@ -253,7 +255,7 @@ export default function MetaCreativeAnalysis({
       </Panel>
 
       <Panel title="Section 2: Creative Decision Buckets">
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <CreativeBucket
             title="🟢 Scale"
             subtitle="Meaningful spend + above campaign average"
@@ -588,130 +590,42 @@ function formatIndex(index: number) {
 
 function EmptyState({ title, text }: any) {
   return (
-    <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white/80 p-10 shadow-xl shadow-slate-200/70">
-      <h3 className="text-xl font-black">{title}</h3>
+    <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 p-3 shadow-sm shadow-slate-200/25">
+      <h3 className="text-[15px] font-semibold">{title}</h3>
       <p className="mt-2 text-slate-500">{text}</p>
     </div>
   );
 }
 
-function LoadingCard({ text }: any) {
-  return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 font-bold text-slate-500 shadow-xl shadow-slate-200/60">
-      {text}
-    </div>
-  );
-}
+function LoadingCard({ text }: any) { return <GosLoadingCard text={text} />; }
 
-function Panel({ title, children }: any) {
-  return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60">
-      <h3 className="mb-4 text-lg font-black tracking-tight">{title}</h3>
-      {children}
-    </section>
-  );
-}
+function Panel({ title, children }: any) { return <GosPanel title={title}>{children}</GosPanel>; }
 
-function DataTile({ label, value }: any) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
-      <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-black tracking-tight">{value}</p>
-    </div>
-  );
-}
+function DataTile({ label, value }: any) { return <GosDataTile label={label} value={value} />; }
 
-function CampaignPicker({ campaigns, value, onChange }: any) {
-  return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/60">
-      <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-        Campaign
-      </label>
+function CampaignPicker({ campaigns, value, onChange }: any) { return <GosCampaignPicker campaigns={campaigns} value={value} onChange={onChange} />; }
 
-      <select
-        value={value || ""}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={!Array.isArray(campaigns) || campaigns.length === 0}
-        className="mt-2 w-full rounded-2xl border bg-slate-50 px-4 py-3 font-bold outline-none disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {(!Array.isArray(campaigns) || campaigns.length === 0) && (
-          <option value="">No campaigns available</option>
-        )}
+function MiniStat({ label, value }: any) { return <GosMiniStat label={label} value={value} />; }
 
-        {(Array.isArray(campaigns) ? campaigns : []).map((campaign: string) => (
-          <option key={campaign} value={campaign}>
-            {campaign}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
+function DecisionRow({ title, subtitle, status, children }: any) { return <GosDecisionRow title={title} subtitle={subtitle} status={status}>{children}</GosDecisionRow>; }
 
-function MiniStat({ label, value }: any) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <p className="mt-1 font-black">{value}</p>
-    </div>
-  );
-}
-
-function DecisionRow({ title, subtitle, status, children }: any) {
-  return (
-    <div className="rounded-[1.75rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-lg shadow-slate-200/60">
-      <div className="mb-3 flex items-start justify-between gap-4">
-        <div>
-          <h4 className="font-black">{title}</h4>
-          <p className="text-sm font-semibold text-slate-500">{subtitle}</p>
-        </div>
-
-        <StatusBadge status={status} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: any) {
-  const cls =
-    status === "SCALE"
-      ? "bg-emerald-100 text-emerald-700"
-      : status === "KILL"
-        ? "bg-red-100 text-red-700"
-        : status === "TEST"
-          ? "bg-blue-100 text-blue-700"
-          : "bg-slate-200 text-slate-600";
-
-  return (
-    <span
-      className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-black ${cls}`}
-    >
-      {status}
-    </span>
-  );
-}
+function StatusBadge({ status }: any) { return <GosStatusBadge status={status} />; }
 
 function CreativeBucket({ title, subtitle, items }: any) {
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60">
-      <h3 className="font-black">{title}</h3>
-      <p className="mb-4 text-sm text-slate-500">{subtitle}</p>
+    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm shadow-slate-200/25">
+      <h3 className="font-semibold">{title}</h3>
+      <p className="mb-2.5 text-[11px] text-slate-500">{subtitle}</p>
 
       {items.length === 0 && (
-        <p className="text-sm text-slate-500">No creatives in this bucket.</p>
+        <p className="text-[11px] text-slate-500">No creatives in this bucket.</p>
       )}
 
       <div className="space-y-3">
         {items.slice(0, 5).map((c: any, i: number) => (
-          <div key={i} className="rounded-2xl border bg-slate-50 p-4">
-            <p className="font-black">{c.creative_name}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-500">
+          <div key={i} className="rounded-lg border bg-slate-50 p-4">
+            <p className="font-semibold">{c.creative_name}</p>
+            <p className="mt-1 text-[11px] font-semibold text-slate-500">
               Spend {formatCurrency(c.spend)} · ROAS {formatNumber(c.roas)} ·
               Index {formatNumber(c.roas_index)}
             </p>
@@ -728,10 +642,10 @@ function FourPiFunnelBox({ title, subtitle, items }: any) {
   const weak = items.filter((x: any) => x.overallStrength === "Weak");
 
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5">
-      <div className="mb-5">
-        <h3 className="text-lg font-black text-slate-950">{title}</h3>
-        <p className="text-sm font-semibold text-slate-500">{subtitle}</p>
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3">
+        <h3 className="text-[14px] font-semibold text-slate-950">{title}</h3>
+        <p className="text-[11px] font-semibold text-slate-500">{subtitle}</p>
       </div>
 
       <FourPiStrengthGroup title="Strong" items={strong} />
@@ -750,16 +664,16 @@ function FourPiStrengthGroup({ title, items }: any) {
         : "border-amber-200 bg-amber-50";
 
   return (
-    <div className={`mb-4 rounded-2xl border p-4 ${tone}`}>
+    <div className={`mb-2.5 rounded-lg border p-4 ${tone}`}>
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="font-black text-slate-950">{title}</h4>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600">
+        <h4 className="font-semibold text-slate-950">{title}</h4>
+        <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-600">
           {items.length}
         </span>
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm font-semibold text-slate-500">No creatives</p>
+        <p className="text-[11px] font-semibold text-slate-500">No creatives</p>
       ) : (
         <div className="space-y-3">
           {items.map((creative: any, i: number) => (
@@ -767,19 +681,19 @@ function FourPiStrengthGroup({ title, items }: any) {
               key={i}
               className="rounded-xl border border-white/70 bg-white p-3"
             >
-              <p className="font-black text-slate-950">
+              <p className="font-semibold text-slate-950">
                 {creative.creative_name}
               </p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              <p className="mt-1 text-[10px] font-semibold text-slate-500">
                 TOF {creative.tofDays}d · MOF {creative.mofDays}d · BOF{" "}
                 {creative.bofDays}d
               </p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              <p className="mt-1 text-[10px] font-semibold text-slate-500">
                 Spend {formatCurrency(creative.totalSpend)} · Avg CPM{" "}
                 {formatCurrency(creative.avgCpm)} · Avg CPA{" "}
                 {formatCurrency(creative.avgCpa)}
               </p>
-              <p className="mt-2 text-sm font-bold text-slate-700">
+              <p className="mt-2 text-[11px] font-bold text-slate-700">
                 {creative.recommendation}
               </p>
             </div>

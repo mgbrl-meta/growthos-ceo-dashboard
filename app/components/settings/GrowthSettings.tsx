@@ -944,28 +944,28 @@ export default function GrowthSettings() {
 
   return (
 
-    <div className="space-y-5">
+    <div className="space-y-3">
 
 
       {/* =====================================================
           PAGE HEADER
       ===================================================== */}
 
-      <section className="flex flex-wrap items-start justify-between gap-4">
+      <section className="flex flex-wrap items-start justify-between gap-2.5">
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
             Growth OS
           </p>
 
 
-          <h1 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950">
+          <h1 className="mt-1 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
             Settings
           </h1>
 
 
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+          <p className="mt-1 max-w-2xl text-[11px] text-slate-500">
             Manage workspace configuration, tools, integrations,
             business rules and commercial access.
           </p>
@@ -982,14 +982,14 @@ export default function GrowthSettings() {
 
           className="
             flex
-            h-10
+            h-8
             items-center
             gap-2
             rounded-xl
             bg-slate-950
-            px-4
-            text-xs
-            font-black
+            px-3
+            text-[10px]
+            font-semibold
             text-white
             shadow-sm
             transition
@@ -1025,14 +1025,14 @@ export default function GrowthSettings() {
           SETTINGS SHELL
       ===================================================== */}
 
-      <section className="grid grid-cols-1 gap-5 lg:grid-cols-[230px_minmax(0,1fr)]">
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[230px_minmax(0,1fr)]">
 
 
         {/* ===================================================
             LOCAL SETTINGS NAV
         =================================================== */}
 
-        <aside className="self-start rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <aside className="self-start rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
 
           {SETTINGS_TABS.map(
             item => {
@@ -1070,7 +1070,7 @@ export default function GrowthSettings() {
                     px-3
                     py-2.5
                     text-left
-                    text-xs
+                    text-[10px]
                     font-bold
                     transition
 
@@ -1126,7 +1126,7 @@ export default function GrowthSettings() {
               description="Workspace-wide settings used across Growth OS."
             >
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
 
 
                 <Field
@@ -1513,8 +1513,8 @@ export default function GrowthSettings() {
                       className="
                         grid
                         grid-cols-1
-                        gap-4
-                        rounded-2xl
+                        gap-2.5
+                        rounded-lg
                         border
                         border-slate-200
                         p-4
@@ -1528,7 +1528,7 @@ export default function GrowthSettings() {
 
                         <div className="flex items-center gap-2">
 
-                          <h3 className="text-sm font-black text-slate-950">
+                          <h3 className="text-[11px] font-semibold text-slate-950">
                             {tool.name}
                           </h3>
 
@@ -1542,7 +1542,7 @@ export default function GrowthSettings() {
                         </div>
 
 
-                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                        <p className="mt-1 text-[10px] leading-5 text-slate-500">
                           {tool.description}
                         </p>
 
@@ -1613,12 +1613,12 @@ export default function GrowthSettings() {
 
                       <div>
 
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                           Availability
                         </p>
 
 
-                        <span className="text-xs font-bold text-slate-600">
+                        <span className="text-[10px] font-bold text-slate-600">
 
                           {tool.enabled
                             ? 'Enabled'
@@ -1686,7 +1686,7 @@ export default function GrowthSettings() {
               description="Manage external platforms and Growth OS data connections."
             >
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
 
                 {settings.integrations.map(
                   integration => (
@@ -1696,10 +1696,10 @@ export default function GrowthSettings() {
                         integration.id
                       }
 
-                      className="rounded-2xl border border-slate-200 p-5"
+                      className="rounded-lg border border-slate-200 p-3"
                     >
 
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between gap-2.5">
 
                         <div>
 
@@ -1712,12 +1712,12 @@ export default function GrowthSettings() {
                           </div>
 
 
-                          <h3 className="mt-4 text-sm font-black text-slate-950">
+                          <h3 className="mt-2.5 text-[11px] font-semibold text-slate-950">
                             {integration.name}
                           </h3>
 
 
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-[10px] text-slate-500">
                             {integration.account}
                           </p>
 
@@ -1733,7 +1733,7 @@ export default function GrowthSettings() {
                       </div>
 
 
-                      <div className="mt-4 border-t border-slate-100 pt-4">
+                      <div className="mt-2.5 border-t border-slate-100 pt-4">
 
                         <div className="flex items-center justify-between">
 
@@ -1742,7 +1742,7 @@ export default function GrowthSettings() {
                           </span>
 
 
-                          <span className="text-xs font-semibold text-slate-700">
+                          <span className="text-[10px] font-semibold text-slate-700">
                             {integration.lastSync}
                           </span>
 
@@ -1769,7 +1769,7 @@ export default function GrowthSettings() {
           {activeTab ===
             'Business Rules' && (
 
-            <div className="space-y-5">
+            <div className="space-y-3">
 
 
               {/* META */}
@@ -1779,7 +1779,7 @@ export default function GrowthSettings() {
                 description="Default decision thresholds used by Meta intelligence."
               >
 
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
 
                   <NumberField
 
@@ -1887,7 +1887,7 @@ export default function GrowthSettings() {
                 description="Default search and Shopping efficiency thresholds."
               >
 
-                <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
 
                   <NumberField
 
@@ -1976,7 +1976,7 @@ export default function GrowthSettings() {
                 description="Global defaults for deterministic attribution and journey analysis."
               >
 
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
 
 
                   <Field
@@ -2239,7 +2239,7 @@ export default function GrowthSettings() {
               </div>
 
 
-              <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
+              <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
 
                 <div className="flex gap-3">
 
@@ -2251,12 +2251,12 @@ export default function GrowthSettings() {
 
                   <div>
 
-                    <p className="text-sm font-black text-slate-900">
+                    <p className="text-[11px] font-semibold text-slate-900">
                       V2: live scheduler control
                     </p>
 
 
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                    <p className="mt-1 text-[10px] leading-5 text-slate-500">
                       This screen will later read Cloud Scheduler,
                       BigQuery refresh history and Cloud Run health
                       directly instead of static configuration.
@@ -2285,7 +2285,7 @@ export default function GrowthSettings() {
               description="Role-based access control for Growth OS."
             >
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
 
                 <RoleCard
                   title="Owner"
@@ -2310,7 +2310,7 @@ export default function GrowthSettings() {
               </div>
 
 
-              <div className="mt-5 rounded-2xl bg-slate-50 p-5">
+              <div className="mt-3 rounded-lg bg-slate-50 p-3">
 
                 <div className="flex gap-3">
 
@@ -2322,12 +2322,12 @@ export default function GrowthSettings() {
 
                   <div>
 
-                    <p className="text-sm font-black">
+                    <p className="text-[11px] font-semibold">
                       Authentication integration comes next
                     </p>
 
 
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                    <p className="mt-1 text-[10px] leading-5 text-slate-500">
                       User roles will be linked to the Shopify-installed
                       entry path and public Growth OS authentication.
                     </p>
@@ -2355,7 +2355,7 @@ export default function GrowthSettings() {
               description="Configure Growth OS commercial plans and tool entitlements."
             >
 
-              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-2">
 
 
                 <Field
@@ -2486,7 +2486,7 @@ export default function GrowthSettings() {
 
               {/* PLAN ENTITLEMENT TABLE */}
 
-              <div className="overflow-hidden rounded-2xl border border-slate-200">
+              <div className="overflow-hidden rounded-lg border border-slate-200">
 
                 <div className="overflow-x-auto">
 
@@ -2575,7 +2575,7 @@ export default function GrowthSettings() {
                                     px-2.5
                                     py-1
                                     text-[10px]
-                                    font-black
+                                    font-semibold
 
                                     ${
                                       allowed
@@ -2613,7 +2613,7 @@ export default function GrowthSettings() {
 
               {/* USAGE PLACEHOLDERS */}
 
-              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-4">
 
                 <UsageCard
                   label="Orders"
@@ -2660,15 +2660,15 @@ export default function GrowthSettings() {
 ============================================================ */
 
 const inputClass =
-  'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100';
+  'h-8 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100';
 
 
 const tableHead =
-  'px-4 py-3 text-left text-[10px] font-black uppercase tracking-wide text-slate-400';
+  'px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400';
 
 
 const tableCell =
-  'px-4 py-3 text-xs text-slate-600';
+  'px-3 py-2 text-[10px] text-slate-600';
 
 
 /* ============================================================
@@ -2683,16 +2683,16 @@ function SettingsPanel({
 
   return (
 
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
-      <div className="mb-5">
+      <div className="mb-3">
 
-        <h2 className="text-base font-black tracking-[-0.025em] text-slate-950">
+        <h2 className="text-base font-semibold tracking-[-0.025em] text-slate-950">
           {title}
         </h2>
 
 
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-[10px] text-slate-500">
           {description}
         </p>
 
@@ -2721,7 +2721,7 @@ function Field({
 
     <label>
 
-      <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </p>
 
@@ -2833,7 +2833,7 @@ function Toggle({
       className={`
         relative
         h-6
-        w-11
+        w-9
         rounded-full
         transition
 
@@ -2903,7 +2903,7 @@ function StatusBadge({
         px-2.5
         py-1
         text-[9px]
-        font-black
+        font-semibold
         uppercase
         tracking-wide
 
@@ -2955,11 +2955,11 @@ function BooleanSetting({
 
   return (
 
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4">
+    <div className="flex items-center justify-between gap-2.5 rounded-xl border border-slate-200 p-4">
 
       <div>
 
-        <p className="text-xs font-black text-slate-900">
+        <p className="text-[10px] font-semibold text-slate-900">
           {title}
         </p>
 
@@ -3006,11 +3006,11 @@ function SyncRow({
 
   return (
 
-    <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 px-4 py-3 md:grid-cols-[minmax(0,1fr)_180px_120px_90px] md:items-center">
+    <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 px-3 py-2 md:grid-cols-[minmax(0,1fr)_180px_120px_90px] md:items-center">
 
       <div>
 
-        <p className="text-xs font-black text-slate-900">
+        <p className="text-[10px] font-semibold text-slate-900">
           {name}
         </p>
 
@@ -3022,12 +3022,12 @@ function SyncRow({
       </div>
 
 
-      <span className="text-xs font-semibold text-slate-600">
+      <span className="text-[10px] font-semibold text-slate-600">
         {schedule}
       </span>
 
 
-      <span className="text-xs font-semibold text-slate-600">
+      <span className="text-[10px] font-semibold text-slate-600">
         {status}
       </span>
 
@@ -3036,7 +3036,7 @@ function SyncRow({
 
         type="button"
 
-        className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-black text-slate-600 hover:bg-slate-50"
+        className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
 
       >
 
@@ -3071,7 +3071,7 @@ function RoleCard({
 
   return (
 
-    <div className="rounded-2xl border border-slate-200 p-5">
+    <div className="rounded-lg border border-slate-200 p-3">
 
       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
 
@@ -3082,17 +3082,17 @@ function RoleCard({
       </div>
 
 
-      <h3 className="mt-4 text-sm font-black text-slate-900">
+      <h3 className="mt-2.5 text-[11px] font-semibold text-slate-900">
         {title}
       </h3>
 
 
-      <p className="mt-1 text-xs leading-5 text-slate-500">
+      <p className="mt-1 text-[10px] leading-5 text-slate-500">
         {description}
       </p>
 
 
-      <p className="mt-4 text-[10px] font-black uppercase tracking-wide text-slate-400">
+      <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {permissions}
       </p>
 
@@ -3119,12 +3119,12 @@ function UsageCard({
 
     <div className="rounded-xl bg-slate-50 p-4">
 
-      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </p>
 
 
-      <p className="mt-2 text-sm font-black text-slate-900">
+      <p className="mt-2 text-[11px] font-semibold text-slate-900">
         {value}
       </p>
 

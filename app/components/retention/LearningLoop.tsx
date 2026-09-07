@@ -70,27 +70,27 @@ export default function LearningLoop() {
   }, [rows]);
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl">
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+    <section className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
         Learning Loop
       </p>
 
-      <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+      <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
         Expected vs Actual Memory
       </h2>
 
-      <p className="mt-2 text-sm text-slate-500">
+      <p className="mt-2 text-[11px] text-slate-500">
         Stores what worked, what failed, how accurate the engine was, and what
         should change next.
       </p>
 
       {loading && (
-        <p className="mt-3 text-xs font-bold text-blue-600">
+        <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading learning data...
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
+      <div className="mt-3 grid gap-2.5 md:grid-cols-4">
         <Card label="Learnings" value={rows.length.toString()} />
         <Card label="Awaiting Review" value={candidates.length.toString()} />
         <Card label="Expected Profit" value={money(summary.expectedProfit)} />
@@ -100,22 +100,22 @@ export default function LearningLoop() {
         />
       </div>
 
-      <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-5">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-700">
+      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700">
           Actions Awaiting Learning
         </p>
 
-        <h3 className="mt-2 text-xl font-black text-slate-950">
+        <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
           {candidates.length} Completed Actions Need Review
         </h3>
 
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-[11px] text-slate-600">
           These actions are completed but do not have a learning recorded yet.
         </p>
 
-        <div className="mt-5 overflow-x-auto rounded-2xl border border-amber-200 bg-white">
-          <table className="w-full min-w-[1200px] text-left text-sm">
-            <thead className="bg-amber-100 text-xs uppercase tracking-widest text-amber-800">
+        <div className="mt-3 overflow-x-auto rounded-lg border border-amber-200 bg-white">
+          <table className="w-full min-w-[1200px] text-left text-[11px]">
+            <thead className="bg-amber-100 text-[10px] uppercase tracking-widest text-amber-800">
               <tr>
                 <th className="p-4">Action</th>
                 <th className="p-4">Opportunity</th>
@@ -128,7 +128,7 @@ export default function LearningLoop() {
             <tbody>
               {candidates.map((row) => (
                 <tr key={row.action_id} className="border-t border-amber-100">
-                  <td className="p-4 font-black">{row.action_title}</td>
+                  <td className="p-4 font-semibold">{row.action_title}</td>
 
                   <td className="p-4">
                     {row.opportunity_type} - {row.opportunity_group}
@@ -151,7 +151,7 @@ export default function LearningLoop() {
               {candidates.length === 0 && (
                 <tr>
                   <td
-                    className="p-6 text-sm font-bold text-slate-500"
+                    className="p-3.5 text-[11px] font-bold text-slate-500"
                     colSpan={5}
                   >
                     No completed actions waiting for learning.
@@ -163,22 +163,22 @@ export default function LearningLoop() {
         </div>
       </div>
 
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-5">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
           Engine Learning Summary
         </p>
 
-        <h3 className="mt-2 text-xl font-black text-slate-950">
+        <h3 className="mt-2 text-[15px] font-semibold text-slate-950">
           Opportunity Type Performance
         </h3>
 
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-[11px] text-slate-500">
           Shows whether each opportunity type is over-performing or
           under-performing against expected profit.
         </p>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[1000px] text-left text-sm">
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[1000px] text-left text-[11px]">
             <thead>
               <tr className="border-b">
                 <th className="p-3">Opportunity Type</th>
@@ -193,7 +193,7 @@ export default function LearningLoop() {
             <tbody>
               {summaryRows.map((row) => (
                 <tr key={row.opportunity_type} className="border-b">
-                  <td className="p-3 font-black">{row.opportunity_type}</td>
+                  <td className="p-3 font-semibold">{row.opportunity_type}</td>
                   <td className="p-3">{row.learnings}</td>
                   <td className="p-3 font-bold">
                     {money(row.total_expected_profit)}
@@ -213,7 +213,7 @@ export default function LearningLoop() {
               {summaryRows.length === 0 && (
                 <tr>
                   <td
-                    className="p-6 text-sm font-bold text-slate-500"
+                    className="p-3.5 text-[11px] font-bold text-slate-500"
                     colSpan={6}
                   >
                     No learning summary yet.
@@ -225,9 +225,9 @@ export default function LearningLoop() {
         </div>
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200">
+      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[1500px] text-left">
-          <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
+          <thead className="bg-slate-100 text-[10px] uppercase tracking-widest text-slate-500">
             <tr>
               <th className="p-4">Opportunity</th>
               <th className="p-4">Expected Revenue</th>
@@ -245,7 +245,7 @@ export default function LearningLoop() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.learning_id} className="border-t border-slate-100">
-                <td className="p-4 font-black text-slate-950">
+                <td className="p-4 font-semibold text-slate-950">
                   {row.opportunity_type} - {row.opportunity_group}
                 </td>
 
@@ -261,7 +261,7 @@ export default function LearningLoop() {
                 </td>
 
                 <td className="p-4">
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-semibold text-slate-600">
                     {row.result}
                   </span>
                 </td>
@@ -280,7 +280,7 @@ export default function LearningLoop() {
               <tr>
                 <td
                   colSpan={10}
-                  className="p-8 text-center text-sm font-bold text-slate-500"
+                  className="p-4 text-center text-[11px] font-bold text-slate-500"
                 >
                   No learnings recorded yet. Complete an action and record
                   actual results to activate the learning loop.
@@ -306,12 +306,12 @@ function formatDate(value: any) {
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

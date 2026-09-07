@@ -1,5 +1,7 @@
 'use client';
 
+
+import { GosCampaignPicker, GosDataTile, GosLoadingCard, GosPanel } from '../ui/GrowthUI';
 import { useEffect, useState } from 'react';
 
 export default function MetaFunnelAnalysis({
@@ -103,11 +105,11 @@ export default function MetaFunnelAnalysis({
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 rounded-3xl border bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-2.5 rounded-xl border bg-white p-3.5 shadow-sm md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-lg font-black">Funnel Analysis</h3>
-          <p className="text-sm text-slate-500">
+          <h3 className="text-[14px] font-semibold">Funnel Analysis</h3>
+          <p className="text-[11px] text-slate-500">
             Current period vs comparison period with growth by funnel stage.
           </p>
         </div>
@@ -133,12 +135,12 @@ export default function MetaFunnelAnalysis({
 
             return (
               <div key={row.stage}>
-                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[180px_1fr_1fr_1fr_1fr] md:items-center">
+                <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 md:grid-cols-[180px_1fr_1fr_1fr_1fr] md:items-center">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       Stage
                     </p>
-                    <p className="text-lg font-black">{row.stage}</p>
+                    <p className="text-[14px] font-semibold">{row.stage}</p>
                   </div>
 
                   <MetricBox label={`Current (${start} → ${end})`} value={formatNumber(row.current, 0)} />
@@ -214,27 +216,9 @@ function formatNumber(value: number = 0, digits = 2) {
   }).format(Number(value || 0));
 }
 
-function Panel({ title, children }: any) {
-  return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60">
-      <h3 className="mb-4 text-lg font-black tracking-tight">{title}</h3>
-      {children}
-    </section>
-  );
-}
+function Panel({ title, children }: any) { return <GosPanel title={title}>{children}</GosPanel>; }
 
-function MetricBox({ label, value, positive = true }: any) {
-  return (
-    <div>
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-        {label}
-      </p>
-      <p className={`mt-1 text-base font-black ${positive ? 'text-emerald-600' : 'text-red-600'}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
+function MetricBox({ label, value }: any) { return <GosDataTile label={label} value={value} />; }
 
 function Toggle({ active, onClick, label }: any) {
   return (
@@ -242,8 +226,8 @@ function Toggle({ active, onClick, label }: any) {
       onClick={onClick}
       className={
         active
-          ? 'rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white'
-          : 'rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600'
+          ? 'rounded-xl bg-slate-950 px-3 py-2 text-[11px] font-semibold text-white'
+          : 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600'
       }
     >
       {label}
@@ -251,31 +235,6 @@ function Toggle({ active, onClick, label }: any) {
   );
 }
 
-function CampaignPicker({ campaigns, value, onChange }: any) {
-  return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/60">
-      <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-        Campaign
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full rounded-2xl border bg-slate-50 px-4 py-3 font-bold outline-none"
-      >
-        {campaigns.map((campaign: string) => (
-          <option key={campaign} value={campaign}>
-            {campaign}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
+function CampaignPicker({ campaigns, value, onChange }: any) { return <GosCampaignPicker campaigns={campaigns} value={value} onChange={onChange} />; }
 
-function LoadingCard({ text }: any) {
-  return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 font-bold text-slate-500 shadow-xl shadow-slate-200/60">
-      {text}
-    </div>
-  );
-}
+function LoadingCard({ text }: any) { return <GosLoadingCard text={text} />; }

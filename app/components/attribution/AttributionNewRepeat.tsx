@@ -105,7 +105,7 @@ export default function AttributionNewRepeat({
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center text-sm text-slate-400">
+      <div className="flex min-h-[400px] items-center justify-center text-[11px] text-slate-400">
         Loading customer mix...
       </div>
     );
@@ -114,7 +114,7 @@ export default function AttributionNewRepeat({
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-red-900">
         {error}
       </div>
     );
@@ -122,25 +122,25 @@ export default function AttributionNewRepeat({
 
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
       <PageIntro />
 
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.7fr_1.3fr]">
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.7fr_1.3fr]">
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
-          <h3 className="text-sm font-black">
+          <h3 className="text-[11px] font-semibold">
             Purchase Mix
           </h3>
 
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-[10px] text-slate-400">
             New versus repeat tracked orders
           </p>
 
 
-          <div className="h-[300px]">
+          <div className="h-[200px]">
 
             <ResponsiveContainer
               width="100%"
@@ -190,7 +190,7 @@ export default function AttributionNewRepeat({
         </section>
 
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
 
           {rows.map(
             row => (
@@ -198,22 +198,22 @@ export default function AttributionNewRepeat({
                 key={
                   row.tracked_customer_type
                 }
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
               >
 
-                <p className="text-[10px] font-black uppercase tracking-wide text-violet-600">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600">
                   {customerType(
                     row.tracked_customer_type
                   )}
                 </p>
 
-                <p className="mt-2 text-2xl font-black">
+                <p className="mt-2 text-[14px] font-semibold">
                   {integer(
                     row.orders
                   )} orders
                 </p>
 
-                <div className="mt-5 grid grid-cols-2 gap-4">
+                <div className="mt-3 grid grid-cols-2 gap-2.5">
 
                   <Small
                     label="Revenue"
@@ -287,13 +287,13 @@ export default function AttributionNewRepeat({
 function PageIntro() {
   return (
     <section>
-      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
         Attribution OS
       </p>
-      <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">
+      <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
         New vs Repeat
       </h2>
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="mt-1 text-[10px] text-slate-400">
         Understand how acquisition and repeat-customer journeys differ.
       </p>
     </section>
@@ -310,7 +310,7 @@ function Small({
       <p className="text-[10px] font-bold uppercase text-slate-400">
         {label}
       </p>
-      <p className="mt-1 text-lg font-black">
+      <p className="mt-1 text-[14px] font-semibold">
         {value}
       </p>
     </div>

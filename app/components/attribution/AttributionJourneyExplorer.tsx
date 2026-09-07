@@ -311,13 +311,13 @@ export default function AttributionJourneyExplorer({
 
     return (
 
-      <section className="rounded-2xl border border-red-200 bg-red-50 p-6">
+      <section className="rounded-lg border border-red-200 bg-red-50 p-3.5">
 
-        <h3 className="font-black text-red-900">
+        <h3 className="font-semibold text-red-900">
           Journey Explorer failed to load
         </h3>
 
-        <p className="mt-1 text-sm text-red-700">
+        <p className="mt-1 text-[11px] text-red-700">
           {error}
         </p>
 
@@ -326,7 +326,7 @@ export default function AttributionJourneyExplorer({
           onClick={
             load
           }
-          className="mt-4 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+          className="mt-2.5 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Retry
         </button>
@@ -340,26 +340,26 @@ export default function AttributionJourneyExplorer({
 
   return (
 
-    <div className="space-y-5">
+    <div className="space-y-3">
 
 
       {/* =====================================================
           TOP STRIP
       ===================================================== */}
 
-      <section className="flex flex-wrap items-end justify-between gap-4">
+      <section className="flex flex-wrap items-end justify-between gap-2.5">
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
             Journey Explorer
           </p>
 
-          <h2 className="mt-1 text-xl font-black tracking-[-0.035em] text-slate-950">
+          <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em] text-slate-950">
             Individual customer journeys
           </h2>
 
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-[10px] text-slate-400">
             Follow the complete sequence from discovery to purchase.
           </p>
 
@@ -373,7 +373,7 @@ export default function AttributionJourneyExplorer({
           className="flex items-center gap-2"
         >
 
-          <div className="flex h-10 w-[300px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
+          <div className="flex h-8 w-[300px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
 
             <Search
               size={15}
@@ -391,7 +391,7 @@ export default function AttributionJourneyExplorer({
                   )
               }
               placeholder="Order, customer or visitor"
-              className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[10px] font-medium text-slate-800 outline-none"
             />
 
           </div>
@@ -399,7 +399,7 @@ export default function AttributionJourneyExplorer({
 
           <button
             type="submit"
-            className="h-10 rounded-xl bg-slate-950 px-4 text-xs font-black text-white"
+            className="h-8 rounded-xl bg-slate-950 px-3 text-[10px] font-semibold text-white"
           >
             Search
           </button>
@@ -413,7 +413,7 @@ export default function AttributionJourneyExplorer({
           KPIs
       ===================================================== */}
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
 
         <MiniKpi
           label="Journeys Loaded"
@@ -459,22 +459,22 @@ export default function AttributionJourneyExplorer({
           EXPLORER
       ===================================================== */}
 
-      <section className="grid min-h-[650px] grid-cols-1 gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+      <section className="grid min-h-[650px] grid-cols-1 gap-3 xl:grid-cols-[380px_minmax(0,1fr)]">
 
 
         {/* ===================================================
             LEFT — ORDERS
         =================================================== */}
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
-          <div className="border-b border-slate-100 px-4 py-3">
+          <div className="border-b border-slate-100 px-3 py-2">
 
             <div className="flex items-center justify-between">
 
               <div>
 
-                <h3 className="text-sm font-black text-slate-950">
+                <h3 className="text-[11px] font-semibold text-slate-950">
                   Orders
                 </h3>
 
@@ -518,8 +518,8 @@ export default function AttributionJourneyExplorer({
                         w-full
                         border-b
                         border-slate-100
-                        px-4
-                        py-3
+                        px-3
+                        py-2
                         text-left
                         transition
 
@@ -534,11 +534,11 @@ export default function AttributionJourneyExplorer({
                       `}
                     >
 
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between gap-2.5">
 
                         <div>
 
-                          <p className="text-sm font-black text-slate-900">
+                          <p className="text-[11px] font-semibold text-slate-900">
                             {
                               row.order_name
                               ||
@@ -557,7 +557,7 @@ export default function AttributionJourneyExplorer({
                         </div>
 
 
-                        <p className="text-xs font-black text-slate-900">
+                        <p className="text-[10px] font-semibold text-slate-900">
                           {
                             currency(
                               row.order_value
@@ -632,7 +632,7 @@ export default function AttributionJourneyExplorer({
                 )
               : (
 
-                  <div className="p-8 text-center text-sm text-slate-400">
+                  <div className="p-4 text-center text-[11px] text-slate-400">
                     No journeys found.
                   </div>
 
@@ -661,7 +661,7 @@ export default function AttributionJourneyExplorer({
               )
             : (
 
-                <div className="flex min-h-[500px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm text-slate-400">
+                <div className="flex min-h-[500px] items-center justify-center rounded-lg border border-slate-200 bg-white text-[11px] text-slate-400">
                   Select an order to inspect its journey.
                 </div>
 
@@ -691,22 +691,22 @@ function JourneyDetail({
 
   return (
 
-    <div className="space-y-5">
+    <div className="space-y-3">
 
 
       {/* ORDER HEADER */}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-2.5">
 
           <div>
 
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-violet-600">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-600">
               Selected Order
             </p>
 
-            <h2 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950">
+            <h2 className="mt-1 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
               {
                 journey.order_name
                 ||
@@ -714,7 +714,7 @@ function JourneyDetail({
               }
             </h2>
 
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-[10px] text-slate-400">
               {
                 formatDateTime(
                   journey.order_created_at
@@ -727,7 +727,7 @@ function JourneyDetail({
 
           <div className="text-right">
 
-            <p className="text-2xl font-black text-slate-950">
+            <p className="text-[14px] font-semibold text-slate-950">
               {
                 currency(
                   journey.order_value
@@ -748,7 +748,7 @@ function JourneyDetail({
         </div>
 
 
-        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-5 md:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-2.5 border-t border-slate-100 pt-5 md:grid-cols-4">
 
           <DetailMetric
             label="Sessions"
@@ -793,7 +793,7 @@ function JourneyDetail({
 
       {/* JOURNEY PATH */}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
         <SectionTitle
           title="Journey Path"
@@ -801,7 +801,7 @@ function JourneyDetail({
         />
 
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
 
           {pathParts(
             journey.touch_channel_path
@@ -821,7 +821,7 @@ function JourneyDetail({
                 className="flex items-center gap-2"
               >
 
-                <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
+                <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-700">
                   {
                     pretty(
                       part
@@ -850,7 +850,7 @@ function JourneyDetail({
             className="text-slate-300"
           />
 
-          <span className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white">
+          <span className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white">
             Purchase
           </span>
 
@@ -861,7 +861,7 @@ function JourneyDetail({
 
       {/* TOUCH TIMELINE */}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
         <SectionTitle
           title="Marketing Touch Timeline"
@@ -869,7 +869,7 @@ function JourneyDetail({
         />
 
 
-        <div className="mt-5">
+        <div className="mt-3">
 
           {touches.length > 0
             ? touches.map(
@@ -882,18 +882,18 @@ function JourneyDetail({
                     key={
                       `${touch.touch_number}-${index}`
                     }
-                    className="relative flex gap-4 pb-6 last:pb-0"
+                    className="relative flex gap-2.5 pb-6 last:pb-0"
                   >
 
                     {index <
                       touches.length - 1 && (
 
-                      <div className="absolute left-[15px] top-8 h-[calc(100%-20px)] w-px bg-slate-200" />
+                      <div className="absolute left-[15px] top-4 h-[calc(100%-20px)] w-px bg-slate-200" />
 
                     )}
 
 
-                    <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-violet-50 text-[11px] font-black text-violet-700">
+                    <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-violet-200 bg-violet-50 text-[11px] font-semibold text-violet-700">
 
                       {
                         touch.touch_number
@@ -908,7 +908,7 @@ function JourneyDetail({
 
                         <div>
 
-                          <p className="font-black text-slate-900">
+                          <p className="font-semibold text-slate-900">
                             {
                               pretty(
                                 touch.channel
@@ -938,7 +938,7 @@ function JourneyDetail({
 
                         <div className="text-right">
 
-                          <p className="text-xs font-bold text-slate-600">
+                          <p className="text-[10px] font-bold text-slate-600">
                             {
                               formatDateTime(
                                 touch.touchpoint_timestamp
@@ -1012,7 +1012,7 @@ function JourneyDetail({
 
                         <div className="text-right">
 
-                          <span className="text-xs font-black text-violet-700">
+                          <span className="text-[10px] font-semibold text-violet-700">
                             {
                               pctFromFraction(
                                 touch.credit_weight
@@ -1020,7 +1020,7 @@ function JourneyDetail({
                             }
                           </span>
 
-                          <span className="ml-2 text-xs font-black text-slate-900">
+                          <span className="ml-2 text-[10px] font-semibold text-slate-900">
                             {
                               currency(
                                 touch.attributed_revenue
@@ -1040,7 +1040,7 @@ function JourneyDetail({
               )
             : (
 
-                <div className="rounded-xl bg-slate-50 p-5 text-sm text-slate-400">
+                <div className="rounded-xl bg-slate-50 p-3 text-[11px] text-slate-400">
                   No model touch credits are available for this order.
                 </div>
 
@@ -1053,7 +1053,7 @@ function JourneyDetail({
 
       {/* BEHAVIOUR */}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
         <SectionTitle
           title="Pre-purchase Behaviour"
@@ -1061,7 +1061,7 @@ function JourneyDetail({
         />
 
 
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
 
           <BehaviourMetric
             icon={
@@ -1130,7 +1130,7 @@ function JourneyDetail({
 
       {/* PRODUCTS */}
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
 
         <SimplePanel
           title="Products Viewed"
@@ -1184,7 +1184,7 @@ function MiniKpi({
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-black text-slate-950">
+      <p className="mt-2 text-[15px] font-semibold text-slate-950">
         {value}
       </p>
 
@@ -1208,7 +1208,7 @@ function DetailMetric({
         {label}
       </p>
 
-      <p className="mt-1 text-lg font-black text-slate-950">
+      <p className="mt-1 text-[14px] font-semibold text-slate-950">
         {value}
       </p>
 
@@ -1228,11 +1228,11 @@ function SectionTitle({
 
     <div>
 
-      <h3 className="text-sm font-black text-slate-950">
+      <h3 className="text-[11px] font-semibold text-slate-950">
         {title}
       </h3>
 
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="mt-1 text-[10px] text-slate-400">
         {subtitle}
       </p>
 
@@ -1261,7 +1261,7 @@ function BehaviourMetric({
         </span>
       </div>
 
-      <p className="mt-2 text-lg font-black text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">
         {
           integer(
             value
@@ -1284,11 +1284,11 @@ function SimplePanel({
 
   return (
 
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
       <div className="flex items-center justify-between gap-3">
 
-        <h3 className="text-sm font-black text-slate-950">
+        <h3 className="text-[11px] font-semibold text-slate-950">
           {title}
         </h3>
 
@@ -1302,7 +1302,7 @@ function SimplePanel({
 
       </div>
 
-      <p className="mt-4 break-words text-xs leading-6 text-slate-500">
+      <p className="mt-2.5 break-words text-[10px] leading-6 text-slate-500">
         {
           value
           ||
@@ -1360,7 +1360,7 @@ function StatusPill({
         px-2.5
         py-1
         text-[10px]
-        font-black
+        font-semibold
 
         ${
           exact

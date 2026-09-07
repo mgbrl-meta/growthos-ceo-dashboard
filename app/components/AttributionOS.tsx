@@ -74,7 +74,7 @@ export default function AttributionOS({
 
   return (
 
-    <section className="space-y-6">
+    <section className="space-y-3">
 
 
       {/* =====================================================

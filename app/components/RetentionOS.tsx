@@ -78,19 +78,14 @@ function Placeholder({
 
     <section
       className="
-        rounded-[2rem]
-        border
-        border-slate-200
-        bg-white
-        p-8
-        shadow-xl
+        gos-panel
       "
     >
 
       <p
         className="
-          text-xs
-          font-black
+          text-[10px]
+          font-semibold
           uppercase
           tracking-[0.22em]
           text-blue-600
@@ -103,8 +98,8 @@ function Placeholder({
       <h2
         className="
           mt-2
-          text-2xl
-          font-black
+          text-[14px]
+          font-semibold
           tracking-[-0.04em]
           text-slate-950
         "
@@ -116,7 +111,7 @@ function Placeholder({
       <p
         className="
           mt-2
-          text-sm
+          text-[11px]
           text-slate-500
         "
       >
@@ -144,7 +139,7 @@ export default function RetentionOS({
 
   return (
 
-    <div className="space-y-5">
+    <div className="space-y-3">
 
 
       {/* =====================================================

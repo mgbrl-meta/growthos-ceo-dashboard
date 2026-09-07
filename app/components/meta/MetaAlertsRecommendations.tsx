@@ -1,5 +1,7 @@
 'use client';
 
+
+import { GosAlert, GosLoadingCard, GosMiniStat, GosPanel, GosSummaryTile } from '../ui/GrowthUI';
 import { useEffect, useState } from 'react';
 
 type MetaParams = {
@@ -149,23 +151,23 @@ export default function AlertRecommendations({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <Panel title="Operator Summary">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-4">
           <SummaryTile title="Waste Creatives" value={wasteCreatives.length} tone="red" text="High spend or poor conversion efficiency" />
           <SummaryTile title="Fatigue Creatives" value={fatigueCreatives.length} tone="amber" text="Rising frequency / CPM / CPA with falling CTR or ROAS" />
           <SummaryTile title="Funnel Leakage" value={leakageCreatives.length} tone="blue" text="Drop-off between click, LPV, ATC, checkout and purchase" />
           <SummaryTile title="Priority Actions" value={priorityCreatives.length} tone="slate" text="Creatives requiring direct operator review" />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <h4 className="font-black text-slate-950">Recommendation Summary</h4>
-          <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{summary}</p>
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <h4 className="font-semibold text-slate-950">Recommendation Summary</h4>
+          <p className="mt-2 text-[11px] font-semibold leading-6 text-slate-600">{summary}</p>
         </div>
       </Panel>
 
       <Panel title="Account-Level Alerts">
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           {accountAlerts.length === 0 ? (
             <AlertBox tone="green" title="Account stable" text="No major account-level alert found for the selected period." />
           ) : (
@@ -177,9 +179,9 @@ export default function AlertRecommendations({
       </Panel>
 
       <Panel title="Priority Creative Recommendations">
-        <div className="space-y-4">
+        <div className="space-y-3">
           {priorityCreatives.length === 0 ? (
-            <p className="text-sm font-semibold text-slate-500">
+            <p className="text-[11px] font-semibold text-slate-500">
               No high-priority creative issues found.
             </p>
           ) : (
@@ -190,7 +192,7 @@ export default function AlertRecommendations({
         </div>
       </Panel>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <AlertCreativeBucket title="Waste Spend Analysis" tone="red" items={wasteCreatives} signalKey="wasteSignals" />
         <AlertCreativeBucket title="Fatigue Analysis" tone="amber" items={fatigueCreatives} signalKey="fatigueSignals" />
         <AlertCreativeBucket title="Funnel Leakage Analysis" tone="blue" items={leakageCreatives} signalKey="leakageSignals" />
@@ -338,76 +340,25 @@ function buildSummary({ roas, cpa, frequency, wasteCreatives, fatigueCreatives, 
   return `${leakageCreatives.length} creatives are showing funnel leakage. First action: identify whether the leak is creative, landing page, offer, cart, or checkout.`;
 }
 
-function Panel({ title, children }: any) {
-  return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60">
-      <h3 className="mb-4 text-lg font-black tracking-tight">{title}</h3>
-      {children}
-    </section>
-  );
-}
+function Panel({ title, children }: any) { return <GosPanel title={title}>{children}</GosPanel>; }
 
-function LoadingCard({ text }: any) {
-  return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 font-bold text-slate-500 shadow-xl shadow-slate-200/60">
-      {text}
-    </div>
-  );
-}
+function LoadingCard({ text }: any) { return <GosLoadingCard text={text} />; }
 
-function MiniStat({ label, value }: any) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-      <p className="text-xs font-bold text-slate-500">{label}</p>
-      <p className="mt-1 font-black">{value}</p>
-    </div>
-  );
-}
+function MiniStat({ label, value }: any) { return <GosMiniStat label={label} value={value} />; }
 
-function AlertBox({ tone, title, text }: any) {
-  const cls =
-    tone === 'red'
-      ? 'border-red-200 bg-red-50 text-red-900'
-      : tone === 'amber'
-        ? 'border-amber-200 bg-amber-50 text-amber-900'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-900';
+function AlertBox({ tone, title, text }: any) { return <GosAlert tone={tone} title={title} text={text} />; }
 
-  return (
-    <div className={`rounded-2xl border p-4 ${cls}`}>
-      <h4 className="font-black">{title}</h4>
-      <p className="mt-1 text-sm opacity-80">{text}</p>
-    </div>
-  );
-}
-
-function SummaryTile({ title, value, tone, text }: any) {
-  const cls =
-    tone === 'red'
-      ? 'border-red-200 bg-red-50 text-red-900'
-      : tone === 'amber'
-        ? 'border-amber-200 bg-amber-50 text-amber-900'
-        : tone === 'blue'
-          ? 'border-blue-200 bg-blue-50 text-blue-900'
-          : 'border-slate-200 bg-slate-50 text-slate-900';
-
-  return (
-    <div className={`rounded-[2rem] border p-5 shadow-xl shadow-slate-200/50 ${cls}`}>
-      <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{title}</p>
-      <p className="mt-2 text-4xl font-black tracking-tight">{value}</p>
-      <p className="mt-2 text-sm font-bold opacity-80">{text}</p>
-    </div>
-  );
-}
+function SummaryTile({ title, value, tone, text }: any) { return <GosSummaryTile title={title} value={value} tone={tone} text={text} />; }
 
 function CreativeAlertCard({ creative }: any) {
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-lg shadow-slate-200/60">
-      <h4 className="text-lg font-black text-slate-950">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm shadow-slate-200/25">
+      <h4 className="text-[14px] font-semibold text-slate-950">
         {creative.creative_name || creative.ad_name || 'Unnamed creative'}
       </h4>
-      <p className="mt-2 text-sm font-semibold text-slate-600">{creative.recommendation}</p>
+      <p className="mt-2 text-[11px] font-semibold text-slate-600">{creative.recommendation}</p>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <MiniStat label="Spend" value={formatCurrency(creative.spend)} />
         <MiniStat label="Avg CPM" value={formatCurrency(creative.cpm)} />
         <MiniStat label="Avg CTR" value={`${formatNumber(creative.ctr)}%`} />
@@ -427,27 +378,27 @@ function AlertCreativeBucket({ title, tone, items, signalKey }: any) {
         : 'border-blue-200 bg-blue-50';
 
   return (
-    <section className={`rounded-[2rem] border p-5 shadow-xl shadow-slate-200/50 ${cls}`}>
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="font-black text-slate-950">{title}</h3>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600">
+    <section className={`rounded-xl border p-3 shadow-sm shadow-slate-200/25 ${cls}`}>
+      <div className="mb-2.5 flex items-center justify-between">
+        <h3 className="font-semibold text-slate-950">{title}</h3>
+        <span className="rounded-full bg-white px-3 py-1 text-[10px] font-semibold text-slate-600">
           {items.length}
         </span>
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm font-semibold text-slate-500">No creatives in this bucket.</p>
+        <p className="text-[11px] font-semibold text-slate-500">No creatives in this bucket.</p>
       ) : (
         <div className="space-y-3">
           {items.slice(0, 8).map((creative: any, i: number) => (
-            <div key={i} className="rounded-2xl border border-white/70 bg-white p-4">
-              <p className="font-black text-slate-950">
+            <div key={i} className="rounded-lg border border-white/70 bg-white p-4">
+              <p className="font-semibold text-slate-950">
                 {creative.creative_name || creative.ad_name || 'Unnamed creative'}
               </p>
-              <p className="mt-1 text-xs font-semibold text-slate-500">
+              <p className="mt-1 text-[10px] font-semibold text-slate-500">
                 Spend {formatCurrency(creative.spend)} · CPM {formatCurrency(creative.cpm)} · CTR {formatNumber(creative.ctr)}% · CPA {formatCurrency(creative.cpa)} · Freq {formatNumber(creative.frequency)}
               </p>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm font-semibold text-slate-700">
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-[11px] font-semibold text-slate-700">
                 {(creative[signalKey] || []).slice(0, 3).map((signal: string, j: number) => (
                   <li key={j}>{signal}</li>
                 ))}

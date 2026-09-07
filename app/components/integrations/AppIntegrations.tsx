@@ -208,7 +208,7 @@ export default function AppIntegrations() {
             className="mx-auto animate-spin text-slate-400"
           />
 
-          <p className="mt-3 text-sm font-medium text-slate-400">
+          <p className="mt-3 text-[11px] font-medium text-slate-400">
             Loading integrations...
           </p>
 
@@ -225,13 +225,13 @@ export default function AppIntegrations() {
 
     return (
 
-      <section className="rounded-2xl border border-red-200 bg-red-50 p-6">
+      <section className="rounded-lg border border-red-200 bg-red-50 p-3.5">
 
-        <h3 className="font-black text-red-900">
+        <h3 className="font-semibold text-red-900">
           Integrations failed to load
         </h3>
 
-        <p className="mt-1 text-sm text-red-700">
+        <p className="mt-1 text-[11px] text-red-700">
           {error}
         </p>
 
@@ -240,7 +240,7 @@ export default function AppIntegrations() {
           onClick={
             load
           }
-          className="mt-4 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+          className="mt-2.5 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Retry
         </button>
@@ -254,28 +254,28 @@ export default function AppIntegrations() {
 
   return (
 
-    <div className="space-y-6">
+    <div className="space-y-3">
 
 
       {/* =====================================================
           PAGE INTRO
       ===================================================== */}
 
-      <section className="flex flex-wrap items-end justify-between gap-4">
+      <section className="flex flex-wrap items-end justify-between gap-2.5">
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600">
             Data Sources
           </p>
 
 
-          <h1 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950">
+          <h1 className="mt-1 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
             App Integrations
           </h1>
 
 
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+          <p className="mt-1 max-w-2xl text-[11px] leading-6 text-slate-500">
             Connect the platforms Growth OS uses to understand revenue,
             customers, advertising and attribution.
           </p>
@@ -290,15 +290,15 @@ export default function AppIntegrations() {
           }
           className="
             flex
-            h-10
+            h-8
             items-center
             gap-2
             rounded-xl
             border
             border-slate-200
             bg-white
-            px-4
-            text-xs
+            px-3
+            text-[10px]
             font-bold
             text-slate-700
             shadow-sm
@@ -322,7 +322,7 @@ export default function AppIntegrations() {
           STATUS
       ===================================================== */}
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-4">
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4">
 
         <SummaryMetric
           label="Available Sources"
@@ -492,20 +492,20 @@ function IntegrationSection({
 
   return (
 
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
 
-      <div className="grid gap-5 border-b border-slate-100 px-5 py-5 lg:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="grid gap-3 border-b border-slate-100 px-3 py-2 lg:grid-cols-[360px_minmax(0,1fr)]">
 
 
         <div>
 
-          <h2 className="text-sm font-black text-slate-950">
+          <h2 className="text-[11px] font-semibold text-slate-950">
             {title}
           </h2>
 
 
-          <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+          <p className="mt-1 max-w-sm text-[10px] leading-5 text-slate-500">
             {description}
           </p>
 
@@ -581,7 +581,7 @@ function IntegrationRow({
         flex
         w-full
         items-center
-        gap-4
+        gap-2.5
         rounded-xl
         border
         border-slate-200
@@ -607,7 +607,7 @@ function IntegrationRow({
         <div className="flex flex-wrap items-center gap-2">
 
 
-          <p className="text-sm font-black text-slate-950">
+          <p className="text-[11px] font-semibold text-slate-950">
             {integration.name}
           </p>
 
@@ -621,7 +621,7 @@ function IntegrationRow({
         </div>
 
 
-        <p className="mt-1 text-xs leading-5 text-slate-500">
+        <p className="mt-1 text-[10px] leading-5 text-slate-500">
           {integration.description}
         </p>
 
@@ -676,10 +676,10 @@ function IntegrationModal({
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[2px]">
 
 
-      <div className="w-full max-w-[620px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-[620px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
 
-        <div className="flex items-start gap-4 border-b border-slate-100 p-6">
+        <div className="flex items-start gap-2.5 border-b border-slate-100 p-3.5">
 
 
           <ProviderIcon
@@ -694,7 +694,7 @@ function IntegrationModal({
 
             <div className="flex flex-wrap items-center gap-2">
 
-              <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">
+              <h2 className="text-[15px] font-semibold tracking-[-0.03em] text-slate-950">
                 {integration.name}
               </h2>
 
@@ -707,7 +707,7 @@ function IntegrationModal({
             </div>
 
 
-            <p className="mt-1 text-sm leading-6 text-slate-500">
+            <p className="mt-1 text-[11px] leading-6 text-slate-500">
               {integration.description}
             </p>
 
@@ -719,7 +719,7 @@ function IntegrationModal({
             onClick={
               onClose
             }
-            className="rounded-lg px-2 py-1 text-xl text-slate-400 hover:bg-slate-100 hover:text-slate-900"
+            className="rounded-lg px-2 py-1 text-[15px] text-slate-400 hover:bg-slate-100 hover:text-slate-900"
           >
             ×
           </button>
@@ -727,7 +727,7 @@ function IntegrationModal({
         </div>
 
 
-        <div className="space-y-5 p-6">
+        <div className="space-y-3 p-3.5">
 
 
           {integration.accountName && (
@@ -756,7 +756,7 @@ function IntegrationModal({
 
           <div>
 
-            <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Available Data
             </p>
 
@@ -787,11 +787,11 @@ function IntegrationModal({
 
             <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
 
-              <p className="text-xs font-black text-violet-900">
+              <p className="text-[10px] font-semibold text-violet-900">
                 Self-service connection
               </p>
 
-              <p className="mt-1 text-xs leading-5 text-violet-700">
+              <p className="mt-1 text-[10px] leading-5 text-violet-700">
                 This provider will connect through Growth OS without manually configuring the dashboard.
               </p>
 
@@ -808,7 +808,7 @@ function IntegrationModal({
               onClick={
                 onClose
               }
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-bold text-slate-600"
             >
               Cancel
             </button>
@@ -818,7 +818,7 @@ function IntegrationModal({
 
               <button
                 type="button"
-                className="flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-xs font-black text-white"
+                className="flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-[10px] font-semibold text-white"
               >
                 Manage Connection
 
@@ -856,7 +856,7 @@ function IntegrationModal({
 
 }}
 
-                className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-black text-white transition hover:bg-violet-700"
+                className="rounded-xl bg-violet-600 px-3 py-2.5 text-[10px] font-semibold text-white transition hover:bg-violet-700"
               >
                 Connect {integration.shortName}
               </button>
@@ -895,8 +895,8 @@ function ProviderIcon({
 
   const size =
     large
-      ? 'h-12 w-12'
-      : 'h-10 w-10';
+      ? 'h-9 w-9'
+      : 'h-8 w-10';
 
 
   if (
@@ -946,8 +946,8 @@ function ProviderIcon({
       <span
         className={
           large
-            ? 'text-lg font-black'
-            : 'text-sm font-black'
+            ? 'text-[14px] font-semibold'
+            : 'text-[11px] font-semibold'
         }
       >
         M
@@ -969,7 +969,7 @@ function ProviderIcon({
 
       <div className={`flex ${size} shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600`}>
 
-        <span className="text-sm font-black">
+        <span className="text-[11px] font-semibold">
           G
         </span>
 
@@ -1019,7 +1019,7 @@ function StatusBadge({
 
     return (
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-black text-emerald-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-semibold text-emerald-700">
 
         <Check
           size={10}
@@ -1041,7 +1041,7 @@ function StatusBadge({
 
     return (
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black text-blue-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[9px] font-semibold text-blue-700">
 
         <RefreshCw
           size={10}
@@ -1069,7 +1069,7 @@ function StatusBadge({
 
     return (
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[9px] font-black text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-700">
 
         <AlertTriangle
           size={10}
@@ -1086,7 +1086,7 @@ function StatusBadge({
 
   return (
 
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-500">
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-500">
 
       <Unplug
         size={10}
@@ -1120,13 +1120,13 @@ function InfoRow({
 
   return (
 
-    <div className="flex items-start justify-between gap-5 border-b border-slate-100 pb-4">
+    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
 
-      <span className="text-xs font-semibold text-slate-400">
+      <span className="text-[10px] font-semibold text-slate-400">
         {label}
       </span>
 
-      <strong className="max-w-[360px] text-right text-xs text-slate-800">
+      <strong className="max-w-[360px] text-right text-[10px] text-slate-800">
         {value}
       </strong>
 
@@ -1172,7 +1172,7 @@ function SummaryMetric({
         {label}
       </p>
 
-      <p className="mt-2 text-xl font-black tracking-[-0.03em] text-slate-950">
+      <p className="mt-2 text-[15px] font-semibold tracking-[-0.03em] text-slate-950">
         {value}
       </p>
 

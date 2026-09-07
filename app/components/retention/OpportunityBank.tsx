@@ -78,18 +78,18 @@ export default function OpportunityBank() {
   }, [filteredRows]);
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <section className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2.5">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
             Opportunity Bank
           </p>
 
-          <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+          <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
             Ranked Retention Opportunities
           </h2>
 
-          <p className="mt-2 max-w-3xl text-sm text-slate-500">
+          <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
             Powered by opportunity scoring v5: expected profit × journey-state
             probability × pattern probability × strategic importance.
           </p>
@@ -98,7 +98,7 @@ export default function OpportunityBank() {
         <select
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-700"
         >
           {opportunityTypes.map((type) => (
             <option key={type} value={type}>
@@ -109,21 +109,21 @@ export default function OpportunityBank() {
       </div>
 
       {loading && (
-        <p className="mt-3 text-xs font-bold text-blue-600">
+        <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading opportunity bank...
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
+      <div className="mt-3 grid gap-2.5 md:grid-cols-4">
         <Card label="Opportunities" value={summary.opportunities.toString()} />
         <Card label="Revenue" value={money(summary.revenue)} />
         <Card label="Profit" value={money(summary.profit)} />
         <Card label="EBV" value={money(summary.ebv)} />
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-3xl border border-slate-200">
+      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[1500px] text-left">
-          <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
+          <thead className="bg-slate-100 text-[10px] uppercase tracking-widest text-slate-500">
             <tr>
               <th className="p-4">Opportunity</th>
               <th className="p-4">Action</th>
@@ -152,7 +152,7 @@ export default function OpportunityBank() {
                   key={`${row.opportunity_type}-${row.best_action}-${index}`}
                   className="border-t border-slate-100 align-top"
                 >
-                  <td className="p-4 font-black text-slate-950">
+                  <td className="p-4 font-semibold text-slate-950">
                     {row.opportunity_type?.replaceAll('_', ' ')}
                   </td>
 
@@ -166,7 +166,7 @@ export default function OpportunityBank() {
                     </div>
 
                     {row.recommended_sku && (
-                      <div className="mt-1 text-xs font-bold text-slate-400">
+                      <div className="mt-1 text-[10px] font-bold text-slate-400">
                         SKU: {row.recommended_sku}
                       </div>
                     )}
@@ -174,7 +174,7 @@ export default function OpportunityBank() {
 
                   <td className="p-4">
                     <div className="font-bold">{row.journey_state || '-'}</div>
-                    <div className="mt-1 text-xs text-slate-400">
+                    <div className="mt-1 text-[10px] text-slate-400">
                       {row.journey_stage || '-'}
                     </div>
                   </td>
@@ -193,7 +193,7 @@ export default function OpportunityBank() {
                     {Math.round(Number(row.success_probability || 0) * 100)}%
                   </td>
 
-                  <td className="p-4 font-black text-blue-700">
+                  <td className="p-4 font-semibold text-blue-700">
                     {money(Number(row.expected_business_value || 0))}
                   </td>
 
@@ -201,7 +201,7 @@ export default function OpportunityBank() {
                     {Math.round(Number(row.confidence || 0))}%
                   </td>
 
-                  <td className="p-4 text-sm leading-6 text-slate-600">
+                  <td className="p-4 text-[11px] leading-6 text-slate-600">
                     {row.reason || '-'}
                   </td>
                 </tr>
@@ -212,7 +212,7 @@ export default function OpportunityBank() {
               <tr>
                 <td
                   colSpan={11}
-                  className="p-8 text-center text-sm font-bold text-slate-500"
+                  className="p-4 text-center text-[11px] font-bold text-slate-500"
                 >
                   No opportunities found.
                 </td>
@@ -227,12 +227,12 @@ export default function OpportunityBank() {
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

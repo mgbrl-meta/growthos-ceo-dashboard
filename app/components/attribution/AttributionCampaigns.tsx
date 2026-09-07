@@ -156,9 +156,9 @@ export default function AttributionCampaigns({
 
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-2.5">
 
         <PageIntro
           title="Campaign Attribution"
@@ -166,7 +166,7 @@ export default function AttributionCampaigns({
         />
 
 
-        <div className="flex h-10 w-[300px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
+        <div className="flex h-8 w-[300px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
 
           <Search
             size={15}
@@ -182,7 +182,7 @@ export default function AttributionCampaigns({
                 )
             }
             placeholder="Search campaign..."
-            className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[10px] outline-none"
           />
 
         </div>
@@ -190,7 +190,7 @@ export default function AttributionCampaigns({
       </div>
 
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
 
         <Metric
           label="Campaigns"
@@ -234,7 +234,7 @@ export default function AttributionCampaigns({
       </section>
 
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
         <div className="overflow-x-auto">
 
@@ -345,13 +345,13 @@ function PageIntro({
 }: any) {
   return (
     <div>
-      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
         Attribution OS
       </p>
-      <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">
+      <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
         {title}
       </h2>
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="mt-1 text-[10px] text-slate-400">
         {description}
       </p>
     </div>
@@ -369,7 +369,7 @@ function Metric({
       <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
         {label}
       </p>
-      <p className="mt-2 text-xl font-black">
+      <p className="mt-2 text-[15px] font-semibold">
         {value}
       </p>
     </div>
@@ -382,7 +382,7 @@ function Th({
   align = 'left',
 }: any) {
   return (
-    <th className={`px-4 py-3 text-${align} text-[10px] font-black uppercase tracking-wide text-slate-400`}>
+    <th className={`px-3 py-2 text-${align} text-[10px] font-semibold uppercase tracking-wide text-slate-400`}>
       {children}
     </th>
   );
@@ -394,7 +394,7 @@ function Td({
   align = 'left',
 }: any) {
   return (
-    <td className={`px-4 py-3 text-${align} text-sm text-slate-600`}>
+    <td className={`px-3 py-2 text-${align} text-[11px] text-slate-600`}>
       {children}
     </td>
   );
@@ -403,7 +403,7 @@ function Td({
 
 function Loading() {
   return (
-    <div className="flex min-h-[400px] items-center justify-center text-sm text-slate-400">
+    <div className="flex min-h-[400px] items-center justify-center text-[11px] text-slate-400">
       Loading campaigns...
     </div>
   );
@@ -415,13 +415,13 @@ function ErrorBox({
   retry,
 }: any) {
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-      <p className="font-black text-red-900">
+    <div className="rounded-lg border border-red-200 bg-red-50 p-3.5">
+      <p className="font-semibold text-red-900">
         {text}
       </p>
       <button
         onClick={retry}
-        className="mt-3 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+        className="mt-3 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
       >
         Retry
       </button>

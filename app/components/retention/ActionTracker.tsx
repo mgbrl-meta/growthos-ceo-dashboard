@@ -928,27 +928,27 @@ export default function ActionTracker() {
 
   return (
 
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl">
+    <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
 
 
       {/* HEADER */}
 
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-end justify-between gap-2.5">
 
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
             Action Tracker
           </p>
 
 
-          <h2 className="mt-1 text-[26px] font-black tracking-[-0.04em] text-slate-950">
+          <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.04em] text-slate-950">
             Retention Execution Queue
           </h2>
 
 
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-[10px] text-slate-500">
             Configure, validate, export, send and measure frozen campaign audiences.
           </p>
 
@@ -960,7 +960,7 @@ export default function ActionTracker() {
           onClick={
             loadExecutions
           }
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-black"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold"
         >
           Refresh
         </button>
@@ -971,7 +971,7 @@ export default function ActionTracker() {
 
       {loading && (
 
-        <p className="mt-3 text-xs font-bold text-blue-600">
+        <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading Action Tracker...
         </p>
 
@@ -980,7 +980,7 @@ export default function ActionTracker() {
 
       {error && (
 
-        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700">
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-700">
           {error}
         </div>
 
@@ -989,7 +989,7 @@ export default function ActionTracker() {
 
       {/* KPI */}
 
-      <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mt-3 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
 
 
         <Card
@@ -1051,7 +1051,7 @@ export default function ActionTracker() {
 
       {/* FILTER */}
 
-      <div className="mt-5 flex gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5">
+      <div className="mt-3 flex gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
 
 
         <input
@@ -1065,7 +1065,7 @@ export default function ActionTracker() {
               )
           }
           placeholder="Search campaign, lifecycle, treatment or template..."
-          className="h-9 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none"
+          className="h-9 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] outline-none"
         />
 
 
@@ -1079,7 +1079,7 @@ export default function ActionTracker() {
                 event.target.value
               )
           }
-          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold"
         >
 
           <option value="ALL">
@@ -1114,7 +1114,7 @@ export default function ActionTracker() {
 
       {/* EXECUTIONS */}
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-2.5 space-y-3">
 
 
         {filtered.map(
@@ -1141,7 +1141,7 @@ export default function ActionTracker() {
                 key={
                   row.execution_id
                 }
-                className="overflow-hidden rounded-2xl border border-slate-200"
+                className="overflow-hidden rounded-lg border border-slate-200"
               >
 
 
@@ -1152,11 +1152,11 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-[8px] font-black uppercase text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase text-slate-400">
                       Slot
                     </p>
 
-                    <p className="mt-1 text-sm font-black">
+                    <p className="mt-1 text-[11px] font-semibold">
                       #
                       {
                         row.campaign_slot_for_day
@@ -1168,7 +1168,7 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-xs font-black">
+                    <p className="text-[10px] font-semibold">
                       {
                         humanize(
                           row.campaign_family
@@ -1195,11 +1195,11 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-[8px] font-black uppercase text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase text-slate-400">
                       Planned
                     </p>
 
-                    <p className="mt-1 text-xs font-black">
+                    <p className="mt-1 text-[10px] font-semibold">
                       {
                         prettyDate(
                           row.scheduled_execution_date
@@ -1212,11 +1212,11 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-[8px] font-black uppercase text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase text-slate-400">
                       Customers
                     </p>
 
-                    <p className="mt-1 text-sm font-black">
+                    <p className="mt-1 text-[11px] font-semibold">
                       {Number(
                         row.planned_audience_size ||
                           0
@@ -1237,11 +1237,11 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-[8px] font-black uppercase text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase text-slate-400">
                       Probability
                     </p>
 
-                    <p className="mt-1 text-xs font-black">
+                    <p className="mt-1 text-[10px] font-semibold">
                       {
                         pct(
                           row.avg_target_probability_90d
@@ -1254,11 +1254,11 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-[8px] font-black uppercase text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase text-slate-400">
                       Expected Value
                     </p>
 
-                    <p className="mt-1 text-xs font-black text-blue-700">
+                    <p className="mt-1 text-[10px] font-semibold text-blue-700">
                       {
                         money(
                           row.total_expected_value_90d
@@ -1271,7 +1271,7 @@ export default function ActionTracker() {
 
                   <div>
 
-                    <p className="text-[8px] font-black uppercase text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase text-slate-400">
                       Status
                     </p>
 
@@ -1293,7 +1293,7 @@ export default function ActionTracker() {
                           : row.execution_id
                       )
                     }
-                    className="rounded-xl bg-slate-950 px-3 py-2 text-[9px] font-black text-white"
+                    className="rounded-xl bg-slate-950 px-3 py-2 text-[9px] font-semibold text-white"
                   >
                     {
                       expanded
@@ -1315,7 +1315,7 @@ export default function ActionTracker() {
 
                     {/* SETUP */}
 
-                    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+                    <div className="grid gap-2.5 lg:grid-cols-2 xl:grid-cols-4">
 
 
                       <Field label="Channel">
@@ -1487,7 +1487,7 @@ export default function ActionTracker() {
                     </div>
 
 
-                    <div className="mt-4">
+                    <div className="mt-2.5">
 
 
                       <Field label="Operator Notes">
@@ -1517,7 +1517,7 @@ export default function ActionTracker() {
 
                     {/* ACTIONS */}
 
-                    <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2">
 
 
                       <button
@@ -1530,7 +1530,7 @@ export default function ActionTracker() {
                             row
                           )
                         }
-                        className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-[10px] font-black"
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-[10px] font-semibold"
                       >
                         Save Setup
                       </button>
@@ -1558,7 +1558,7 @@ export default function ActionTracker() {
                             );
                           }
                         }}
-                        className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-[10px] font-black text-blue-700"
+                        className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-semibold text-blue-700"
                       >
                         {
                           previewOpen
@@ -1572,7 +1572,7 @@ export default function ActionTracker() {
                         href={`/api/retention-os/action-tracker/export?executionId=${encodeURIComponent(
                           row.execution_id
                         )}`}
-                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[10px] font-black text-emerald-700"
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-semibold text-emerald-700"
                       >
                         Export Customers
                       </a>
@@ -1592,7 +1592,7 @@ export default function ActionTracker() {
                               'READY_TO_SEND'
                             )
                           }
-                          className="rounded-xl bg-blue-600 px-4 py-2 text-[10px] font-black text-white"
+                          className="rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-semibold text-white"
                         >
                           Mark Ready
                         </button>
@@ -1622,7 +1622,7 @@ export default function ActionTracker() {
                               );
                             }
                           }}
-                          className="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-black text-white"
+                          className="rounded-xl bg-emerald-600 px-3 py-2 text-[10px] font-semibold text-white"
                         >
                           Mark Sent
                         </button>
@@ -1632,7 +1632,7 @@ export default function ActionTracker() {
 
                       {saving && (
 
-                        <span className="px-3 py-2 text-[10px] font-black text-blue-600">
+                        <span className="px-3 py-2 text-[10px] font-semibold text-blue-600">
                           Saving...
                         </span>
 
@@ -1646,15 +1646,15 @@ export default function ActionTracker() {
 
                     {previewOpen && (
 
-                      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                      <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
 
 
-                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                        <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
 
 
                           <div>
 
-                            <p className="text-xs font-black">
+                            <p className="text-[10px] font-semibold">
                               Frozen Audience Preview
                             </p>
 
@@ -1695,7 +1695,7 @@ export default function ActionTracker() {
 
                         {previewLoading && (
 
-                          <p className="p-4 text-xs font-bold text-blue-600">
+                          <p className="p-4 text-[10px] font-bold text-blue-600">
                             Loading audience...
                           </p>
 
@@ -1704,7 +1704,7 @@ export default function ActionTracker() {
 
                         {previewError && (
 
-                          <p className="p-4 text-xs font-bold text-red-600">
+                          <p className="p-4 text-[10px] font-bold text-red-600">
                             {
                               previewError
                             }
@@ -1723,7 +1723,7 @@ export default function ActionTracker() {
                             <table className="w-full min-w-[1250px] text-left">
 
 
-                              <thead className="bg-slate-50 text-[8px] font-black uppercase tracking-wider text-slate-400">
+                              <thead className="bg-slate-50 text-[8px] font-semibold uppercase tracking-wider text-slate-400">
 
 
                                 <tr>
@@ -1818,7 +1818,7 @@ export default function ActionTracker() {
 
                                       <td className="p-3">
 
-                                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[8px] font-black">
+                                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[8px] font-semibold">
                                           {
                                             member.target_type
                                           }
@@ -1829,7 +1829,7 @@ export default function ActionTracker() {
 
                                       <td className="p-3">
 
-                                        <p className="max-w-[240px] text-[9px] font-black text-blue-700">
+                                        <p className="max-w-[240px] text-[9px] font-semibold text-blue-700">
                                           {
                                             member.dynamic_target_value ||
                                             member.target_value ||
@@ -1840,7 +1840,7 @@ export default function ActionTracker() {
                                       </td>
 
 
-                                      <td className="p-3 text-[9px] font-black">
+                                      <td className="p-3 text-[9px] font-semibold">
                                         #
                                         {
                                           member.current_order_number
@@ -1850,7 +1850,7 @@ export default function ActionTracker() {
 
                                       <td className="p-3">
 
-                                        <p className="text-[9px] font-black">
+                                        <p className="text-[9px] font-semibold">
                                           {
                                             humanize(
                                               member.weekly_timing_status
@@ -1867,7 +1867,7 @@ export default function ActionTracker() {
                                       </td>
 
 
-                                      <td className="p-3 text-[9px] font-black">
+                                      <td className="p-3 text-[9px] font-semibold">
                                         {
                                           pct(
                                             member.predicted_target_probability_90d
@@ -1876,7 +1876,7 @@ export default function ActionTracker() {
                                       </td>
 
 
-                                      <td className="p-3 text-[9px] font-black">
+                                      <td className="p-3 text-[9px] font-semibold">
                                         {
                                           money(
                                             member.expected_target_value_90d
@@ -1913,7 +1913,7 @@ export default function ActionTracker() {
 
                         {/* PAGINATION */}
 
-                        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
+                        <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2">
 
 
                           <button
@@ -1933,7 +1933,7 @@ export default function ActionTracker() {
                                 )
                               )
                             }
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-black disabled:opacity-30"
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold disabled:opacity-30"
                           >
                             Previous
                           </button>
@@ -1980,7 +1980,7 @@ export default function ActionTracker() {
                                   PREVIEW_LIMIT
                               )
                             }
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-black disabled:opacity-30"
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-[9px] font-semibold disabled:opacity-30"
                           >
                             Next
                           </button>
@@ -2010,9 +2010,9 @@ export default function ActionTracker() {
           0 &&
           !loading && (
 
-          <div className="rounded-2xl border border-slate-200 p-10 text-center">
+          <div className="rounded-lg border border-slate-200 p-3 text-center">
 
-            <p className="text-xs font-bold text-slate-500">
+            <p className="text-[10px] font-bold text-slate-500">
               No prepared campaigns found.
             </p>
 
@@ -2065,13 +2065,13 @@ function Card({
 
   return (
 
-    <div className="min-h-[82px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+    <div className="min-h-[82px] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
 
-      <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 text-lg font-black text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">
         {value}
       </p>
 
@@ -2093,7 +2093,7 @@ function Field({
 
     <label className="block">
 
-      <span className="mb-1 block text-[8px] font-black uppercase text-slate-400">
+      <span className="mb-1 block text-[8px] font-semibold uppercase text-slate-400">
         {label}
       </span>
 
@@ -2140,7 +2140,7 @@ function StatusBadge({
   return (
 
     <span
-      className={`mt-1 inline-flex rounded-full px-2 py-1 text-[7px] font-black uppercase ${
+      className={`mt-1 inline-flex rounded-full px-2 py-1 text-[7px] font-semibold uppercase ${
         styles[status] ||
         'bg-slate-100 text-slate-600'
       }`}

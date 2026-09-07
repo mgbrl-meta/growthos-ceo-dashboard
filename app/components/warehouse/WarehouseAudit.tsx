@@ -467,7 +467,7 @@ export default function WarehouseAudit() {
             className="mx-auto animate-spin text-slate-400"
           />
 
-          <p className="mt-3 text-sm font-semibold text-slate-400">
+          <p className="mt-3 text-[11px] font-semibold text-slate-400">
             Auditing BigQuery warehouse...
           </p>
 
@@ -484,13 +484,13 @@ export default function WarehouseAudit() {
 
     return (
 
-      <section className="rounded-2xl border border-red-200 bg-red-50 p-6">
+      <section className="rounded-lg border border-red-200 bg-red-50 p-3.5">
 
-        <h3 className="font-black text-red-900">
+        <h3 className="font-semibold text-red-900">
           Warehouse audit failed
         </h3>
 
-        <p className="mt-2 text-sm text-red-700">
+        <p className="mt-2 text-[11px] text-red-700">
           {error}
         </p>
 
@@ -499,7 +499,7 @@ export default function WarehouseAudit() {
           onClick={
             load
           }
-          className="mt-4 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+          className="mt-2.5 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Retry
         </button>
@@ -524,28 +524,28 @@ export default function WarehouseAudit() {
 
   return (
 
-    <div className="space-y-6">
+    <div className="space-y-3">
 
 
       {/* =====================================================
           HEADER
       ===================================================== */}
 
-      <section className="flex flex-wrap items-end justify-between gap-4">
+      <section className="flex flex-wrap items-end justify-between gap-2.5">
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600">
             Growth OS System
           </p>
 
 
-          <h1 className="mt-1 text-2xl font-black tracking-[-0.04em] text-slate-950">
+          <h1 className="mt-1 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
             Warehouse Audit
           </h1>
 
 
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+          <p className="mt-1 max-w-3xl text-[11px] leading-6 text-slate-500">
 
             Read-only audit of BigQuery tables,
             storage architecture, partitioning and
@@ -561,7 +561,7 @@ export default function WarehouseAudit() {
           onClick={
             load
           }
-          className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+          className="flex h-8 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"
         >
 
           <RefreshCw
@@ -579,11 +579,11 @@ export default function WarehouseAudit() {
           WAREHOUSE
       ===================================================== */}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
 
-        <div className="flex flex-wrap items-center gap-5">
+        <div className="flex flex-wrap items-center gap-3">
 
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+          <div className="flex h-8 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
 
             <Database
               size={18}
@@ -598,14 +598,14 @@ export default function WarehouseAudit() {
               Current Warehouse
             </p>
 
-            <p className="mt-1 text-sm font-black text-slate-950">
+            <p className="mt-1 text-[11px] font-semibold text-slate-950">
               {audit.projectId}
             </p>
 
           </div>
 
 
-          <div className="ml-auto rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-black text-emerald-700">
+          <div className="ml-auto rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">
             READ ONLY
           </div>
 
@@ -618,7 +618,7 @@ export default function WarehouseAudit() {
           SUMMARY KPIs
       ===================================================== */}
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
 
         <Metric
           icon={
@@ -678,7 +678,7 @@ export default function WarehouseAudit() {
           ARCHITECTURE STATUS
       ===================================================== */}
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
 
         <StatusCard
           label="Datasets"
@@ -741,10 +741,10 @@ export default function WarehouseAudit() {
           FILTERS
       ===================================================== */}
 
-      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
 
 
-        <div className="flex h-10 min-w-[280px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
+        <div className="flex h-8 min-w-[280px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3">
 
           <Search
             size={15}
@@ -762,7 +762,7 @@ export default function WarehouseAudit() {
                 )
             }
             placeholder="Search table, issue, partition..."
-            className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[10px] font-medium text-slate-800 outline-none"
           />
 
         </div>
@@ -778,7 +778,7 @@ export default function WarehouseAudit() {
                 event.target.value
               )
           }
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
+          className="h-8 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 outline-none"
         >
 
           <option value="all">
@@ -815,7 +815,7 @@ export default function WarehouseAudit() {
                 event.target.value
               )
           }
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
+          className="h-8 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 outline-none"
         >
 
           <option value="all">
@@ -847,7 +847,7 @@ export default function WarehouseAudit() {
                 event.target.value
               )
           }
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none"
+          className="h-8 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 outline-none"
         >
 
           <option value="all">
@@ -865,7 +865,7 @@ export default function WarehouseAudit() {
         </select>
 
 
-        <div className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-500">
+        <div className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-semibold text-slate-500">
 
           {
             integer(
@@ -882,16 +882,16 @@ export default function WarehouseAudit() {
           TABLE INVENTORY
       ===================================================== */}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
 
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="border-b border-slate-100 px-3 py-2.5">
 
-          <h2 className="text-sm font-black text-slate-950">
+          <h2 className="text-[11px] font-semibold text-slate-950">
             Table Inventory
           </h2>
 
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-[10px] text-slate-400">
             Largest and highest-risk tables appear first.
           </p>
 
@@ -1156,7 +1156,7 @@ export default function WarehouseAudit() {
 
                   <td
                     colSpan={10}
-                    className="px-6 py-14 text-center text-sm text-slate-400"
+                    className="px-3 py-14 text-center text-[11px] text-slate-400"
                   >
                     No tables match the current filters.
                   </td>
@@ -1216,8 +1216,8 @@ function Metric({
       <p
         className={
           danger
-            ? 'mt-2 text-xl font-black text-red-600'
-            : 'mt-2 text-xl font-black text-slate-950'
+            ? 'mt-2 text-[15px] font-semibold text-red-600'
+            : 'mt-2 text-[15px] font-semibold text-slate-950'
         }
       >
         {value}
@@ -1238,7 +1238,7 @@ function StatusCard({
 
   return (
 
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
 
       <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
         {label}
@@ -1247,8 +1247,8 @@ function StatusCard({
       <p
         className={
           warning
-            ? 'mt-2 text-xl font-black text-amber-600'
-            : 'mt-2 text-xl font-black text-slate-950'
+            ? 'mt-2 text-[15px] font-semibold text-amber-600'
+            : 'mt-2 text-[15px] font-semibold text-slate-950'
         }
       >
         {
@@ -1278,7 +1278,7 @@ function HealthBadge({
 
     return (
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[9px] font-black text-red-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[9px] font-semibold text-red-700">
 
         <ShieldAlert
           size={10}
@@ -1300,7 +1300,7 @@ function HealthBadge({
 
     return (
 
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-black text-amber-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[9px] font-semibold text-amber-700">
 
         <AlertTriangle
           size={10}
@@ -1317,7 +1317,7 @@ function HealthBadge({
 
   return (
 
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-black text-emerald-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[9px] font-semibold text-emerald-700">
 
       <CheckCircle2
         size={10}
@@ -1373,8 +1373,8 @@ function Th({
     <th
       className={
         right
-          ? 'px-4 py-3 text-right text-[10px] font-black uppercase tracking-wide text-slate-400'
-          : 'px-4 py-3 text-left text-[10px] font-black uppercase tracking-wide text-slate-400'
+          ? 'px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-400'
+          : 'px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400'
       }
     >
       {children}
@@ -1395,8 +1395,8 @@ function Td({
     <td
       className={
         right
-          ? 'px-4 py-3 text-right text-xs text-slate-600'
-          : 'px-4 py-3 text-left text-xs text-slate-600'
+          ? 'px-3 py-2 text-right text-[10px] text-slate-600'
+          : 'px-3 py-2 text-left text-[10px] text-slate-600'
       }
     >
       {children}

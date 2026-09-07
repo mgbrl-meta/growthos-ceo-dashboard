@@ -35,7 +35,7 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
 
   if (loading) {
     return (
-      <div className="rounded-3xl border bg-white/90 p-10 text-center">
+      <div className="rounded-xl border bg-white/90 p-3 text-center">
         Loading Campaign Data...
       </div>
     );
@@ -49,9 +49,9 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
   const watch = campaigns.filter((c: any) => c.action === 'WATCH');
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* KPI Strip */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <Card title="Total Spend" value={money(data?.totals?.spend)} />
         <Card title="Revenue" value={money(data?.totals?.revenue)} />
         <Card
@@ -65,7 +65,7 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
       </div>
 
       {/* Decision Buckets */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
         <Bucket title="Scale" data={scale} color="emerald" />
         <Bucket title="Reduce" data={reduce} color="red" />
         <Bucket title="Hold" data={hold} color="blue" />
@@ -73,14 +73,14 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
       </div>
 
       {/* Table */}
-      <div className="rounded-3xl border bg-white/90 p-6 shadow-sm">
-        <h3 className="mb-4 text-xl font-black">Campaign Decision Table</h3>
+      <div className="rounded-xl border bg-white/90 p-3.5 shadow-sm">
+        <h3 className="mb-2.5 text-[15px] font-semibold">Campaign Decision Table</h3>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-sm">
+          <table className="w-full min-w-[1200px] text-[11px]">
             <thead>
-              <tr className="border-b text-xs uppercase text-slate-500">
-                <th className="py-3 text-left">Campaign</th>
+              <tr className="border-b text-[10px] uppercase text-slate-500">
+                <th className="py-2 text-left">Campaign</th>
                 <th className="text-right">Spend</th>
                 <th className="text-right">Revenue</th>
                 <th className="text-right">ROAS</th>
@@ -96,7 +96,7 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
             <tbody>
               {campaigns.map((c: any) => (
                 <tr key={c.campaign_name} className="border-b">
-                  <td className="py-3 font-bold">{c.campaign_name}</td>
+                  <td className="py-2 font-bold">{c.campaign_name}</td>
                   <td className="text-right">{money(c.spend)}</td>
                   <td className="text-right">{money(c.revenue)}</td>
                   <td className="text-right font-bold">
@@ -121,7 +121,7 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
                   >
                     {pct(c.efficiency_gap)}
                   </td>
-                  <td className={`text-right font-black ${color(c.action)}`}>
+                  <td className={`text-right font-semibold ${color(c.action)}`}>
                     {c.action}
                   </td>
                 </tr>
@@ -136,9 +136,9 @@ export default function GoogleCampaign({ startDate, endDate }: Props) {
 
 function Card({ title, value }: any) {
   return (
-    <div className="rounded-3xl border bg-white/90 p-5 shadow-sm">
-      <p className="text-xs font-black uppercase text-slate-500">{title}</p>
-      <p className="mt-1 text-2xl font-black">{value}</p>
+    <div className="rounded-xl border bg-white/90 p-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase text-slate-500">{title}</p>
+      <p className="mt-1 text-[14px] font-semibold">{value}</p>
     </div>
   );
 }
@@ -152,11 +152,11 @@ function Bucket({ title, data, color }: any) {
   };
 
   return (
-    <div className={`rounded-3xl border p-4 ${styles[color]}`}>
-      <p className="text-xs font-black uppercase">{title}</p>
+    <div className={`rounded-xl border p-4 ${styles[color]}`}>
+      <p className="text-[10px] font-semibold uppercase">{title}</p>
       <div className="mt-2 space-y-1">
         {data.slice(0, 5).map((c: any) => (
-          <p key={c.campaign_name} className="text-sm font-bold truncate">
+          <p key={c.campaign_name} className="text-[11px] font-bold truncate">
             {c.campaign_name}
           </p>
         ))}

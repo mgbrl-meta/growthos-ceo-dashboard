@@ -58,7 +58,7 @@ export default function IntegrationSetupShell({
 
         bg-[#f5f6f8]
 
-        px-5
+        px-3
         py-10
       "
     >
@@ -68,14 +68,14 @@ export default function IntegrationSetupShell({
           w-full
           max-w-[660px]
 
-          rounded-[28px]
+          rounded-xl
 
           border
           border-slate-200
 
           bg-white
 
-          p-8
+          p-4
 
           shadow-sm
         "
@@ -91,8 +91,8 @@ export default function IntegrationSetupShell({
           <div
             className="
               flex
-              h-11
-              w-11
+              h-9
+              w-9
               items-center
               justify-center
 
@@ -103,7 +103,7 @@ export default function IntegrationSetupShell({
               to-blue-500
 
               text-base
-              font-black
+              font-semibold
               text-white
             "
           >
@@ -113,11 +113,11 @@ export default function IntegrationSetupShell({
 
           <div>
 
-            <div className="text-lg font-black tracking-[-0.035em] text-slate-950">
+            <div className="text-[14px] font-semibold tracking-[-0.035em] text-slate-950">
               Growth OS
             </div>
 
-            <div className="text-xs text-slate-400">
+            <div className="text-[10px] text-slate-400">
               {providerLabel} Connector
             </div>
 
@@ -138,7 +138,7 @@ export default function IntegrationSetupShell({
               size={21}
             />
 
-            <span className="text-xs font-black uppercase tracking-[0.12em]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">
               Connected successfully
             </span>
 
@@ -147,10 +147,10 @@ export default function IntegrationSetupShell({
 
           <h1
             className="
-              mt-4
+              mt-2.5
 
               text-[30px]
-              font-black
+              font-semibold
               tracking-[-0.05em]
 
               text-slate-950
@@ -160,7 +160,7 @@ export default function IntegrationSetupShell({
           </h1>
 
 
-          <p className="mt-3 text-sm leading-6 text-slate-500">
+          <p className="mt-3 text-[11px] leading-6 text-slate-500">
 
             {accountName
               ? `${accountName} is connected to Growth OS.`
@@ -175,7 +175,7 @@ export default function IntegrationSetupShell({
             PROVIDER-SPECIFIC CONTENT
         ================================================== */}
 
-        <div className="mt-8">
+        <div className="mt-2.5">
 
           {children}
 

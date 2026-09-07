@@ -674,22 +674,22 @@ export default function DailyPlanner({
     }, [filteredRows]);
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl">
+    <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
 
       {/* HEADER */}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
 
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
             Retention Planner
           </p>
 
-          <h2 className="mt-1 text-[26px] font-black tracking-[-0.04em] text-slate-950">
+          <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.04em] text-slate-950">
             Weekly Execution Planner
           </h2>
 
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-[10px] text-slate-500">
             One next-best action per customer, consolidated into executable campaign groups.
           </p>
         </div>
@@ -705,7 +705,7 @@ export default function DailyPlanner({
                   'SELECTED_DATE'
                 )
               }
-              className={`rounded-lg px-4 py-2 text-[10px] font-black transition ${
+              className={`rounded-lg px-3 py-2 text-[10px] font-semibold transition ${
                 plannerMode ===
                 'SELECTED_DATE'
                   ? 'bg-slate-950 text-white'
@@ -722,7 +722,7 @@ export default function DailyPlanner({
                   'ALL_WEEK'
                 )
               }
-              className={`rounded-lg px-4 py-2 text-[10px] font-black transition ${
+              className={`rounded-lg px-3 py-2 text-[10px] font-semibold transition ${
                 plannerMode ===
                 'ALL_WEEK'
                   ? 'bg-slate-950 text-white'
@@ -758,20 +758,20 @@ export default function DailyPlanner({
       </div>
 
       {loading && (
-        <p className="mt-3 text-xs font-bold text-blue-600">
+        <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading weekly execution plan...
         </p>
       )}
 
       {error && (
-        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-700">
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-700">
           {error}
         </div>
       )}
 
       {/* KPI */}
 
-      <div className="mt-5 grid gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mt-3 grid gap-3 md:grid-cols-4 xl:grid-cols-7">
 
         <Card
           label="Campaigns"
@@ -836,7 +836,7 @@ export default function DailyPlanner({
 
       {/* FILTERS */}
 
-      <div className="mt-5 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2.5 xl:flex-row">
+      <div className="mt-3 flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5 xl:flex-row">
 
         <input
           value={search}
@@ -847,7 +847,7 @@ export default function DailyPlanner({
               )
           }
           placeholder="Search campaign, treatment, template or status..."
-          className="h-9 min-w-[260px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none"
+          className="h-9 min-w-[260px] flex-1 rounded-lg border border-slate-200 bg-white px-3 text-[10px] outline-none"
         />
 
         <select
@@ -860,7 +860,7 @@ export default function DailyPlanner({
                 event.target.value
               )
           }
-          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold"
         >
           <option value="ALL">
             All Campaign Families
@@ -890,7 +890,7 @@ export default function DailyPlanner({
                 event.target.value
               )
           }
-          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold"
         >
           <option value="ALL">
             All Lifecycle
@@ -920,7 +920,7 @@ export default function DailyPlanner({
                 event.target.value
               )
           }
-          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[10px] font-bold"
         >
           <option value="ALL">
             All Treatments
@@ -944,7 +944,7 @@ export default function DailyPlanner({
 
       {/* DAYS */}
 
-      <div className="mt-4 space-y-5">
+      <div className="mt-2.5 space-y-3">
 
         {Object.entries(
           rowsByDate
@@ -970,13 +970,13 @@ export default function DailyPlanner({
             return (
               <div
                 key={date}
-                className="overflow-hidden rounded-2xl border border-slate-200"
+                className="overflow-hidden rounded-lg border border-slate-200"
               >
 
-                <div className="flex items-center justify-between bg-slate-100 px-4 py-3">
+                <div className="flex items-center justify-between bg-slate-100 px-3 py-2">
 
                   <div>
-                    <p className="text-sm font-black text-slate-950">
+                    <p className="text-[11px] font-semibold text-slate-950">
                       {prettyDate(
                         date
                       )}
@@ -989,13 +989,13 @@ export default function DailyPlanner({
                   </div>
 
                   <div className="text-right">
-                    <p className="text-sm font-black text-slate-950">
+                    <p className="text-[11px] font-semibold text-slate-950">
                       {dayCustomers.toLocaleString(
                         'en-IN'
                       )}
                     </p>
 
-                    <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">
+                    <p className="text-[8px] font-semibold uppercase tracking-wider text-slate-400">
                       Customers
                     </p>
                   </div>
@@ -1006,7 +1006,7 @@ export default function DailyPlanner({
 
                   <table className="w-full min-w-[1390px] table-fixed text-left">
 
-                    <thead className="bg-white text-[8px] font-black uppercase tracking-widest text-slate-400">
+                    <thead className="bg-white text-[8px] font-semibold uppercase tracking-widest text-slate-400">
 
                       <tr>
                         <th className="w-[50px] p-3">
@@ -1080,7 +1080,7 @@ export default function DailyPlanner({
                           >
 
                             <td className="p-3">
-                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950 text-[9px] font-black text-white">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-950 text-[9px] font-semibold text-white">
                                 {
                                   row.campaign_slot_for_day
                                 }
@@ -1089,7 +1089,7 @@ export default function DailyPlanner({
 
                             <td className="p-3">
 
-                              <p className="text-xs font-black text-slate-950">
+                              <p className="text-[10px] font-semibold text-slate-950">
                                 {
                                   humanize(
                                     row.campaign_family
@@ -1122,7 +1122,7 @@ export default function DailyPlanner({
                             </td>
 
                             <td className="p-3">
-                              <p className="text-sm font-black text-slate-950">
+                              <p className="text-[11px] font-semibold text-slate-950">
                                 {Number(
                                   row.audience_size ||
                                     0
@@ -1133,7 +1133,7 @@ export default function DailyPlanner({
                             </td>
 
                             <td className="p-3">
-                              <p className="text-xs font-black text-slate-950">
+                              <p className="text-[10px] font-semibold text-slate-950">
                                 {Number(
                                   row.unique_dynamic_targets ||
                                     0
@@ -1147,7 +1147,7 @@ export default function DailyPlanner({
                               </p>
                             </td>
 
-                            <td className="p-3 text-[10px] font-black">
+                            <td className="p-3 text-[10px] font-semibold">
                               {
                                 pct(
                                   row.avg_target_probability_90d
@@ -1163,7 +1163,7 @@ export default function DailyPlanner({
                               }
                             </td>
 
-                            <td className="p-3 text-[9px] font-black text-blue-700">
+                            <td className="p-3 text-[9px] font-semibold text-blue-700">
                               {
                                 money(
                                   row.total_expected_value_90d
@@ -1180,7 +1180,7 @@ export default function DailyPlanner({
                             </td>
 
                             <td className="p-3">
-                              <p className="break-words text-[8px] font-black text-slate-700">
+                              <p className="break-words text-[8px] font-semibold text-slate-700">
                                 {
                                   row.suggested_template_key
                                 }
@@ -1189,7 +1189,7 @@ export default function DailyPlanner({
 
                             <td className="p-3">
                               <span
-                                className={`inline-flex rounded-full px-2 py-1 text-[7px] font-black uppercase ${
+                                className={`inline-flex rounded-full px-2 py-1 text-[7px] font-semibold uppercase ${
                                   row.capacity_status ===
                                   'WITHIN_CAPACITY'
                                     ? 'bg-emerald-50 text-emerald-700'
@@ -1208,7 +1208,7 @@ export default function DailyPlanner({
                               {row.tracker_status ? (
                                 <div className="flex flex-col items-start gap-1">
 
-                                  <span className="rounded-full bg-blue-50 px-2 py-1 text-[7px] font-black uppercase text-blue-700">
+                                  <span className="rounded-full bg-blue-50 px-2 py-1 text-[7px] font-semibold uppercase text-blue-700">
                                     {
                                       humanize(
                                         row.tracker_status
@@ -1233,7 +1233,7 @@ export default function DailyPlanner({
                                       row
                                     )
                                   }
-                                  className="rounded-lg bg-slate-950 px-3 py-2 text-[9px] font-black text-white disabled:opacity-50"
+                                  className="rounded-lg bg-slate-950 px-3 py-2 text-[9px] font-semibold text-white disabled:opacity-50"
                                 >
                                   {preparingGroupId ===
                                   row.execution_group_id
@@ -1262,7 +1262,7 @@ export default function DailyPlanner({
         {filteredRows.length ===
           0 &&
           !loading && (
-          <div className="rounded-2xl border border-slate-200 p-10 text-center text-xs font-bold text-slate-500">
+          <div className="rounded-lg border border-slate-200 p-3 text-center text-[10px] font-bold text-slate-500">
             No execution campaigns found.
           </div>
         )}
@@ -1281,12 +1281,12 @@ function Card({
   value: string;
 }) {
   return (
-    <div className="min-h-[82px] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-      <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">
+    <div className="min-h-[82px] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 text-lg font-black text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">
         {value}
       </p>
     </div>
@@ -1308,7 +1308,7 @@ function TreatmentBadge({
     'RECOVERY'
   ) {
     return (
-      <span className="rounded-full bg-amber-50 px-2 py-1 text-[8px] font-black uppercase text-amber-700">
+      <span className="rounded-full bg-amber-50 px-2 py-1 text-[8px] font-semibold uppercase text-amber-700">
         Recovery
       </span>
     );
@@ -1319,7 +1319,7 @@ function TreatmentBadge({
     'TIMELY_ACTION'
   ) {
     return (
-      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[8px] font-black uppercase text-emerald-700">
+      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[8px] font-semibold uppercase text-emerald-700">
         Timely
       </span>
     );
@@ -1330,14 +1330,14 @@ function TreatmentBadge({
     'EDUCATION'
   ) {
     return (
-      <span className="rounded-full bg-blue-50 px-2 py-1 text-[8px] font-black uppercase text-blue-700">
+      <span className="rounded-full bg-blue-50 px-2 py-1 text-[8px] font-semibold uppercase text-blue-700">
         Education
       </span>
     );
   }
 
   return (
-    <span className="rounded-full bg-slate-100 px-2 py-1 text-[8px] font-black uppercase text-slate-600">
+    <span className="rounded-full bg-slate-100 px-2 py-1 text-[8px] font-semibold uppercase text-slate-600">
       {humanize(
         value
       )}

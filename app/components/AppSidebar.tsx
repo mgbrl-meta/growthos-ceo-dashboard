@@ -1183,7 +1183,7 @@ export default function AppSidebar({
       className="
         relative
         h-screen
-        w-[68px]
+        w-[64px]
         shrink-0
       "
     >
@@ -1221,12 +1221,12 @@ export default function AppSidebar({
           ${
             expanded
               ? `
-                w-[230px]
+                w-[220px]
 
                 shadow-[14px_0_32px_rgba(15,23,42,0.18)]
               `
               : `
-                w-[68px]
+                w-[64px]
               `
           }
         `}
@@ -1242,14 +1242,14 @@ export default function AppSidebar({
           <div
             className="
               flex
-              h-[70px]
+              h-[60px]
               shrink-0
               items-center
 
               border-b
               border-white/5
 
-              px-4
+              px-3
             "
           >
 
@@ -1279,11 +1279,11 @@ export default function AppSidebar({
                   from-violet-500
                   to-blue-500
 
-                  text-sm
-                  font-black
+                  text-[11px]
+                  font-semibold
                   text-white
 
-                  shadow-lg
+                  shadow-sm
                   shadow-violet-950/40
                 "
               >
@@ -1317,7 +1317,7 @@ export default function AppSidebar({
                 <div
                   className="
                     text-[15px]
-                    font-black
+                    font-semibold
                     tracking-[-0.03em]
                   "
                 >
@@ -1428,7 +1428,7 @@ export default function AppSidebar({
               overflow-x-hidden
 
               px-2
-              py-4
+              py-2.5
             "
           >
 
@@ -1463,7 +1463,7 @@ export default function AppSidebar({
                       group.label
                     }
 
-                    className="mb-5"
+                    className="mb-3"
                   >
 
 
@@ -1565,7 +1565,7 @@ export default function AppSidebar({
 
                                 className={`
                                   flex
-                                  h-[38px]
+                                  h-[34px]
                                   w-full
                                   items-center
 
@@ -1874,7 +1874,7 @@ export default function AppSidebar({
 
               className={`
                 flex
-                h-[38px]
+                h-[34px]
                 w-full
                 items-center
 

@@ -65,7 +65,7 @@ export default function AttributionDataQuality() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center text-sm text-slate-400">
+      <div className="flex min-h-[400px] items-center justify-center text-[11px] text-slate-400">
         Checking attribution infrastructure...
       </div>
     );
@@ -74,7 +74,7 @@ export default function AttributionDataQuality() {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-red-900">
         {error}
       </div>
     );
@@ -82,20 +82,20 @@ export default function AttributionDataQuality() {
 
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
-      <section className="flex items-end justify-between gap-4">
+      <section className="flex items-end justify-between gap-2.5">
 
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
             Attribution OS
           </p>
 
-          <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">
+          <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
             Data Quality
           </h2>
 
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-[10px] text-slate-400">
             Monitor collection, sessionization, identity matching and order resolution.
           </p>
         </div>
@@ -103,7 +103,7 @@ export default function AttributionDataQuality() {
 
         <button
           onClick={load}
-          className="rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white"
+          className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Refresh
         </button>
@@ -111,7 +111,7 @@ export default function AttributionDataQuality() {
       </section>
 
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-4">
 
         <HealthCard
           label="Sessionization"
@@ -172,7 +172,7 @@ export default function AttributionDataQuality() {
       </section>
 
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
 
         <Panel title="Collection">
 
@@ -386,7 +386,7 @@ function HealthCard({
   healthy,
 }: any) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
       <div className="flex items-center gap-2">
 
@@ -398,14 +398,14 @@ function HealthCard({
           }
         />
 
-        <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           {label}
         </p>
 
       </div>
 
 
-      <p className="mt-3 text-2xl font-black">
+      <p className="mt-3 text-[14px] font-semibold">
         {value}
       </p>
 
@@ -413,8 +413,8 @@ function HealthCard({
       <p
         className={
           healthy
-            ? 'mt-2 text-xs font-bold text-emerald-600'
-            : 'mt-2 text-xs font-bold text-amber-600'
+            ? 'mt-2 text-[10px] font-bold text-emerald-600'
+            : 'mt-2 text-[10px] font-bold text-amber-600'
         }
       >
         {healthy
@@ -432,13 +432,13 @@ function Panel({
   children,
 }: any) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
-      <h3 className="text-sm font-black">
+      <h3 className="text-[11px] font-semibold">
         {title}
       </h3>
 
-      <div className="mt-4">
+      <div className="mt-2.5">
         {children}
       </div>
 
@@ -452,13 +452,13 @@ function Row({
   value,
 }: any) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-100 py-3 last:border-0">
+    <div className="flex items-center justify-between border-b border-slate-100 py-2 last:border-0">
 
-      <span className="text-xs font-semibold text-slate-500">
+      <span className="text-[10px] font-semibold text-slate-500">
         {label}
       </span>
 
-      <strong className="text-xs text-slate-900">
+      <strong className="text-[10px] text-slate-900">
         {value}
       </strong>
 

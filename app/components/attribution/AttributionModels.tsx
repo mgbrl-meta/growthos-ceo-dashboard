@@ -87,7 +87,7 @@ export default function AttributionModels({
 
   if (loading) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center text-sm text-slate-400">
+      <div className="flex min-h-[400px] items-center justify-center text-[11px] text-slate-400">
         Loading attribution models...
       </div>
     );
@@ -96,7 +96,7 @@ export default function AttributionModels({
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-red-900">
         {error}
       </div>
     );
@@ -104,30 +104,30 @@ export default function AttributionModels({
 
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
       <section>
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
           Attribution OS
         </p>
 
-        <h2 className="mt-1 text-xl font-black tracking-[-0.035em]">
+        <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
           Attribution Models
         </h2>
 
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-[10px] text-slate-400">
           Compare how revenue credit changes under each attribution methodology.
         </p>
       </section>
 
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
-        <h3 className="text-sm font-black">
+        <h3 className="text-[11px] font-semibold">
           Attributed Revenue by Model
         </h3>
 
-        <div className="mt-4 h-[320px]">
+        <div className="mt-2.5 h-[200px]">
 
           <ResponsiveContainer
             width="100%"
@@ -175,7 +175,7 @@ export default function AttributionModels({
       </section>
 
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
         <div className="overflow-x-auto">
 
@@ -283,7 +283,7 @@ function Th({
   children,
 }: any) {
   return (
-    <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-wide text-slate-400">
+    <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
       {children}
     </th>
   );
@@ -294,7 +294,7 @@ function Td({
   children,
 }: any) {
   return (
-    <td className="px-4 py-3 text-sm text-slate-600">
+    <td className="px-3 py-2 text-[11px] text-slate-600">
       {children}
     </td>
   );

@@ -144,7 +144,7 @@ export default function ShopifySetupCompleteButton({
 
   return (
 
-    <div className="mt-4">
+    <div className="mt-2.5">
 
       <button
 
@@ -169,11 +169,11 @@ export default function ShopifySetupCompleteButton({
 
           bg-emerald-600
 
-          px-5
-          py-3
+          px-3
+          py-2
 
-          text-sm
-          font-black
+          text-[11px]
+          font-semibold
           text-white
 
           transition
@@ -221,10 +221,10 @@ export default function ShopifySetupCompleteButton({
 
             bg-red-50
 
-            px-4
-            py-3
+            px-3
+            py-2
 
-            text-xs
+            text-[10px]
             font-semibold
             text-red-700
           "

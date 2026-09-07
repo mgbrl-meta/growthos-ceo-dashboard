@@ -451,18 +451,18 @@ export default function PatternDiscovery() {
   };
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-xl md:p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-3.5">
+      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
             Pattern Discovery
           </p>
 
-          <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+          <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
             What Should the Operator Act On?
           </h2>
 
-          <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500">
+          <p className="mt-2 max-w-4xl text-[11px] leading-6 text-slate-500">
             Validated retention drivers, next-product sequences, routine
             completion, replenishment windows and controlled affinity tests
             from the frozen backend engines.
@@ -470,7 +470,7 @@ export default function PatternDiscovery() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-500">
             Updated{' '}
             {formatTimestamp(
               quality?.latest_source_refresh
@@ -483,7 +483,7 @@ export default function PatternDiscovery() {
               setReloadKey((value) => value + 1)
             }
             disabled={loading}
-            className="rounded-full border border-slate-900 bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-full border border-slate-900 bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Loading…' : 'Refresh'}
           </button>
@@ -491,12 +491,12 @@ export default function PatternDiscovery() {
       </div>
 
       {error && (
-        <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-black text-red-700">
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="text-[11px] font-semibold text-red-700">
             Pattern Discovery failed to load
           </p>
 
-          <p className="mt-1 text-sm text-red-600">
+          <p className="mt-1 text-[11px] text-red-600">
             {error}
           </p>
         </div>
@@ -504,13 +504,13 @@ export default function PatternDiscovery() {
 
       {workflowMessage && (
         <div
-          className={`mt-5 flex items-center justify-between gap-3 rounded-2xl border p-4 ${
+          className={`mt-3 flex items-center justify-between gap-3 rounded-lg border p-4 ${
             workflowMessage.type === 'success'
               ? 'border-green-200 bg-green-50 text-green-700'
               : 'border-red-200 bg-red-50 text-red-700'
           }`}
         >
-          <p className="text-sm font-black">
+          <p className="text-[11px] font-semibold">
             {workflowMessage.text}
           </p>
 
@@ -519,14 +519,14 @@ export default function PatternDiscovery() {
             onClick={() =>
               setWorkflowMessage(null)
             }
-            className="text-xs font-black uppercase tracking-wide"
+            className="text-[10px] font-semibold uppercase tracking-wide"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Activate Now"
           value={numberFormat.format(
@@ -560,7 +560,7 @@ export default function PatternDiscovery() {
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 px-1 text-xs font-medium text-slate-500">
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 px-1 text-[10px] font-medium text-slate-500">
         <span>
           {numberFormat.format(
             quality?.total_master_patterns || 0
@@ -591,7 +591,7 @@ export default function PatternDiscovery() {
         </span>
       </div>
 
-      <div className="mt-5 flex gap-2 overflow-x-auto pb-1">
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
         <FamilyButton
           active={family === 'All'}
           label="All Patterns"
@@ -618,14 +618,14 @@ export default function PatternDiscovery() {
         ))}
       </div>
 
-      <div className="mt-5 grid gap-2 lg:grid-cols-[minmax(260px,1fr)_190px_140px_170px_auto]">
+      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(260px,1fr)_190px_140px_170px_auto]">
         <input
           value={search}
           onChange={(event) =>
             setSearch(event.target.value)
           }
           placeholder="Search SKU, product, routine or action…"
-          className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-900 outline-none transition focus:border-slate-400"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-medium text-slate-900 outline-none transition focus:border-slate-400"
         />
 
         <select
@@ -637,7 +637,7 @@ export default function PatternDiscovery() {
                 | PatternActionGroup
             )
           }
-          className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 outline-none"
         >
           <option value="All">
             All Actions
@@ -661,7 +661,7 @@ export default function PatternDiscovery() {
           onChange={(event) =>
             setPriority(event.target.value)
           }
-          className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 outline-none"
         >
           <option value="All">
             All Priority
@@ -679,7 +679,7 @@ export default function PatternDiscovery() {
               event.target.value as SortOption
             )
           }
-          className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 outline-none"
+          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-bold text-slate-700 outline-none"
         >
           <option>Operator Rank</option>
           <option>Priority Score</option>
@@ -687,8 +687,8 @@ export default function PatternDiscovery() {
           <option>Confidence</option>
         </select>
 
-        <label className="flex h-11 cursor-pointer items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4">
-          <span className="whitespace-nowrap text-xs font-black uppercase tracking-wide text-slate-600">
+        <label className="flex h-9 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3">
+          <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-slate-600">
             Default Queue
           </span>
 
@@ -705,8 +705,8 @@ export default function PatternDiscovery() {
         </label>
       </div>
 
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-xs font-bold text-slate-500">
+      <div className="mt-2.5 flex items-center justify-between">
+        <p className="text-[10px] font-bold text-slate-500">
           Showing{' '}
           <span className="text-slate-950">
             {numberFormat.format(rows.length)}
@@ -714,15 +714,15 @@ export default function PatternDiscovery() {
           patterns
         </p>
 
-        <p className="text-xs text-slate-400">
+        <p className="text-[10px] text-slate-400">
           Click a pattern to inspect evidence
         </p>
       </div>
 
-      <div className="mt-3 max-h-[720px] overflow-auto rounded-3xl border border-slate-200">
+      <div className="mt-3 max-h-[720px] overflow-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[1480px] text-left">
           <thead className="sticky top-0 z-10 bg-slate-100 shadow-sm">
-            <tr className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+            <tr className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               <th className="p-4">Rank</th>
               <th className="p-4">Action</th>
               <th className="p-4">Pattern</th>
@@ -778,14 +778,14 @@ export default function PatternDiscovery() {
               <tr>
                 <td
                   colSpan={9}
-                  className="p-10 text-center"
+                  className="p-3 text-center"
                 >
-                  <p className="text-sm font-black text-slate-700">
+                  <p className="text-[11px] font-semibold text-slate-700">
                     No patterns match these
                     filters.
                   </p>
 
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-[11px] text-slate-500">
                     Clear the search or disable
                     Default Queue.
                   </p>
@@ -836,12 +836,12 @@ function PatternRows({
               priority={pattern.priority_band}
             />
 
-            <span className="whitespace-nowrap text-xs font-black text-slate-500">
+            <span className="whitespace-nowrap text-[10px] font-semibold text-slate-500">
               Queue #{pattern.global_rank}
             </span>
           </div>
 
-          <p className="mt-2 text-xs font-bold text-slate-400">
+          <p className="mt-2 text-[10px] font-bold text-slate-400">
             Score{' '}
             {pattern.operator_priority_score.toFixed(
               1
@@ -856,7 +856,7 @@ function PatternRows({
             }
           />
 
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-[10px] text-slate-500">
             {titleCase(
               pattern.operator_status
             )}
@@ -869,17 +869,17 @@ function PatternRows({
             onClick={onToggle}
             className="max-w-[260px] text-left"
           >
-            <p className="text-xs font-black uppercase tracking-wide text-blue-600">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600">
               {titleCase(
                 pattern.pattern_family
               )}
             </p>
 
-            <p className="mt-1 font-black leading-5 text-slate-950 hover:text-blue-700">
+            <p className="mt-1 font-semibold leading-5 text-slate-950 hover:text-blue-700">
               {pattern.operator_headline}
             </p>
 
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-[10px] text-slate-500">
               {titleCase(
                 pattern.pattern_subtype
               )}
@@ -893,13 +893,13 @@ function PatternRows({
               pattern.source_sku}
           </p>
 
-          <p className="mt-1 text-xs font-bold text-slate-500">
+          <p className="mt-1 text-[10px] font-bold text-slate-500">
             {pattern.source_sku}
           </p>
 
           {pattern.target_sku && (
             <>
-              <p className="my-2 text-xs font-black text-blue-500">
+              <p className="my-2 text-[10px] font-semibold text-blue-500">
                 ↓
               </p>
 
@@ -908,7 +908,7 @@ function PatternRows({
                   pattern.target_sku}
               </p>
 
-              <p className="mt-1 text-xs font-bold text-slate-500">
+              <p className="mt-1 text-[10px] font-bold text-slate-500">
                 {pattern.target_sku}
               </p>
             </>
@@ -916,17 +916,17 @@ function PatternRows({
         </td>
 
         <td className="p-4">
-          <p className="font-black text-slate-950">
+          <p className="font-semibold text-slate-950">
             {numberFormat.format(
               pattern.observed_support
             )}
           </p>
 
-          <p className="mt-1 max-w-[170px] text-xs leading-5 text-slate-500">
+          <p className="mt-1 max-w-[170px] text-[10px] leading-5 text-slate-500">
             {pattern.primary_metric_name}
           </p>
 
-          <p className="mt-1 text-sm font-black text-blue-700">
+          <p className="mt-1 text-[11px] font-semibold text-blue-700">
             {percent(
               pattern.primary_metric_value
             )}
@@ -934,7 +934,7 @@ function PatternRows({
 
           {pattern.benchmark_metric_value !==
             null && (
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-[10px] text-slate-500">
               Benchmark{' '}
               {percent(
                 pattern.benchmark_metric_value
@@ -944,13 +944,13 @@ function PatternRows({
         </td>
 
         <td className="p-4">
-          <p className="text-sm font-black text-slate-950">
+          <p className="text-[11px] font-semibold text-slate-950">
             {percentagePoints(
               pattern.absolute_lift
             )}
           </p>
 
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-[10px] text-slate-500">
             Downstream repeat
           </p>
 
@@ -960,7 +960,7 @@ function PatternRows({
             )}
           </p>
 
-          <p className="mt-2 max-w-[150px] text-xs leading-4 text-slate-500">
+          <p className="mt-2 max-w-[150px] text-[10px] leading-4 text-slate-500">
             Downstream revenue lift/customer
           </p>
 
@@ -972,12 +972,12 @@ function PatternRows({
         </td>
 
         <td className="p-4">
-          <p className="font-black text-slate-950">
+          <p className="font-semibold text-slate-950">
             {getWindowLabel(pattern)}
           </p>
 
           {pattern.requires_holdout && (
-            <p className="mt-2 max-w-[150px] text-xs leading-5 text-slate-500">
+            <p className="mt-2 max-w-[150px] text-[10px] leading-5 text-slate-500">
               {pattern.recommended_test_split ||
                 'Holdout required'}
             </p>
@@ -985,20 +985,20 @@ function PatternRows({
         </td>
 
         <td className="p-4">
-          <p className="font-black text-slate-950">
+          <p className="font-semibold text-slate-950">
             {titleCase(
               pattern.confidence_band
             )}
           </p>
 
-          <p className="mt-1 text-sm font-bold text-blue-700">
+          <p className="mt-1 text-[11px] font-bold text-blue-700">
             {Math.round(
               pattern.confidence_score * 100
             )}
             %
           </p>
 
-          <p className="mt-2 max-w-[170px] text-xs leading-5 text-slate-500">
+          <p className="mt-2 max-w-[170px] text-[10px] leading-5 text-slate-500">
             {titleCase(
               pattern.evidence_status
             )}
@@ -1006,7 +1006,7 @@ function PatternRows({
         </td>
 
         <td className="p-4">
-          <p className="max-w-[300px] text-sm font-bold leading-5 text-slate-800">
+          <p className="max-w-[300px] text-[11px] font-bold leading-5 text-slate-800">
             {pattern.operator_action.length > 150
               ? `${pattern.operator_action.slice(
                   0,
@@ -1026,7 +1026,7 @@ function PatternRows({
                   )
                 }
                 disabled={creatingWorkflow}
-                className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {creatingWorkflow
                   ? 'Saving...'
@@ -1039,7 +1039,7 @@ function PatternRows({
             <button
               type="button"
               onClick={onToggle}
-              className="px-1 text-xs font-black text-blue-700 hover:underline"
+              className="px-1 text-[10px] font-semibold text-blue-700 hover:underline"
             >
               {expanded
                 ? 'Hide evidence'
@@ -1051,7 +1051,7 @@ function PatternRows({
 
       {expanded && (
         <tr className="border-t border-slate-100 bg-slate-50">
-          <td colSpan={9} className="p-5">
+          <td colSpan={9} className="p-3">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <EvidenceCard
                 label="Observed Support"
@@ -1087,7 +1087,7 @@ function PatternRows({
               />
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-2.5 grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
               <DetailBlock
                 label="Full Operator Action"
                 value={pattern.operator_action}
@@ -1125,16 +1125,16 @@ function MetricCard({
   subtext: string;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold tracking-tight text-slate-950">
         {value}
       </p>
 
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-[10px] text-slate-500">
         {subtext}
       </p>
     </div>
@@ -1156,7 +1156,7 @@ function FamilyButton({
     <button
       type="button"
       onClick={onClick}
-      className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-black transition ${
+      className={`whitespace-nowrap rounded-full border px-3 py-2 text-[10px] font-semibold transition ${
         active
           ? 'border-slate-950 bg-slate-950 text-white'
           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
@@ -1190,7 +1190,7 @@ function PriorityBadge({
 
   return (
     <span
-      className={`rounded-full border px-2.5 py-1 text-[10px] font-black ${
+      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
         classes[priority] ||
         classes.P4
       }`}
@@ -1224,7 +1224,7 @@ function ActionBadge({
 
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] font-black ${
+      className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1.5 text-[10px] font-semibold ${
         classes[action]
       }`}
     >
@@ -1241,12 +1241,12 @@ function EvidenceCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 font-black text-slate-950">
+      <p className="mt-2 font-semibold text-slate-950">
         {value}
       </p>
     </div>
@@ -1262,11 +1262,11 @@ function DetailBlock({
 }) {
   return (
     <div>
-      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         {label}
       </p>
 
-      <p className="mt-2 text-sm font-medium leading-6 text-slate-700">
+      <p className="mt-2 text-[11px] font-medium leading-6 text-slate-700">
         {value}
       </p>
     </div>
@@ -1282,7 +1282,7 @@ function LoadingRows() {
           className="border-t border-slate-100"
         >
           <td colSpan={9} className="p-4">
-            <div className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+            <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
           </td>
         </tr>
       ))}

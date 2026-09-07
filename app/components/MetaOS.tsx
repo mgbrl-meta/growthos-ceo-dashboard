@@ -27,49 +27,74 @@ import MetaAlertsRecommendations
   from './meta/MetaAlertsRecommendations';
 
 
+// ============================================================
+// TYPES
+// ============================================================
+
 type MetaParams = {
 
-  targetRoas: number;
+  targetRoas:
+    number;
 
-  targetCpa: number;
+  targetCpa:
+    number;
 
-  scalePct: number;
+  scalePct:
+    number;
 
-  killPct: number;
+  killPct:
+    number;
 
-  minSpend: number;
+  minSpend:
+    number;
 
-  minPurchases: number;
+  minPurchases:
+    number;
 
-  maxCpa: number;
+  maxCpa:
+    number;
 
-  minRoas: number;
+  minRoas:
+    number;
 
-  minCtr: number;
+  minCtr:
+    number;
 
-  maxFrequency: number;
+  maxFrequency:
+    number;
 
-  cpmIncreasePct: number;
+  cpmIncreasePct:
+    number;
 
 };
 
 
 type MetaOSProps = {
 
-  activeMetaTab: string;
+  activeMetaTab:
+    string;
 
-  start: string;
+  start:
+    string;
 
-  end: string;
+  end:
+    string;
 
-  compareStart: string;
+  compareStart:
+    string;
 
-  compareEnd: string;
+  compareEnd:
+    string;
 
 };
 
 
-const DEFAULT_PARAMS: MetaParams = {
+// ============================================================
+// DEFAULT PARAMETERS
+// ============================================================
+
+const DEFAULT_PARAMS:
+  MetaParams = {
 
   targetRoas:
     0.8,
@@ -107,6 +132,10 @@ const DEFAULT_PARAMS: MetaParams = {
 };
 
 
+// ============================================================
+// META OS
+// ============================================================
+
 export default function MetaOS({
 
   activeMetaTab,
@@ -122,6 +151,10 @@ export default function MetaOS({
 }: MetaOSProps) {
 
 
+  // ==========================================================
+  // META PARAMETERS
+  // ==========================================================
+
   const [
     params,
     setParams,
@@ -130,6 +163,10 @@ export default function MetaOS({
       DEFAULT_PARAMS
     );
 
+
+  // ==========================================================
+  // CAMPAIGN STATE
+  // ==========================================================
 
   const [
     campaigns,
@@ -148,6 +185,10 @@ export default function MetaOS({
       ''
     );
 
+
+  // ==========================================================
+  // CAMPAIGN LIST
+  // ==========================================================
 
   useEffect(
     () => {
@@ -209,7 +250,8 @@ export default function MetaOS({
               ? json
                   .map(
                     (
-                      row: any
+                      row:
+                        any
                     ) =>
                       String(
                         row?.campaign_name ||
@@ -261,7 +303,9 @@ export default function MetaOS({
               }
 
 
-              return uniqueNames[0];
+              return (
+                uniqueNames[0]
+              );
 
             }
           );
@@ -318,10 +362,23 @@ export default function MetaOS({
   );
 
 
+  // ==========================================================
+  // UI
+  // ==========================================================
+
   return (
 
-    <section className="space-y-6">
+    <section
+      className="
+        min-w-0
+        space-y-3
+      "
+    >
 
+
+      {/* =====================================================
+          SETTINGS
+      ===================================================== */}
 
       {activeMetaTab ===
         'Settings' && (
@@ -340,6 +397,10 @@ export default function MetaOS({
 
       )}
 
+
+      {/* =====================================================
+          OVERVIEW
+      ===================================================== */}
 
       {activeMetaTab ===
         'Overview' && (
@@ -371,6 +432,10 @@ export default function MetaOS({
       )}
 
 
+      {/* =====================================================
+          CAMPAIGN ANALYSIS
+      ===================================================== */}
+
       {activeMetaTab ===
         'Campaign Analysis' && (
 
@@ -392,6 +457,10 @@ export default function MetaOS({
 
       )}
 
+
+      {/* =====================================================
+          AD SET ANALYSIS
+      ===================================================== */}
 
       {activeMetaTab ===
         'Ad Set Analysis' && (
@@ -427,6 +496,10 @@ export default function MetaOS({
       )}
 
 
+      {/* =====================================================
+          CREATIVE ANALYSIS
+      ===================================================== */}
+
       {activeMetaTab ===
         'Creative Analysis' && (
 
@@ -460,6 +533,10 @@ export default function MetaOS({
 
       )}
 
+
+      {/* =====================================================
+          FUNNEL ANALYSIS
+      ===================================================== */}
 
       {activeMetaTab ===
         'Funnel Analysis' && (
@@ -499,6 +576,10 @@ export default function MetaOS({
       )}
 
 
+      {/* =====================================================
+          ALERTS & RECOMMENDATIONS
+      ===================================================== */}
+
       {activeMetaTab ===
         'Alerts & Recommendations' && (
 
@@ -527,7 +608,6 @@ export default function MetaOS({
         />
 
       )}
-
 
     </section>
 

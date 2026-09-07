@@ -76,7 +76,7 @@ export default function ProductOS({
 
   return (
 
-    <section className="space-y-6">
+    <section className="space-y-3">
 
 
       {/* =====================================================

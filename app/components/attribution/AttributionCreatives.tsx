@@ -218,7 +218,7 @@ export default function AttributionCreatives({
 
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950" />
 
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-[11px] text-slate-400">
             Loading creatives...
           </p>
 
@@ -235,13 +235,13 @@ export default function AttributionCreatives({
 
     return (
 
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-3.5">
 
-        <p className="font-black text-red-900">
+        <p className="font-semibold text-red-900">
           Creative attribution failed to load
         </p>
 
-        <p className="mt-1 text-sm text-red-700">
+        <p className="mt-1 text-[11px] text-red-700">
           {error}
         </p>
 
@@ -249,7 +249,7 @@ export default function AttributionCreatives({
         <button
           type="button"
           onClick={load}
-          className="mt-4 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+          className="mt-2.5 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Retry
         </button>
@@ -263,35 +263,35 @@ export default function AttributionCreatives({
 
   return (
 
-    <div className="space-y-5">
+    <div className="space-y-3">
 
 
       {/* =====================================================
           PAGE HEADER
       ===================================================== */}
 
-      <section className="flex flex-wrap items-end justify-between gap-4">
+      <section className="flex flex-wrap items-end justify-between gap-2.5">
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
             Attribution OS
           </p>
 
 
-          <h2 className="mt-1 text-xl font-black tracking-[-0.035em] text-slate-950">
+          <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em] text-slate-950">
             Creative Attribution
           </h2>
 
 
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-[10px] text-slate-400">
             Identify which individual ads and creatives start, assist and close customer journeys.
           </p>
 
         </div>
 
 
-        <div className="flex h-10 w-[320px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
+        <div className="flex h-8 w-[320px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
 
           <Search
             size={15}
@@ -314,7 +314,7 @@ export default function AttributionCreatives({
 
             placeholder="Search creative, ad or campaign"
 
-            className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[10px] font-medium text-slate-800 outline-none"
 
           />
 
@@ -327,7 +327,7 @@ export default function AttributionCreatives({
           KPI STRIP
       ===================================================== */}
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
 
 
         <Metric
@@ -378,20 +378,20 @@ export default function AttributionCreatives({
           TABLE
       ===================================================== */}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
 
-        <div className="border-b border-slate-100 px-5 py-4">
+        <div className="border-b border-slate-100 px-3 py-2.5">
 
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-2.5">
 
             <div>
 
-              <h3 className="text-sm font-black text-slate-950">
+              <h3 className="text-[11px] font-semibold text-slate-950">
                 Creative Intelligence
               </h3>
 
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-[10px] text-slate-400">
                 Creative-level journey contribution
               </p>
 
@@ -635,7 +635,7 @@ export default function AttributionCreatives({
 
                   <td
                     colSpan={12}
-                    className="px-5 py-12 text-center text-sm text-slate-400"
+                    className="px-3 py-12 text-center text-[11px] text-slate-400"
                   >
                     No creatives found for the selected period.
                   </td>
@@ -684,7 +684,7 @@ function Metric({
       </p>
 
 
-      <p className="mt-2 text-xl font-black tracking-[-0.03em] text-slate-950">
+      <p className="mt-2 text-[15px] font-semibold tracking-[-0.03em] text-slate-950">
         {value}
       </p>
 
@@ -710,9 +710,9 @@ function Th({
       className={
         right
 
-          ? 'px-4 py-3 text-right text-[10px] font-black uppercase tracking-wide text-slate-400'
+          ? 'px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-slate-400'
 
-          : 'px-4 py-3 text-left text-[10px] font-black uppercase tracking-wide text-slate-400'
+          : 'px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400'
       }
     >
       {children}
@@ -734,9 +734,9 @@ function Td({
       className={
         right
 
-          ? 'px-4 py-3 text-right text-xs text-slate-600'
+          ? 'px-3 py-2 text-right text-[10px] text-slate-600'
 
-          : 'px-4 py-3 text-left text-xs text-slate-600'
+          : 'px-3 py-2 text-left text-[10px] text-slate-600'
       }
     >
       {children}

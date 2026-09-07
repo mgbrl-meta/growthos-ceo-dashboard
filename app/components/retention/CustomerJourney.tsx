@@ -81,39 +81,39 @@ export default function CustomerJourney() {
     Math.max(filtered.length, 1);
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl">
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+    <section className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
         Customer Journey
       </p>
 
-      <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+      <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
         Journey State Engine
       </h2>
 
-      <p className="mt-2 text-sm text-slate-500">
+      <p className="mt-2 text-[11px] text-slate-500">
         Shows journey stage, timing state, base probability, multiplier and state score.
       </p>
 
       {loading && (
-        <p className="mt-3 text-xs font-bold text-blue-600">
+        <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading customer journey...
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
+      <div className="mt-3 grid gap-2.5 md:grid-cols-4">
         <Card label="Customers" value={totalCustomers.toLocaleString('en-IN')} />
         <Card label="Revenue" value={money(totalRevenue)} />
         <Card label="Avg Orders" value={avgOrders.toFixed(2)} />
         <Card label="Avg State Score" value={avgStateScore.toFixed(3)} />
       </div>
 
-      <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-5">
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">
           Journey State Summary
         </p>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+        <div className="mt-2.5 overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-[11px]">
             <thead>
               <tr className="border-b">
                 <th className="p-3">Stage</th>
@@ -131,7 +131,7 @@ export default function CustomerJourney() {
                   key={`${row.journey_stage}-${row.journey_state}`}
                   className="border-b"
                 >
-                  <td className="p-3 font-black">{row.journey_stage}</td>
+                  <td className="p-3 font-semibold">{row.journey_stage}</td>
                   <td className="p-3">{row.journey_state}</td>
                   <td className="p-3">
                     {Number(row.customers || 0).toLocaleString('en-IN')}
@@ -150,7 +150,7 @@ export default function CustomerJourney() {
 
               {summary.length === 0 && (
                 <tr>
-                  <td className="p-6 text-sm font-bold text-slate-500" colSpan={6}>
+                  <td className="p-3.5 text-[11px] font-bold text-slate-500" colSpan={6}>
                     No journey summary found.
                   </td>
                 </tr>
@@ -160,18 +160,18 @@ export default function CustomerJourney() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search customer, stage, state..."
-          className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-[11px]"
         />
 
         <select
           value={stageFilter}
           onChange={(e) => setStageFilter(e.target.value)}
-          className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-[11px]"
         >
           <option>All</option>
           <option>First Purchase</option>
@@ -184,7 +184,7 @@ export default function CustomerJourney() {
         <select
           value={stateFilter}
           onChange={(e) => setStateFilter(e.target.value)}
-          className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-[11px]"
         >
           {journeyStates.map((state) => (
             <option key={state}>{state}</option>
@@ -192,9 +192,9 @@ export default function CustomerJourney() {
         </select>
       </div>
 
-      <div className="mt-5 overflow-x-auto rounded-3xl border border-slate-200">
+      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[1300px] text-left">
-          <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
+          <thead className="bg-slate-100 text-[10px] uppercase tracking-widest text-slate-500">
             <tr>
               <th className="p-4">Customer</th>
               <th className="p-4">Stage</th>
@@ -212,7 +212,7 @@ export default function CustomerJourney() {
           <tbody>
             {filtered.map((row) => (
               <tr key={row.customer_key} className="border-t border-slate-100">
-                <td className="p-4 font-black">{row.customer_key}</td>
+                <td className="p-4 font-semibold">{row.customer_key}</td>
 
                 <td className="p-4 font-bold text-blue-700">
                   {row.journey_stage}
@@ -247,7 +247,7 @@ export default function CustomerJourney() {
             {filtered.length === 0 && (
               <tr>
                 <td
-                  className="p-8 text-center text-sm font-bold text-slate-500"
+                  className="p-4 text-center text-[11px] font-bold text-slate-500"
                   colSpan={10}
                 >
                   No customer journey rows found.
@@ -263,11 +263,11 @@ export default function CustomerJourney() {
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

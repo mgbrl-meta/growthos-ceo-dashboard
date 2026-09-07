@@ -1164,13 +1164,13 @@ export default function GrowthOSDashboard() {
           <div
             className="
               mx-auto
-              max-w-[1680px]
+              max-w-[1880px]
 
-              px-4
-              py-5
+              px-3
+              py-2.5
 
-              md:px-6
-              xl:px-8
+              md:px-3
+              xl:px-3
             "
           >
 
@@ -1512,24 +1512,14 @@ function PlatformPlaceholder({
   return (
 
     <section
-      className="
-        rounded-2xl
-        border
-        border-slate-200
-
-        bg-white
-
-        p-8
-
-        shadow-sm
-      "
+      className="gos-panel"
     >
 
       <div
         className="
           flex
-          h-11
-          w-11
+          h-9
+          w-9
           items-center
           justify-center
 
@@ -1550,10 +1540,10 @@ function PlatformPlaceholder({
 
       <p
         className="
-          mt-5
+          mt-3
 
           text-[10px]
-          font-black
+          font-semibold
           uppercase
           tracking-[0.18em]
 
@@ -1568,8 +1558,8 @@ function PlatformPlaceholder({
         className="
           mt-1
 
-          text-2xl
-          font-black
+          text-[14px]
+          font-semibold
           tracking-[-0.04em]
 
           text-slate-950
@@ -1584,7 +1574,7 @@ function PlatformPlaceholder({
           mt-2
           max-w-2xl
 
-          text-sm
+          text-[11px]
           leading-6
 
           text-slate-500
@@ -1596,7 +1586,7 @@ function PlatformPlaceholder({
 
       <span
         className="
-          mt-6
+          mt-3
           inline-flex
 
           rounded-full

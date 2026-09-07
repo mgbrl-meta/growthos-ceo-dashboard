@@ -375,7 +375,7 @@ export default function AttributionOverview({
 
           <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-slate-950" />
 
-          <p className="mt-4 text-sm font-semibold text-slate-500">
+          <p className="mt-2.5 text-[11px] font-semibold text-slate-500">
             Loading Attribution OS...
           </p>
 
@@ -394,13 +394,13 @@ export default function AttributionOverview({
 
     return (
 
-      <div className="rounded-3xl border border-red-200 bg-red-50 p-6">
+      <div className="rounded-xl border border-red-200 bg-red-50 p-3.5">
 
-        <p className="font-black text-red-900">
+        <p className="font-semibold text-red-900">
           Attribution data failed to load
         </p>
 
-        <p className="mt-1 text-sm text-red-700">
+        <p className="mt-1 text-[11px] text-red-700">
           {error}
         </p>
 
@@ -409,7 +409,7 @@ export default function AttributionOverview({
           onClick={
             load
           }
-          className="mt-4 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+          className="mt-2.5 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Retry
         </button>
@@ -423,7 +423,7 @@ export default function AttributionOverview({
 
   return (
 
-    <div className="space-y-5">
+    <div className="space-y-3">
 
 
       {/* ==================================================
@@ -434,11 +434,11 @@ export default function AttributionOverview({
 
         <div>
 
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-violet-600">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-600">
             Attribution Intelligence
           </p>
 
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-[11px] text-slate-500">
             Understand how channels, campaigns and customer journeys contribute to purchase.
           </p>
 
@@ -447,7 +447,7 @@ export default function AttributionOverview({
 
         <div className="flex items-center gap-2">
 
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600">
             {startDate === endDate
               ? formatDate(
                   startDate
@@ -465,7 +465,7 @@ export default function AttributionOverview({
             onClick={
               load
             }
-            className="rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white transition hover:bg-slate-800"
+            className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white transition hover:bg-slate-800"
           >
             Refresh
           </button>
@@ -479,7 +479,7 @@ export default function AttributionOverview({
           KPI ROW
       ================================================== */}
 
-      <section className="grid grid-cols-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm sm:grid-cols-2 xl:grid-cols-5">
 
         <Metric
           label="Total Orders"
@@ -551,7 +551,7 @@ export default function AttributionOverview({
           JOURNEY + PATHS
       ================================================== */}
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.8fr_1.2fr]">
 
 
         <Card
@@ -607,7 +607,7 @@ export default function AttributionOverview({
           subtitle="Most common routes to conversion"
         >
 
-          <div className="h-[260px]">
+          <div className="h-[190px]">
 
             <ResponsiveContainer
               width="100%"
@@ -699,7 +699,7 @@ export default function AttributionOverview({
           ROLES + CUSTOMER MIX
       ================================================== */}
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[1.35fr_0.65fr]">
 
 
         <Card
@@ -877,7 +877,7 @@ export default function AttributionOverview({
         subtitle="Attributed revenue contribution by channel"
       >
 
-        <div className="h-[300px]">
+        <div className="h-[200px]">
 
           <ResponsiveContainer
             width="100%"
@@ -1042,7 +1042,7 @@ export default function AttributionOverview({
 
                     <Td>
 
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-700">
                         {
                           prettyChannel(
                             row.channel
@@ -1110,7 +1110,7 @@ export default function AttributionOverview({
           DATA QUALITY STRIP
       ================================================== */}
 
-      <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-3 xl:grid-cols-6">
 
         <HealthMetric
           label="Pixel Collector"
@@ -1240,7 +1240,7 @@ function Metric({
 
     <div
       className={
-        `p-5 ${
+        `p-3 ${
           last
             ? ''
             : 'border-b border-slate-200 sm:border-r'
@@ -1252,7 +1252,7 @@ function Metric({
         {label}
       </p>
 
-      <p className="mt-2 text-[24px] font-black tracking-[-0.04em] text-slate-950">
+      <p className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-slate-950">
         {value}
       </p>
 
@@ -1276,11 +1276,11 @@ function MiniMetric({
 
     <div>
 
-      <p className="text-xs font-semibold text-slate-500">
+      <p className="text-[10px] font-semibold text-slate-500">
         {label}
       </p>
 
-      <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
         {value}
       </p>
 
@@ -1300,15 +1300,15 @@ function Card({
 
   return (
 
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
-      <div className="border-b border-slate-100 px-5 py-4">
+      <div className="border-b border-slate-100 px-3 py-2.5">
 
-        <h3 className="text-sm font-black text-slate-950">
+        <h3 className="text-[11px] font-semibold text-slate-950">
           {title}
         </h3>
 
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-[10px] text-slate-400">
           {subtitle}
         </p>
 
@@ -1319,7 +1319,7 @@ function Card({
         className={
           flush
             ? ''
-            : 'p-5'
+            : 'p-3'
         }
       >
         {children}
@@ -1370,7 +1370,7 @@ function HealthMetric({
 
       </div>
 
-      <p className="mt-2 text-lg font-black text-slate-950">
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">
         {value}
       </p>
 
@@ -1402,7 +1402,7 @@ function Th({
 
     <th
       className={
-        `px-5 py-3 text-${align} text-[10px] font-black uppercase tracking-wide text-slate-400`
+        `px-3 py-2 text-${align} text-[10px] font-semibold uppercase tracking-wide text-slate-400`
       }
     >
       {children}
@@ -1422,7 +1422,7 @@ function Td({
 
     <td
       className={
-        `px-5 py-4 text-${align} text-sm text-slate-600`
+        `px-3 py-2.5 text-${align} text-[11px] text-slate-600`
       }
     >
       {children}
@@ -1439,7 +1439,7 @@ function Empty({
 
   return (
 
-    <div className="flex h-full items-center justify-center text-sm text-slate-400">
+    <div className="flex h-full items-center justify-center text-[11px] text-slate-400">
       {children}
     </div>
 

@@ -69,10 +69,10 @@ export default function GoogleSearchTerms({ startDate, endDate, settings }: Prop
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
 
       {/* Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
         <Card title="Total Spend" value={money(data?.summary?.spend)} />
         <Card title="Wasted Spend" value={money(data?.summary?.wasted_spend)} />
         <Card title="Negatives" value={data?.summary?.negative_candidates} />
@@ -110,7 +110,7 @@ export default function GoogleSearchTerms({ startDate, endDate, settings }: Prop
 
       {/* Bulk Bar */}
       {selectedRows.length > 0 && (
-        <div className="rounded-2xl bg-black text-white p-3 flex justify-between">
+        <div className="rounded-lg bg-black text-white p-3 flex justify-between">
           <span>
             {selectedRows.length} selected · Spend {money(
               selectedRows.reduce((s: number, r: any) => s + r.spend, 0)
@@ -126,13 +126,13 @@ export default function GoogleSearchTerms({ startDate, endDate, settings }: Prop
       )}
 
       {/* Table */}
-      <div className="rounded-3xl border bg-white p-4 overflow-auto">
+      <div className="rounded-xl border bg-white p-4 overflow-auto">
         {loading ? (
           <p>Loading...</p>
         ) : (
-          <table className="w-full text-sm min-w-[1200px]">
+          <table className="w-full text-[11px] min-w-[1200px]">
             <thead>
-              <tr className="border-b text-xs uppercase text-slate-500">
+              <tr className="border-b text-[10px] uppercase text-slate-500">
                 <th></th>
                 <th>Search Term</th>
                 <th>Campaign</th>
@@ -184,9 +184,9 @@ export default function GoogleSearchTerms({ startDate, endDate, settings }: Prop
 
 function Card({ title, value }: any) {
   return (
-    <div className="border rounded-2xl p-4 bg-white">
-      <p className="text-xs text-slate-500">{title}</p>
-      <p className="text-xl font-bold">{value}</p>
+    <div className="border rounded-lg p-4 bg-white">
+      <p className="text-[10px] text-slate-500">{title}</p>
+      <p className="text-[15px] font-bold">{value}</p>
     </div>
   );
 }

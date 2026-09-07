@@ -52,7 +52,7 @@ export default function CustomWebSetup({
         className="
           overflow-hidden
 
-          rounded-2xl
+          rounded-lg
 
           border
           border-slate-200
@@ -82,16 +82,16 @@ export default function CustomWebSetup({
 
       <div
         className="
-          mt-6
+          mt-3
 
-          rounded-2xl
+          rounded-lg
 
           border
           border-slate-200
 
           bg-slate-50
 
-          p-5
+          p-3
         "
       >
 
@@ -105,12 +105,12 @@ export default function CustomWebSetup({
 
           <div>
 
-            <div className="text-sm font-black text-slate-950">
+            <div className="text-[11px] font-semibold text-slate-950">
               Tracking installation
             </div>
 
 
-            <p className="mt-2 text-xs leading-5 text-slate-500">
+            <p className="mt-2 text-[10px] leading-5 text-slate-500">
 
               Growth OS will generate a website-specific
               tracking snippet here when the Custom Website
@@ -130,7 +130,7 @@ export default function CustomWebSetup({
         href="/"
 
         className="
-          mt-4
+          mt-2.5
 
           flex
           w-full
@@ -142,11 +142,11 @@ export default function CustomWebSetup({
           border
           border-slate-200
 
-          px-5
-          py-3
+          px-3
+          py-2
 
-          text-sm
-          font-black
+          text-[11px]
+          font-semibold
           text-slate-800
 
           hover:bg-slate-50
@@ -196,8 +196,8 @@ function SetupRow({
         items-center
         gap-3
 
-        px-4
-        py-3
+        px-3
+        py-2
 
         ${
           last
@@ -238,7 +238,7 @@ function SetupRow({
       </div>
 
 
-      <span className="text-xs font-semibold text-slate-700">
+      <span className="text-[10px] font-semibold text-slate-700">
         {label}
       </span>
 

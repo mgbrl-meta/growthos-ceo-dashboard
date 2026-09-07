@@ -44,4 +44,3 @@ export interface OpportunityResult {
 
   status: string;
 }
-

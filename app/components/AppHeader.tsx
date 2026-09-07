@@ -1,3 +1,4 @@
+
 'use client';
 
 import type {
@@ -265,16 +266,16 @@ export default function AppHeader({
       <div
         className="
           flex
-          min-h-[72px]
+          min-h-[60px]
 
           items-center
           justify-between
 
-          gap-6
+          gap-3
 
-          px-6
+          px-3
 
-          xl:px-8
+          xl:px-3
         "
       >
 
@@ -289,7 +290,7 @@ export default function AppHeader({
           <div
             className="
               text-[9px]
-              font-black
+              font-semibold
               uppercase
               tracking-[0.18em]
 
@@ -306,8 +307,8 @@ export default function AppHeader({
 
               truncate
 
-              text-[20px]
-              font-black
+              text-[18px]
+              font-semibold
 
               tracking-[-0.035em]
 

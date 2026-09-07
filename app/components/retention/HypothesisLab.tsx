@@ -75,27 +75,27 @@ export default function HypothesisLab() {
   );
 
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl">
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">
+    <section className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
         Hypothesis Lab
       </p>
 
-      <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-slate-950">
+      <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
         What Should We Test?
       </h2>
 
-      <p className="mt-2 text-sm text-slate-500">
+      <p className="mt-2 text-[11px] text-slate-500">
         Generated hypotheses plus operator-selected controlled tests from Pattern
         Discovery.
       </p>
 
       {loading && (
-        <p className="mt-3 text-xs font-bold text-blue-600">
+        <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading hypotheses...
         </p>
       )}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-5">
+      <div className="mt-3 grid gap-2.5 md:grid-cols-5">
         <Card label="Generated Hypotheses" value={filtered.length.toString()} />
         <Card label="Pattern Test Briefs" value={patternTests.length.toString()} />
         <Card label="Expected Profit" value={money(totalExpectedProfit)} />
@@ -115,18 +115,18 @@ export default function HypothesisLab() {
       </div>
 
       {patternTests.length > 0 && (
-        <div className="mt-6 rounded-3xl border border-blue-200 bg-blue-50/40 p-4">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">
+        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-700">
             Operator-created test briefs
           </p>
 
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-[11px] text-slate-600">
             Tests selected from validated Pattern Discovery evidence.
           </p>
 
-          <div className="mt-4 overflow-x-auto rounded-2xl border border-blue-100 bg-white">
+          <div className="mt-2.5 overflow-x-auto rounded-lg border border-blue-100 bg-white">
             <table className="w-full min-w-[1250px] text-left">
-              <thead className="bg-blue-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <thead className="bg-blue-50 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                 <tr>
                   <th className="p-3">Priority</th>
                   <th className="p-3">Test Brief</th>
@@ -145,39 +145,39 @@ export default function HypothesisLab() {
                     key={test.action_id}
                     className="border-t border-blue-100 align-top"
                   >
-                    <td className="p-3 font-black">
+                    <td className="p-3 font-semibold">
                       {test.priority_band || '—'}
                     </td>
 
                     <td className="p-3">
-                      <p className="max-w-[330px] font-black text-slate-950">
+                      <p className="max-w-[330px] font-semibold text-slate-950">
                         {test.action_title}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-[10px] text-slate-500">
                         {test.pattern_family}
                       </p>
                     </td>
 
-                    <td className="p-3 text-sm">
+                    <td className="p-3 text-[11px]">
                       <p className="font-bold">{test.source_sku || '—'}</p>
                       {test.target_sku && (
                         <p className="mt-1 text-blue-700">→ {test.target_sku}</p>
                       )}
                     </td>
 
-                    <td className="p-3 text-sm">
-                      <p className="font-black">
+                    <td className="p-3 text-[11px]">
+                      <p className="font-semibold">
                         {Number(test.evidence_support || 0).toLocaleString(
                           'en-IN'
                         )}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-[10px] text-slate-500">
                         {Math.round(Number(test.confidence_score || 0) * 100)}%
                         confidence
                       </p>
                     </td>
 
-                    <td className="p-3 text-sm">
+                    <td className="p-3 text-[11px]">
                       <p>
                         Primary:{' '}
                         {test.expected_primary_lift === null
@@ -194,20 +194,20 @@ export default function HypothesisLab() {
                       </p>
                     </td>
 
-                    <td className="p-3 text-sm font-bold">
+                    <td className="p-3 text-[11px] font-bold">
                       {test.recommended_window_start_day !== null &&
                       test.recommended_window_end_day !== null
                         ? `Day ${test.recommended_window_start_day}–${test.recommended_window_end_day}`
                         : '—'}
                     </td>
 
-                    <td className="p-3 text-sm">
+                    <td className="p-3 text-[11px]">
                       {test.requires_holdout
                         ? test.recommended_test_split || 'Required'
                         : 'Not required'}
                     </td>
 
-                    <td className="p-3 text-sm font-black">{test.status}</td>
+                    <td className="p-3 text-[11px] font-semibold">{test.status}</td>
                   </tr>
                 ))}
               </tbody>
@@ -216,18 +216,18 @@ export default function HypothesisLab() {
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search hypotheses..."
-          className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-[11px]"
         />
 
         <select
           value={actionType}
           onChange={(event) => setActionType(event.target.value)}
-          className="rounded-2xl border border-slate-200 px-4 py-2 text-sm"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-[11px]"
         >
           <option>All</option>
           <option>Acquisition Mix</option>
@@ -236,9 +236,9 @@ export default function HypothesisLab() {
         </select>
       </div>
 
-      <div className="mt-5 overflow-x-auto rounded-3xl border border-slate-200">
+      <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full min-w-[1500px] text-left">
-          <thead className="bg-slate-100 text-xs uppercase tracking-widest text-slate-500">
+          <thead className="bg-slate-100 text-[10px] uppercase tracking-widest text-slate-500">
             <tr>
               <th className="p-4">Hypothesis</th>
               <th className="p-4">Pattern</th>
@@ -261,7 +261,7 @@ export default function HypothesisLab() {
                 key={`${row.pattern_type}-${row.sku}-${row.hypothesis}`}
                 className="border-t border-slate-100"
               >
-                <td className="p-4 font-black text-slate-950">
+                <td className="p-4 font-semibold text-slate-950">
                   {row.hypothesis}
                 </td>
                 <td className="p-4 font-bold text-blue-700">
@@ -294,7 +294,7 @@ export default function HypothesisLab() {
               <tr>
                 <td
                   colSpan={12}
-                  className="p-8 text-center text-sm font-bold text-slate-500"
+                  className="p-4 text-center text-[11px] font-bold text-slate-500"
                 >
                   No hypotheses found. Pattern data or mapped product data may
                   still be incomplete.
@@ -310,11 +310,11 @@ export default function HypothesisLab() {
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+      <p className="mt-2 text-[14px] font-semibold text-slate-950">{value}</p>
     </div>
   );
 }

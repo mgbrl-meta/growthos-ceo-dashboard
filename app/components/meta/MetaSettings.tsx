@@ -23,7 +23,7 @@ export default function MetaSettings({ params, setParams }: any) {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
       <SettingCard title="Core Targets">
         <SettingInput
           label="Target ROAS"
@@ -94,13 +94,13 @@ export default function MetaSettings({ params, setParams }: any) {
         />
       </SettingCard>
 
-      <div className="rounded-[2rem] border border-slate-800 bg-gradient-to-br from-slate-950 to-slate-900 p-6 text-white shadow-2xl shadow-slate-900/25">
-        <h3 className="text-lg font-black">How this powers Meta OS</h3>
-        <p className="mt-2 text-sm text-slate-400">
+      <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950 to-slate-900 p-3.5 text-white shadow-sm shadow-slate-900/25">
+        <h3 className="text-[14px] font-semibold">How this powers Meta OS</h3>
+        <p className="mt-2 text-[11px] text-slate-400">
           Every tab uses these rules to classify Scale, Test, Kill and Ignore.
         </p>
 
-        <div className="mt-5 space-y-2 text-sm text-slate-300">
+        <div className="mt-3 space-y-2 text-[11px] text-slate-300">
           <p>
             Scale ROAS: above{' '}
             {(params.targetRoas * (1 + params.scalePct / 100)).toFixed(2)}
@@ -120,9 +120,9 @@ export default function MetaSettings({ params, setParams }: any) {
 
 function SettingCard({ title, children }: any) {
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-lg shadow-slate-200/60">
-      <h3 className="mb-4 font-black">{title}</h3>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 shadow-sm shadow-slate-200/25">
+      <h3 className="mb-2.5 font-semibold">{title}</h3>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {children}
       </div>
     </div>
@@ -132,13 +132,13 @@ function SettingCard({ title, children }: any) {
 function SettingInput({ label, value, onChange }: any) {
   return (
     <label>
-      <span className="mb-1 block text-xs font-bold text-slate-500">
+      <span className="mb-1 block text-[10px] font-bold text-slate-500">
         {label}
       </span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 font-black outline-none focus:border-slate-950"
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold outline-none focus:border-slate-950"
       />
     </label>
   );

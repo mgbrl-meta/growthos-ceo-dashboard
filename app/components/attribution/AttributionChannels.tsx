@@ -142,7 +142,7 @@ export default function AttributionChannels({
 
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
 
       <PageIntro
         eyebrow="Attribution OS"
@@ -173,7 +173,7 @@ export default function AttributionChannels({
       />
 
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
 
         <Card
           title="Attributed Revenue"
@@ -379,13 +379,13 @@ function PageIntro({
 }: any) {
   return (
     <section>
-      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-600">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
         {eyebrow}
       </p>
-      <h2 className="mt-1 text-xl font-black tracking-[-0.035em] text-slate-950">
+      <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em] text-slate-950">
         {title}
       </h2>
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="mt-1 text-[10px] text-slate-400">
         {description}
       </p>
     </section>
@@ -399,7 +399,7 @@ function KpiGrid({
   items: [string, string][];
 }) {
   return (
-    <section className="grid grid-cols-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
+    <section className="grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-4">
       {items.map(
         ([label, value], i) => (
           <div
@@ -413,7 +413,7 @@ function KpiGrid({
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
               {label}
             </p>
-            <p className="mt-2 text-xl font-black text-slate-950">
+            <p className="mt-2 text-[15px] font-semibold text-slate-950">
               {value}
             </p>
           </div>
@@ -430,14 +430,14 @@ function Card({
   children,
 }: any) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-black text-slate-950">
+    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <h3 className="text-[11px] font-semibold text-slate-950">
         {title}
       </h3>
-      <p className="mt-1 text-xs text-slate-400">
+      <p className="mt-1 text-[10px] text-slate-400">
         {subtitle}
       </p>
-      <div className="mt-4">
+      <div className="mt-2.5">
         {children}
       </div>
     </section>
@@ -449,7 +449,7 @@ function TableShell({
   children,
 }: any) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px]">
           {children}
@@ -465,7 +465,7 @@ function Th({
   align = 'left',
 }: any) {
   return (
-    <th className={`border-b border-slate-200 px-4 py-3 text-${align} text-[10px] font-black uppercase tracking-wide text-slate-400`}>
+    <th className={`border-b border-slate-200 px-3 py-2 text-${align} text-[10px] font-semibold uppercase tracking-wide text-slate-400`}>
       {children}
     </th>
   );
@@ -477,7 +477,7 @@ function Td({
   align = 'left',
 }: any) {
   return (
-    <td className={`px-4 py-3 text-${align} text-sm text-slate-600`}>
+    <td className={`px-3 py-2 text-${align} text-[11px] text-slate-600`}>
       {children}
     </td>
   );
@@ -488,7 +488,7 @@ function Loading({
   text,
 }: any) {
   return (
-    <div className="flex min-h-[400px] items-center justify-center text-sm text-slate-400">
+    <div className="flex min-h-[400px] items-center justify-center text-[11px] text-slate-400">
       {text}
     </div>
   );
@@ -500,13 +500,13 @@ function ErrorBox({
   retry,
 }: any) {
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-      <p className="font-black text-red-900">
+    <div className="rounded-lg border border-red-200 bg-red-50 p-3.5">
+      <p className="font-semibold text-red-900">
         {text}
       </p>
       <button
         onClick={retry}
-        className="mt-3 rounded-xl bg-red-900 px-4 py-2 text-xs font-black text-white"
+        className="mt-3 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
       >
         Retry
       </button>

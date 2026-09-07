@@ -47,6 +47,10 @@ import {
   releaseBackfillLoadClaim,
 } from './shopify-backfill-state.js';
 
+import {
+  processShopifyBackfillWindow,
+} from './shopify-backfill-processor.js';
+
 
 // ============================================================
 // APP
@@ -2502,6 +2506,141 @@ app.post(
 
           error:
             'SHOPIFY_BACKFILL_WAREHOUSE_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+// ============================================================
+// Q3E-6C-1
+// PROCESS ONE SHOPIFY BACKFILL WINDOW
+//
+// Caller supplies only Growth OS identity.
+//
+// Worker resolves:
+//
+// connection
+// integration account
+// provider account
+// Bulk Operation
+//
+// from the control plane.
+// ============================================================
+
+app.post(
+  '/internal/shopify/backfill-process',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const result =
+        await processShopifyBackfillWindow(
+          req.body
+          ??
+          {}
+        );
+
+
+      console.log(
+        'SHOPIFY_BACKFILL_PROCESS_RESULT',
+        {
+
+          workspaceId:
+            req.body?.workspaceId
+            ??
+            null,
+
+          brandId:
+            req.body?.brandId
+            ??
+            null,
+
+          backfillRunId:
+            req.body?.backfillRunId
+            ??
+            null,
+
+          backfillWindowId:
+            req.body?.backfillWindowId
+            ??
+            null,
+
+          outcome:
+            result.outcome,
+
+          status:
+            result.status,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          'Shopify backfill processor failed'
+        );
+
+
+      console.error(
+        'SHOPIFY_BACKFILL_PROCESS_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_BACKFILL_PROCESS_FAILED',
 
           message,
 

@@ -60,13 +60,13 @@ export default function SeasonalityEngine({}: Props) {
 
   return (
     <div className="bg-white p-4 rounded-lg border">
-      <h2 className="text-lg font-semibold mb-1">Seasonality Engine</h2>
-      <p className="text-xs text-gray-500 mb-4">
+      <h2 className="text-[14px] font-semibold mb-1">Seasonality Engine</h2>
+      <p className="text-[10px] text-gray-500 mb-2.5">
         Monthly SKU demand index. 1.00 = average month, above 1 = stronger demand.
       </p>
 
       <div className="overflow-x-auto max-h-[650px]">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full text-[11px]">
           <thead className="sticky top-0 bg-white border-b">
             <tr>
               <th className="p-2 text-left">SKU</th>
@@ -117,7 +117,7 @@ export default function SeasonalityEngine({}: Props) {
 
                 <td className="p-2 text-right">
                   <span
-                    className={`px-2 py-1 rounded text-xs ${
+                    className={`px-2 py-1 rounded text-[10px] ${
                       row.confidence === 'High'
                         ? 'bg-green-100 text-green-700'
                         : row.confidence === 'Medium'
