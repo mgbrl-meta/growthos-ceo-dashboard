@@ -9,6 +9,10 @@ import type {
   ShopifyResolvedShop,
 } from '@/lib/auth/shopify';
 
+import {
+  queryEarliestShopifyOrder,
+} from '@/lib/auth/shopify';
+
 import type {
   ShopifyOfflineOAuthCredential,
 } from '@/lib/integrations/providers/shopify-oauth';
@@ -745,5 +749,300 @@ export async function refreshStoredShopifyCredential(
     verified,
 
   };
+
+}
+
+// ============================================================
+// EARLIEST ORDER USING STORED SHOPIFY CREDENTIAL
+//
+// Secret material remains inside this server-only module.
+//
+// Caller receives:
+// - earliest order
+// - safe refresh information
+//
+// Caller never receives:
+// - access_token
+// - refresh_token
+// ============================================================
+
+export async function queryEarliestOrderWithStoredShopifyCredential(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    secretName:
+      string;
+
+    expectedShopId:
+      string;
+
+    expectedShopDomain:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // 1. VERIFY EXISTING STORED IDENTITY
+  // ==========================================================
+
+  const verified =
+    await verifyStoredShopifyCredential({
+
+      secretName:
+        input.secretName,
+
+      expectedShopId:
+        input.expectedShopId,
+
+      expectedShopDomain:
+        input.expectedShopDomain,
+
+    });
+
+
+  // ==========================================================
+  // 2. DETERMINE WHETHER TOKEN SHOULD BE REFRESHED
+  //
+  // Five-minute safety margin.
+  // ==========================================================
+
+  let tokenRefreshed =
+    false;
+
+
+  const expiresAt =
+    verified.accessTokenExpiresAt
+      ?
+        Date.parse(
+          verified.accessTokenExpiresAt
+        )
+      :
+        null;
+
+
+  if (
+    expiresAt !==
+      null
+    &&
+    Number.isFinite(
+      expiresAt
+    )
+    &&
+    expiresAt <=
+      Date.now()
+      +
+      5 * 60 * 1000
+  ) {
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+  }
+
+
+  // ==========================================================
+  // 3. READ CURRENT SECRET VERSION
+  //
+  // This may be the same version or a newly refreshed version.
+  // ==========================================================
+
+  let stored =
+    await readIntegrationSecret<
+      StoredShopifyCredentialV1
+    >(
+      input.secretName
+    );
+
+
+  // ==========================================================
+  // 4. DEFENCE-IN-DEPTH VALIDATION
+  // ==========================================================
+
+  if (
+    stored.schema_version !==
+      1
+    ||
+    stored.credential_type !==
+      'shopify_offline_expiring'
+    ||
+    stored.provider !==
+      'shopify'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_CREDENTIAL_INVALID'
+    );
+
+  }
+
+
+  if (
+    stored.shop_id !==
+      input.expectedShopId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_SHOP_ID_MISMATCH'
+    );
+
+  }
+
+
+  if (
+    stored
+      .shop_domain
+      .toLowerCase()
+    !==
+    input
+      .expectedShopDomain
+      .toLowerCase()
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_SHOP_DOMAIN_MISMATCH'
+    );
+
+  }
+
+
+  if (!stored.access_token) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_ACCESS_TOKEN_MISSING'
+    );
+
+  }
+
+
+  // ==========================================================
+  // 5. QUERY SHOPIFY
+  //
+  // If Shopify unexpectedly rejects the stored token with 401,
+  // refresh once and retry.
+  // ==========================================================
+
+  try {
+
+    const order =
+      await queryEarliestShopifyOrder(
+
+        stored.shop_domain,
+
+        stored.access_token
+
+      );
+
+
+    return {
+
+      order,
+
+      tokenRefreshed,
+
+    };
+
+
+  } catch (
+    error: any
+  ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        ''
+      );
+
+
+    if (
+      message !==
+        'SHOPIFY_EARLIEST_ORDER_HTTP_401'
+    ) {
+
+      throw error;
+
+    }
+
+
+    // ========================================================
+    // FORCED RECOVERY
+    // ========================================================
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+
+    stored =
+      await readIntegrationSecret<
+        StoredShopifyCredentialV1
+      >(
+        input.secretName
+      );
+
+
+    if (
+      !stored.access_token
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_ORDER_REFRESHED_ACCESS_TOKEN_MISSING'
+      );
+
+    }
+
+
+    const order =
+      await queryEarliestShopifyOrder(
+
+        stored.shop_domain,
+
+        stored.access_token
+
+      );
+
+
+    return {
+
+      order,
+
+      tokenRefreshed,
+
+    };
+
+  }
 
 }

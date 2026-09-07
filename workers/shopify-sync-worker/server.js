@@ -6,6 +6,7 @@ import {
 
 import {
   fetchOrdersPage,
+  fetchEarliestShopifyOrder,
 } from './shopify-api.js';
 
 import {
@@ -2754,6 +2755,249 @@ app.post(
 
           error:
             'SHOPIFY_BACKFILL_SUPERVISOR_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+// ============================================================
+// Q3E-6D-2
+// EARLIEST SHOPIFY ORDER PROBE
+//
+// Read-only.
+//
+// Used by onboarding/history bootstrap to determine the actual
+// beginning of Shopify Orders history.
+//
+// No warehouse writes.
+// No Bulk Operation.
+// No backfill state mutation.
+// ============================================================
+
+app.post(
+  '/internal/shopify/earliest-order',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const input =
+        req.body
+        ??
+        {};
+
+
+      const job = {
+
+        workspaceId:
+          requireString(
+            input.workspaceId,
+            'SHOPIFY_JOB_WORKSPACE_MISSING'
+          ),
+
+        brandId:
+          requireString(
+            input.brandId,
+            'SHOPIFY_JOB_BRAND_MISSING'
+          ),
+
+        connectionId:
+          requireString(
+            input.connectionId,
+            'SHOPIFY_JOB_CONNECTION_MISSING'
+          ),
+
+        integrationAccountId:
+          requireString(
+            input.integrationAccountId,
+            'SHOPIFY_JOB_ACCOUNT_MISSING'
+          ),
+
+        providerAccountId:
+          requireString(
+            input.providerAccountId,
+            'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
+          ),
+
+      };
+
+
+      // ======================================================
+      // EXISTING AUTHORITATIVE RUNTIME RESOLUTION
+      // ======================================================
+
+      const runtime =
+        await resolveShopifyRuntimeContext(
+          job
+        );
+
+
+      // ======================================================
+      // SHOPIFY SOURCE PROBE
+      // ======================================================
+
+      const result =
+        await fetchEarliestShopifyOrder(
+          runtime
+        );
+
+
+      const order =
+        result.order;
+
+
+      console.log(
+        'SHOPIFY_EARLIEST_ORDER_RESOLVED',
+        {
+
+          workspaceId:
+            job.workspaceId,
+
+          brandId:
+            job.brandId,
+
+          integrationAccountId:
+            job.integrationAccountId,
+
+          providerAccountId:
+            job.providerAccountId,
+
+          hasOrders:
+            Boolean(
+              order
+            ),
+
+          orderId:
+            order?.id
+            ??
+            null,
+
+          createdAt:
+            order?.createdAt
+            ??
+            null,
+
+          tokenRefreshed:
+            result.tokenRefreshed,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result: {
+
+            hasOrders:
+              Boolean(
+                order
+              ),
+
+            order:
+              order
+                ?
+                  {
+
+                    id:
+                      order.id
+                      ??
+                      null,
+
+                    legacyResourceId:
+                      order.legacyResourceId
+                      ??
+                      null,
+
+                    name:
+                      order.name
+                      ??
+                      null,
+
+                    createdAt:
+                      order.createdAt
+                      ??
+                      null,
+
+                    updatedAt:
+                      order.updatedAt
+                      ??
+                      null,
+
+                  }
+                :
+                  null,
+
+            tokenRefreshed:
+              result.tokenRefreshed,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          },
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          'Shopify earliest order probe failed'
+        );
+
+
+      console.error(
+        'SHOPIFY_EARLIEST_ORDER_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_EARLIEST_ORDER_FAILED',
 
           message,
 

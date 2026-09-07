@@ -1,6 +1,7 @@
 import 'server-only';
 
 import {
+  createHash,
   randomUUID,
 } from 'crypto';
 
@@ -38,10 +39,18 @@ const OPS_LOCATION =
 
 
 // ============================================================
+// STRATEGY
+// ============================================================
+
+const BACKFILL_STRATEGY =
+  'shopify_bulk_quarterly_v1';
+
+
+// ============================================================
 // TYPES
 // ============================================================
 
-type BackfillWindow = {
+export type ShopifyBackfillWindowPlan = {
 
   backfillWindowId:
     string;
@@ -91,13 +100,79 @@ function parseDate(
 
 
 // ============================================================
-// FULL-HISTORY WINDOW
+// REQUIRED STRING
+// ============================================================
+
+function requireValue(
+  value: unknown,
+  errorCode: string
+) {
+
+  const normalized =
+    String(
+      value
+      ??
+      ''
+    ).trim();
+
+
+  if (!normalized) {
+
+    throw new Error(
+      errorCode
+    );
+
+  }
+
+
+  return normalized;
+
+}
+
+
+// ============================================================
+// DETERMINISTIC ID
 //
-// INITIAL BACKFILL STRATEGY:
+// Used when caller supplies an idempotency key.
 //
-// ONE requested historical range
-//        ↓
-// ONE Shopify Bulk window
+// Same logical bootstrap:
+//      ↓
+// same run ID
+// same window IDs
+//
+// This lets setup/bootstrap safely retry without intentionally
+// creating another logical backfill.
+// ============================================================
+
+function deterministicId(
+  prefix: string,
+  value: string
+) {
+
+  const hash =
+    createHash(
+      'sha256'
+    )
+      .update(
+        value,
+        'utf8'
+      )
+      .digest(
+        'hex'
+      )
+      .slice(
+        0,
+        40
+      );
+
+
+  return `${prefix}_${hash}`;
+
+}
+
+
+// ============================================================
+// QUARTER WINDOWS
 //
 // Canonical interval:
 //
@@ -108,43 +183,246 @@ function parseDate(
 //
 // Example:
 //
-// 2021-01-01T00:00:00Z
-//        ↓
-// 2026-09-05T00:00:00Z
+// 2020-11-12 → 2021-01-01
+// 2021-01-01 → 2021-04-01
+// 2021-04-01 → 2021-07-01
 //
-// Growth OS first asks Shopify to process the entire historical
-// range.
+// No overlaps.
+// No gaps.
 //
-// Future Q3E-6:
-//
-// If Shopify cannot process this range or the resulting export
-// becomes operationally unsuitable, the backfill engine will
-// split this window adaptively.
-//
-// The planner itself must NOT pre-split into months/quarters.
+// If idempotencyKey is present, window IDs are deterministic.
+// Otherwise random IDs preserve manual/test behavior.
 // ============================================================
 
-function createFullHistoryWindow(
+function createQuarterWindows(
   from: Date,
-  to: Date
+  to: Date,
+  idempotencyKey?:
+    string | null
 ):
+  ShopifyBackfillWindowPlan[] {
 
-  BackfillWindow[] {
+  const windows:
+    ShopifyBackfillWindowPlan[] =
+      [];
 
-  return [
-    {
 
-      backfillWindowId:
-        `bfw_${randomUUID()}`,
+  let cursor =
+    new Date(
+      from.getTime()
+    );
+
+
+  while (
+    cursor <
+      to
+  ) {
+
+    const year =
+      cursor
+        .getUTCFullYear();
+
+
+    const month =
+      cursor
+        .getUTCMonth();
+
+
+    // ========================================================
+    // NEXT QUARTER BOUNDARY
+    //
+    // Jan-Mar  → Apr 1
+    // Apr-Jun  → Jul 1
+    // Jul-Sep  → Oct 1
+    // Oct-Dec  → Jan 1 next year
+    //
+    // Date.UTC automatically handles month 12 rollover.
+    // ========================================================
+
+    const nextQuarterMonth =
+      Math.floor(
+        month / 3
+      )
+      * 3
+      +
+      3;
+
+
+    const quarterBoundary =
+      new Date(
+        Date.UTC(
+          year,
+          nextQuarterMonth,
+          1,
+          0,
+          0,
+          0,
+          0
+        )
+      );
+
+
+    const windowEnd =
+      quarterBoundary <
+        to
+        ?
+          quarterBoundary
+        :
+          to;
+
+
+    if (
+      windowEnd <=
+        cursor
+    ) {
+
+      throw new Error(
+        'SHOPIFY_BACKFILL_WINDOW_BOUNDARY_INVALID'
+      );
+
+    }
+
+
+    const fromIso =
+      cursor
+        .toISOString();
+
+
+    const toIso =
+      windowEnd
+        .toISOString();
+
+
+    const backfillWindowId =
+      idempotencyKey
+        ?
+          deterministicId(
+            'bfw',
+            [
+              idempotencyKey,
+              fromIso,
+              toIso,
+            ].join(
+              ':'
+            )
+          )
+        :
+          `bfw_${randomUUID()}`;
+
+
+    windows.push({
+
+      backfillWindowId,
 
       from:
-        from.toISOString(),
+        fromIso,
 
       to:
-        to.toISOString(),
+        toIso,
 
-    },
-  ];
+    });
+
+
+    cursor =
+      new Date(
+        windowEnd
+          .getTime()
+      );
+
+  }
+
+
+  return windows;
+
+}
+
+
+// ============================================================
+// READ-ONLY WINDOW PREVIEW
+//
+// No BigQuery writes.
+// No Pub/Sub.
+// No orchestration.
+//
+// Preview IDs may be random because they are diagnostic only.
+// Actual bootstrap creation gets deterministic IDs through the
+// idempotency key.
+// ============================================================
+
+export function planShopifyOrdersBackfillWindows(
+  input: {
+
+    from:
+      string;
+
+    to:
+      string;
+
+  }
+) {
+
+  const from =
+    parseDate(
+      input.from,
+      'SHOPIFY_BACKFILL_FROM_INVALID'
+    );
+
+
+  const to =
+    parseDate(
+      input.to,
+      'SHOPIFY_BACKFILL_TO_INVALID'
+    );
+
+
+  if (
+    from >=
+      to
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_RANGE_INVALID'
+    );
+
+  }
+
+
+  const windows =
+    createQuarterWindows(
+      from,
+      to
+    );
+
+
+  if (
+    windows.length ===
+      0
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_WINDOWS_EMPTY'
+    );
+
+  }
+
+
+  return {
+
+    strategy:
+      BACKFILL_STRATEGY,
+
+    requestedFrom:
+      from.toISOString(),
+
+    requestedTo:
+      to.toISOString(),
+
+    totalWindows:
+      windows.length,
+
+    windows,
+
+  };
 
 }
 
@@ -152,27 +430,45 @@ function createFullHistoryWindow(
 // ============================================================
 // CREATE SHOPIFY ORDERS BACKFILL
 //
-// PLANNER RESPONSIBILITY ONLY:
+// RESPONSIBILITY:
 //
-// validate request
+// validate identity
 //      ↓
-// create backfill run
+// validate requested range
 //      ↓
-// create ONE full-history window
+// split range into quarterly windows
 //      ↓
-// return plan
+// create/ensure ONE parent run
+//      ↓
+// create/ensure MANY queued windows
 //
 // IMPORTANT:
 //
-// This module does NOT:
+// THIS FUNCTION DOES NOT DISPATCH.
 //
-// - publish Pub/Sub
-// - call Shopify
-// - start Bulk Operations
-// - load JSONL
-// - orchestrate execution
+// Cloud Scheduler
+//      ↓
+// Supervisor
+//      ↓
+// Orchestrator
 //
-// Cloud Run backfill engine owns execution.
+// remains the only execution authority.
+//
+// IDEMPOTENCY:
+//
+// When idempotencyKey is supplied:
+//
+// same logical request
+//      ↓
+// same deterministic run ID
+//      ↓
+// same deterministic window IDs
+//      ↓
+// BigQuery MERGE
+//
+// When idempotencyKey is absent:
+//
+// random run/window IDs preserve manual/test semantics.
 // ============================================================
 
 export async function createShopifyOrdersBackfill(
@@ -202,100 +498,61 @@ export async function createShopifyOrdersBackfill(
     requestedBy?:
       string | null;
 
+    idempotencyKey?:
+      string | null;
+
   }
 ) {
 
   // ==========================================================
-  // VALIDATE IDENTIFIERS
+  // IDENTIFIERS
   // ==========================================================
 
   const workspaceId =
-    String(
-      input.workspaceId
-      ||
-      ''
-    ).trim();
-
-
-  const brandId =
-    String(
-      input.brandId
-      ||
-      ''
-    ).trim();
-
-
-  const connectionId =
-    String(
-      input.connectionId
-      ||
-      ''
-    ).trim();
-
-
-  const integrationAccountId =
-    String(
-      input.integrationAccountId
-      ||
-      ''
-    ).trim();
-
-
-  const providerAccountId =
-    String(
-      input.providerAccountId
-      ||
-      ''
-    ).trim();
-
-
-  if (!workspaceId) {
-
-    throw new Error(
+    requireValue(
+      input.workspaceId,
       'SHOPIFY_BACKFILL_WORKSPACE_MISSING'
     );
 
-  }
 
-
-  if (!brandId) {
-
-    throw new Error(
+  const brandId =
+    requireValue(
+      input.brandId,
       'SHOPIFY_BACKFILL_BRAND_MISSING'
     );
 
-  }
 
-
-  if (!connectionId) {
-
-    throw new Error(
+  const connectionId =
+    requireValue(
+      input.connectionId,
       'SHOPIFY_BACKFILL_CONNECTION_MISSING'
     );
 
-  }
 
-
-  if (!integrationAccountId) {
-
-    throw new Error(
+  const integrationAccountId =
+    requireValue(
+      input.integrationAccountId,
       'SHOPIFY_BACKFILL_INTEGRATION_ACCOUNT_MISSING'
     );
 
-  }
 
-
-  if (!providerAccountId) {
-
-    throw new Error(
+  const providerAccountId =
+    requireValue(
+      input.providerAccountId,
       'SHOPIFY_BACKFILL_PROVIDER_ACCOUNT_MISSING'
     );
 
-  }
+
+  const idempotencyKey =
+    String(
+      input.idempotencyKey
+      ??
+      ''
+    ).trim();
 
 
   // ==========================================================
-  // VALIDATE RANGE
+  // RANGE
   // ==========================================================
 
   const from =
@@ -313,7 +570,8 @@ export async function createShopifyOrdersBackfill(
 
 
   if (
-    from >= to
+    from >=
+      to
   ) {
 
     throw new Error(
@@ -324,22 +582,38 @@ export async function createShopifyOrdersBackfill(
 
 
   // ==========================================================
-  // CREATE ONE FULL-HISTORY WINDOW
+  // PLAN QUARTERLY WINDOWS
+  //
+  // Bootstrap:
+  // deterministic IDs.
+  //
+  // Manual/test:
+  // random IDs.
   // ==========================================================
 
   const windows =
-    createFullHistoryWindow(
+    createQuarterWindows(
+
       from,
-      to
+
+      to,
+
+      idempotencyKey
+        ?
+          idempotencyKey
+        :
+          null
+
     );
 
 
   if (
-    windows.length !== 1
+    windows.length ===
+      0
   ) {
 
     throw new Error(
-      'SHOPIFY_BACKFILL_FULL_HISTORY_WINDOW_INVALID'
+      'SHOPIFY_BACKFILL_WINDOWS_EMPTY'
     );
 
   }
@@ -349,10 +623,20 @@ export async function createShopifyOrdersBackfill(
     windows[0];
 
 
-  if (!firstWindow) {
+  const lastWindow =
+    windows[
+      windows.length - 1
+    ];
+
+
+  if (
+    !firstWindow
+    ||
+    !lastWindow
+  ) {
 
     throw new Error(
-      'SHOPIFY_BACKFILL_FIRST_WINDOW_MISSING'
+      'SHOPIFY_BACKFILL_WINDOW_PLAN_INVALID'
     );
 
   }
@@ -363,7 +647,14 @@ export async function createShopifyOrdersBackfill(
   // ==========================================================
 
   const backfillRunId =
-    `bfr_${randomUUID()}`;
+    idempotencyKey
+      ?
+        deterministicId(
+          'bfr',
+          idempotencyKey
+        )
+      :
+        `bfr_${randomUUID()}`;
 
 
   const now =
@@ -372,112 +663,133 @@ export async function createShopifyOrdersBackfill(
 
 
   // ==========================================================
-  // INSERT BACKFILL RUN
+  // ENSURE PARENT RUN
   //
-  // IMPORTANT:
+  // MERGE instead of INSERT.
   //
-  // Use BigQuery DML.
+  // Existing run is NEVER reset to queued and its counters are
+  // NEVER overwritten.
   //
-  // Do NOT use streaming table.insert() here because immediate
-  // UPDATE/MERGE state transitions may otherwise encounter
-  // BigQuery streaming-buffer limitations.
+  // This is critical because a retry may arrive while the run
+  // is already running or completed.
   // ==========================================================
 
   await bigquery.query({
 
     query: `
 
-      INSERT INTO
+      MERGE
         \`${PROJECT_ID}.${OPS_DATASET}.shopify_backfill_runs\`
+          AS target
+
+      USING
       (
-        backfill_run_id,
+        SELECT
 
-        workspace_id,
-        brand_id,
+          @backfill_run_id
+            AS backfill_run_id
 
-        connection_id,
-        integration_account_id,
-        provider_account_id,
-
-        provider,
-        entity,
-        strategy,
-        status,
-
-        requested_from,
-        requested_to,
-
-        requested_by,
-        requested_at,
-
-        total_windows,
-        queued_windows,
-        running_windows,
-        completed_windows,
-        failed_windows,
-
-        records_loaded,
-
-        started_at,
-        completed_at,
-
-        error,
-
-        created_at,
-        updated_at
       )
+        AS source
 
-      VALUES
-      (
-        @backfill_run_id,
+      ON
 
-        @workspace_id,
-        @brand_id,
+        target.backfill_run_id =
+          source.backfill_run_id
 
-        @connection_id,
-        @integration_account_id,
-        @provider_account_id,
 
-        'shopify',
-        'orders',
-        'shopify_bulk_full_history_v1',
-        'queued',
+      WHEN NOT MATCHED THEN
 
-        TIMESTAMP(
-          @requested_from
-        ),
+        INSERT
+        (
+          backfill_run_id,
 
-        TIMESTAMP(
-          @requested_to
-        ),
+          workspace_id,
+          brand_id,
 
-        @requested_by,
+          connection_id,
+          integration_account_id,
+          provider_account_id,
 
-        TIMESTAMP(
-          @requested_at
-        ),
+          provider,
+          entity,
+          strategy,
+          status,
 
-        1,
-        1,
-        0,
-        0,
-        0,
+          requested_from,
+          requested_to,
 
-        0,
+          requested_by,
+          requested_at,
 
-        NULL,
-        NULL,
+          total_windows,
+          queued_windows,
+          running_windows,
+          completed_windows,
+          failed_windows,
 
-        NULL,
+          records_loaded,
 
-        TIMESTAMP(
-          @created_at
-        ),
+          started_at,
+          completed_at,
 
-        TIMESTAMP(
-          @updated_at
+          error,
+
+          created_at,
+          updated_at
         )
-      )
+
+        VALUES
+        (
+          @backfill_run_id,
+
+          @workspace_id,
+          @brand_id,
+
+          @connection_id,
+          @integration_account_id,
+          @provider_account_id,
+
+          'shopify',
+          'orders',
+          @strategy,
+          'queued',
+
+          TIMESTAMP(
+            @requested_from
+          ),
+
+          TIMESTAMP(
+            @requested_to
+          ),
+
+          @requested_by,
+
+          TIMESTAMP(
+            @requested_at
+          ),
+
+          @total_windows,
+          @total_windows,
+          0,
+          0,
+          0,
+
+          0,
+
+          NULL,
+          NULL,
+
+          NULL,
+
+          TIMESTAMP(
+            @created_at
+          ),
+
+          TIMESTAMP(
+            @updated_at
+          )
+        )
 
     `,
 
@@ -504,6 +816,9 @@ export async function createShopifyOrdersBackfill(
       provider_account_id:
         providerAccountId,
 
+      strategy:
+        BACKFILL_STRATEGY,
+
       requested_from:
         from.toISOString(),
 
@@ -517,6 +832,9 @@ export async function createShopifyOrdersBackfill(
 
       requested_at:
         now,
+
+      total_windows:
+        windows.length,
 
       created_at:
         now,
@@ -537,111 +855,192 @@ export async function createShopifyOrdersBackfill(
 
 
   // ==========================================================
-  // INSERT ONE FULL-HISTORY WINDOW
+  // SERIALIZE WINDOW PLAN
+  // ==========================================================
+
+  const windowsJson =
+    JSON.stringify(
+
+      windows.map(
+        window => ({
+
+          backfill_window_id:
+            window.backfillWindowId,
+
+          window_start:
+            window.from,
+
+          window_end:
+            window.to,
+
+        })
+      )
+
+    );
+
+
+  // ==========================================================
+  // ENSURE ALL WINDOWS
+  //
+  // MERGE instead of INSERT.
+  //
+  // Existing windows remain untouched:
+  //
+  // completed remains completed
+  // running remains running
+  // failed remains failed
+  //
+  // Missing windows are inserted queued.
   // ==========================================================
 
   await bigquery.query({
 
     query: `
 
-      INSERT INTO
+      MERGE
         \`${PROJECT_ID}.${OPS_DATASET}.shopify_backfill_windows\`
+          AS target
+
+      USING
       (
-        backfill_window_id,
-        backfill_run_id,
 
-        workspace_id,
-        brand_id,
+        SELECT
 
-        connection_id,
-        integration_account_id,
-        provider_account_id,
+          JSON_VALUE(
+            item,
+            '$.backfill_window_id'
+          )
+            AS backfill_window_id,
 
-        entity,
+          TIMESTAMP(
+            JSON_VALUE(
+              item,
+              '$.window_start'
+            )
+          )
+            AS window_start,
 
-        window_start,
-        window_end,
+          TIMESTAMP(
+            JSON_VALUE(
+              item,
+              '$.window_end'
+            )
+          )
+            AS window_end
 
-        status,
+        FROM
 
-        bulk_operation_id,
-        bulk_operation_status,
+          UNNEST(
 
-        bulk_object_count,
-        bulk_file_size_bytes,
+            JSON_QUERY_ARRAY(
 
-        records_received,
-        records_loaded,
-        records_skipped,
+              PARSE_JSON(
+                @windows_json
+              )
 
-        attempt_count,
+            )
 
-        next_retry_at,
+          )
+            AS item
 
-        started_at,
-        result_ready_at,
-        loading_started_at,
-        completed_at,
-
-        error,
-
-        created_at,
-        updated_at
       )
+        AS source
 
-      VALUES
-      (
-        @backfill_window_id,
-        @backfill_run_id,
+      ON
 
-        @workspace_id,
-        @brand_id,
+        target.backfill_window_id =
+          source.backfill_window_id
 
-        @connection_id,
-        @integration_account_id,
-        @provider_account_id,
 
-        'orders',
+      WHEN NOT MATCHED THEN
 
-        TIMESTAMP(
-          @window_start
-        ),
+        INSERT
+        (
+          backfill_window_id,
+          backfill_run_id,
 
-        TIMESTAMP(
-          @window_end
-        ),
+          workspace_id,
+          brand_id,
 
-        'queued',
+          connection_id,
+          integration_account_id,
+          provider_account_id,
 
-        NULL,
-        NULL,
+          entity,
 
-        NULL,
-        NULL,
+          window_start,
+          window_end,
 
-        0,
-        0,
-        0,
+          status,
 
-        0,
+          bulk_operation_id,
+          bulk_operation_status,
 
-        NULL,
+          bulk_object_count,
+          bulk_file_size_bytes,
 
-        NULL,
-        NULL,
-        NULL,
-        NULL,
+          records_received,
+          records_loaded,
+          records_skipped,
 
-        NULL,
+          attempt_count,
 
-        TIMESTAMP(
-          @created_at
-        ),
+          next_retry_at,
 
-        TIMESTAMP(
-          @updated_at
+          started_at,
+          result_ready_at,
+          loading_started_at,
+          completed_at,
+
+          error,
+
+          created_at,
+          updated_at
         )
-      )
+
+        VALUES
+        (
+          source.backfill_window_id,
+          @backfill_run_id,
+
+          @workspace_id,
+          @brand_id,
+
+          @connection_id,
+          @integration_account_id,
+          @provider_account_id,
+
+          'orders',
+
+          source.window_start,
+          source.window_end,
+
+          'queued',
+
+          NULL,
+          NULL,
+
+          NULL,
+          NULL,
+
+          0,
+          0,
+          0,
+
+          0,
+
+          NULL,
+
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+
+          NULL,
+
+          CURRENT_TIMESTAMP(),
+          CURRENT_TIMESTAMP()
+        )
 
     `,
 
@@ -650,8 +1049,8 @@ export async function createShopifyOrdersBackfill(
 
     params: {
 
-      backfill_window_id:
-        firstWindow.backfillWindowId,
+      windows_json:
+        windowsJson,
 
       backfill_run_id:
         backfillRunId,
@@ -671,18 +1070,6 @@ export async function createShopifyOrdersBackfill(
       provider_account_id:
         providerAccountId,
 
-      window_start:
-        firstWindow.from,
-
-      window_end:
-        firstWindow.to,
-
-      created_at:
-        now,
-
-      updated_at:
-        now,
-
     },
 
   });
@@ -691,12 +1078,9 @@ export async function createShopifyOrdersBackfill(
   // ==========================================================
   // RESULT
   //
-  // IMPORTANT:
-  //
   // No dispatch occurs here.
   //
-  // Cloud Run will later observe this queued run/window and
-  // control execution.
+  // Scheduler/Supervisor discovers queued work.
   // ==========================================================
 
   return {
@@ -704,7 +1088,7 @@ export async function createShopifyOrdersBackfill(
     backfillRunId,
 
     strategy:
-      'shopify_bulk_full_history_v1',
+      BACKFILL_STRATEGY,
 
     requestedFrom:
       from.toISOString(),
@@ -713,7 +1097,12 @@ export async function createShopifyOrdersBackfill(
       to.toISOString(),
 
     totalWindows:
-      1,
+      windows.length,
+
+    idempotent:
+      Boolean(
+        idempotencyKey
+      ),
 
     firstWindow: {
 
@@ -726,7 +1115,23 @@ export async function createShopifyOrdersBackfill(
       to:
         firstWindow.to,
 
-      status:
+      initialStatus:
+        'queued',
+
+    },
+
+    lastWindow: {
+
+      backfillWindowId:
+        lastWindow.backfillWindowId,
+
+      from:
+        lastWindow.from,
+
+      to:
+        lastWindow.to,
+
+      initialStatus:
         'queued',
 
     },
@@ -755,6 +1160,6 @@ export const SHOPIFY_BACKFILL_OPS = {
     OPS_LOCATION,
 
   strategy:
-    'shopify_bulk_full_history_v1',
+    BACKFILL_STRATEGY,
 
 };

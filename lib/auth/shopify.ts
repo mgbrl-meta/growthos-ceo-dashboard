@@ -1077,6 +1077,294 @@ export async function queryCurrentShop(
 
 }
 
+// ============================================================
+// QUERY EARLIEST SHOPIFY ORDER
+//
+// Read-only source-coverage probe.
+//
+// Used by Growth OS during connector bootstrap to determine the
+// actual beginning of accessible Shopify Orders history.
+//
+// No warehouse writes.
+// No Bulk Operation.
+// ============================================================
+
+export type ShopifyEarliestOrder = {
+
+  id:
+    string;
+
+  legacyResourceId:
+    string | null;
+
+  name:
+    string | null;
+
+  createdAt:
+    string;
+
+  updatedAt:
+    string | null;
+
+};
+
+
+export async function queryEarliestShopifyOrder(
+  shopDomain: string,
+  accessToken: string
+):
+  Promise<
+    ShopifyEarliestOrder | null
+  > {
+
+  const normalizedShopDomain =
+    normalizeShopDomain(
+      shopDomain
+    );
+
+
+  if (
+    !normalizedShopDomain
+    ||
+    !normalizedShopDomain.endsWith(
+      '.myshopify.com'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_SHOP_DOMAIN_INVALID'
+    );
+
+  }
+
+
+  if (!accessToken) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_ACCESS_TOKEN_MISSING'
+    );
+
+  }
+
+
+  const apiVersion =
+    getShopifyApiVersion();
+
+
+  const response =
+    await fetch(
+
+      `https://${normalizedShopDomain}/admin/api/${apiVersion}/graphql.json`,
+
+      {
+
+        method:
+          'POST',
+
+        headers: {
+
+          'Content-Type':
+            'application/json',
+
+          'Accept':
+            'application/json',
+
+          'X-Shopify-Access-Token':
+            accessToken,
+
+        },
+
+        body:
+          JSON.stringify({
+
+            query:
+              `
+                query GrowthOsEarliestOrder {
+
+                  orders(
+                    first: 1
+                    sortKey: CREATED_AT
+                    reverse: false
+                  ) {
+
+                    nodes {
+
+                      id
+                      legacyResourceId
+                      name
+                      createdAt
+                      updatedAt
+
+                    }
+
+                  }
+
+                }
+              `,
+
+          }),
+
+        cache:
+          'no-store',
+
+      }
+
+    );
+
+
+  const raw =
+    await response.text();
+
+
+  let json:
+    any;
+
+
+  try {
+
+    json =
+      JSON.parse(
+        raw
+      );
+
+  } catch {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_RESPONSE_INVALID'
+    );
+
+  }
+
+
+  if (!response.ok) {
+
+    console.error(
+      'SHOPIFY_EARLIEST_ORDER_HTTP_FAILED',
+      {
+        status:
+          response.status,
+      }
+    );
+
+
+    throw new Error(
+      `SHOPIFY_EARLIEST_ORDER_HTTP_${response.status}`
+    );
+
+  }
+
+
+  if (
+    Array.isArray(
+      json?.errors
+    )
+    &&
+    json.errors.length > 0
+  ) {
+
+    console.error(
+      'SHOPIFY_EARLIEST_ORDER_GRAPHQL_FAILED',
+      json.errors
+    );
+
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_GRAPHQL_FAILED'
+    );
+
+  }
+
+
+  const nodes =
+    Array.isArray(
+      json?.data?.orders?.nodes
+    )
+      ?
+        json.data.orders.nodes
+      :
+        [];
+
+
+  const order =
+    nodes[0]
+    ??
+    null;
+
+
+  // Empty Shopify store is valid.
+  if (!order) {
+
+    return null;
+
+  }
+
+
+  const id =
+    String(
+      order?.id
+      ||
+      ''
+    ).trim();
+
+
+  const createdAt =
+    String(
+      order?.createdAt
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !id
+    ||
+    !createdAt
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_ORDER_INCOMPLETE'
+    );
+
+  }
+
+
+  return {
+
+    id,
+
+    legacyResourceId:
+      order?.legacyResourceId
+        ?
+          String(
+            order.legacyResourceId
+          )
+        :
+          null,
+
+    name:
+      order?.name
+        ?
+          String(
+            order.name
+          )
+        :
+          null,
+
+    createdAt,
+
+    updatedAt:
+      order?.updatedAt
+        ?
+          String(
+            order.updatedAt
+          )
+        :
+          null,
+
+  };
+
+}
+
 
 // ============================================================
 // RESOLVE CANONICAL SHOP ID
