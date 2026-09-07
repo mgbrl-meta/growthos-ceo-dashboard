@@ -1282,12 +1282,21 @@ export default function AppSidebar({
     // ========================================================
 
     <div
-      className="
+      className={`
         relative
         h-screen
-        w-[64px]
         shrink-0
-      "
+
+        transition-[width]
+        duration-200
+        ease-out
+
+        ${
+          sidebarOpen
+          ? 'w-[220px]'
+          : 'w-[64px]'
+        }
+      `}
     >
 
       <aside
