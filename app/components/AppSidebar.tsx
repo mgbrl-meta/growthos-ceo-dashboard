@@ -2,7 +2,6 @@
 
 import {
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -14,7 +13,6 @@ import {
   Database,
   GitBranch,
   History,
-  Lock,
   Megaphone,
   PackageSearch,
   Plug,
@@ -41,108 +39,34 @@ type Props = {
 
   setActiveTab:
     (
-      tab: string
+      tab:
+        string
     ) => void;
 
   setActiveSubTab:
     (
-      module: string,
-      subTab: string
+      module:
+        string,
+      subTab:
+        string
     ) => void;
 
-  // TRUE  = fixed / always expanded
-  // FALSE = cursor / hover expansion
+  // ----------------------------------------------------------
+  // TRUE  = fixed sidebar
+  // FALSE = cursor / hover sidebar
+  // ----------------------------------------------------------
 
   sidebarOpen:
     boolean;
 
   setSidebarOpen:
     (
-      open: boolean
+      open:
+        boolean
     ) => void;
 
 };
 
-
-type Plan =
-  | 'starter'
-  | 'pro'
-  | 'advanced'
-  | 'enterprise';
-
-
-type ToolSetting = {
-
-  id:
-    string;
-
-  name:
-    string;
-
-  enabled:
-    boolean;
-
-  requiredPlan:
-    Plan;
-
-};
-
-
-type PlatformSettings = {
-
-  tools?:
-    ToolSetting[];
-
-  plan?: {
-
-    currentPlan?:
-      Plan;
-
-  };
-
-};
-
-
-// ============================================================
-// STORAGE
-// ============================================================
-
-const STORAGE_KEY =
-  'growth_os_global_settings_v1';
-
-
-const SIDEBAR_MODE_KEY =
-  'growth_os_sidebar_mode_v1';
-
-
-// ============================================================
-// PLAN HIERARCHY
-// ============================================================
-
-const PLAN_ORDER:
-  Record<
-    Plan,
-    number
-  > = {
-
-    starter:
-      1,
-
-    pro:
-      2,
-
-    advanced:
-      3,
-
-    enterprise:
-      4,
-
-  };
-
-
-// ============================================================
-// NAVIGATION TYPES
-// ============================================================
 
 type NavigationItem = {
 
@@ -155,8 +79,19 @@ type NavigationItem = {
   icon:
     typeof CircleGauge;
 
-  toolId:
-    string | null;
+  // ----------------------------------------------------------
+  // Static module identity only.
+  //
+  // IMPORTANT:
+  // AppSidebar does NOT calculate entitlement.
+  //
+  // This ID will later be matched against the access response
+  // coming from the server/control plane.
+  // ----------------------------------------------------------
+
+  moduleId:
+    string |
+    null;
 
   children:
     string[];
@@ -176,11 +111,20 @@ type NavigationGroup = {
 
 
 // ============================================================
-// NAVIGATION CONFIGURATION
+// PERSONAL SIDEBAR PREFERENCE
+// ============================================================
+
+const SIDEBAR_MODE_KEY =
+  'growth_os_sidebar_mode_v1';
+
+
+// ============================================================
+// NAVIGATION
 // ============================================================
 
 const groups:
   NavigationGroup[] = [
+
 
   // ==========================================================
   // WORKSPACE
@@ -204,8 +148,8 @@ const groups:
         icon:
           CircleGauge,
 
-        toolId:
-          null,
+        moduleId:
+          'command-center',
 
         children:
           [],
@@ -239,7 +183,7 @@ const groups:
         icon:
           Megaphone,
 
-        toolId:
+        moduleId:
           'meta',
 
         children: [
@@ -268,7 +212,7 @@ const groups:
         icon:
           Search,
 
-        toolId:
+        moduleId:
           'google',
 
         children: [
@@ -299,7 +243,7 @@ const groups:
         icon:
           GitBranch,
 
-        toolId:
+        moduleId:
           'attribution',
 
         children: [
@@ -344,7 +288,7 @@ const groups:
         icon:
           Repeat2,
 
-        toolId:
+        moduleId:
           'retention',
 
         children: [
@@ -390,7 +334,7 @@ const groups:
         icon:
           PackageSearch,
 
-        toolId:
+        moduleId:
           'product',
 
         children: [
@@ -415,6 +359,11 @@ const groups:
 
   // ==========================================================
   // DATA SOURCES
+  //
+  // These are workspace/platform operational pages.
+  //
+  // Access rules will later come from server-side permission
+  // data instead of being decided inside this component.
   // ==========================================================
 
   {
@@ -435,7 +384,7 @@ const groups:
         icon:
           Plug,
 
-        toolId:
+        moduleId:
           null,
 
         children:
@@ -455,7 +404,7 @@ const groups:
         icon:
           Activity,
 
-        toolId:
+        moduleId:
           null,
 
         children:
@@ -475,7 +424,7 @@ const groups:
         icon:
           History,
 
-        toolId:
+        moduleId:
           null,
 
         children:
@@ -510,7 +459,7 @@ const groups:
         icon:
           Database,
 
-        toolId:
+        moduleId:
           null,
 
         children:
@@ -526,7 +475,7 @@ const groups:
 
 
 // ============================================================
-// MAIN COMPONENT
+// MAIN
 // ============================================================
 
 export default function AppSidebar({
@@ -547,7 +496,7 @@ export default function AppSidebar({
 
 
   // ==========================================================
-  // HOVER EXPANSION
+  // HOVER STATE
   // ==========================================================
 
   const [
@@ -584,19 +533,70 @@ export default function AppSidebar({
 
 
   // ----------------------------------------------------------
-  // Expanded when:
+  // Fixed mode:
   //
-  // sidebarOpen = fixed mode
-  // hovered     = cursor mode temporary expansion
+  // sidebarOpen = true
+  //
+  // Hover mode:
+  //
+  // sidebarOpen = false
+  // hovered     = true temporarily
   // ----------------------------------------------------------
 
   const expanded =
-    sidebarOpen ||
+    sidebarOpen
+    ||
     hovered;
 
 
   // ==========================================================
-  // RESTORE SAVED SIDEBAR MODE
+  // APPLY SIDEBAR MODE
+  // ==========================================================
+
+  function applySidebarMode(
+    mode:
+      string |
+      null
+  ) {
+
+    if (
+      mode ===
+      'fixed'
+    ) {
+
+      setSidebarOpen(
+        true
+      );
+
+
+      setHovered(
+        false
+      );
+
+
+      return;
+
+    }
+
+
+    if (
+      mode ===
+      'cursor'
+    ) {
+
+      setSidebarOpen(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // LOAD PERSONAL SIDEBAR PREFERENCE
+  //
+  // This is the ONLY local configuration this component reads.
   // ==========================================================
 
   useEffect(
@@ -604,34 +604,13 @@ export default function AppSidebar({
 
       try {
 
-        const savedMode =
+        applySidebarMode(
+
           window.localStorage.getItem(
             SIDEBAR_MODE_KEY
-          );
+          )
 
-
-        if (
-          savedMode ===
-          'fixed'
-        ) {
-
-          setSidebarOpen(
-            true
-          );
-
-        }
-
-
-        if (
-          savedMode ===
-          'cursor'
-        ) {
-
-          setSidebarOpen(
-            false
-          );
-
-        }
+        );
 
       } catch (
         error
@@ -644,6 +623,86 @@ export default function AppSidebar({
 
       }
 
+
+      // ------------------------------------------------------
+      // SAME TAB
+      //
+      // GrowthSettings dispatches this after a user changes
+      // their personal sidebar preference.
+      // ------------------------------------------------------
+
+      function handleSidebarModeUpdate(
+        event:
+          Event
+      ) {
+
+        const customEvent =
+          event as
+            CustomEvent<
+              string
+            >;
+
+
+        applySidebarMode(
+          customEvent.detail
+        );
+
+      }
+
+
+      // ------------------------------------------------------
+      // OTHER TAB / WINDOW
+      // ------------------------------------------------------
+
+      function handleStorage(
+        event:
+          StorageEvent
+      ) {
+
+        if (
+          event.key !==
+          SIDEBAR_MODE_KEY
+        ) {
+
+          return;
+
+        }
+
+
+        applySidebarMode(
+          event.newValue
+        );
+
+      }
+
+
+      window.addEventListener(
+        'growth-os-sidebar-mode-updated',
+        handleSidebarModeUpdate
+      );
+
+
+      window.addEventListener(
+        'storage',
+        handleStorage
+      );
+
+
+      return () => {
+
+        window.removeEventListener(
+          'growth-os-sidebar-mode-updated',
+          handleSidebarModeUpdate
+        );
+
+
+        window.removeEventListener(
+          'storage',
+          handleStorage
+        );
+
+      };
+
     },
     [
       setSidebarOpen,
@@ -652,7 +711,7 @@ export default function AppSidebar({
 
 
   // ==========================================================
-  // TOGGLE SIDEBAR MODE
+  // SIDEBAR MODE TOGGLE
   // ==========================================================
 
   function toggleSidebarMode() {
@@ -661,29 +720,57 @@ export default function AppSidebar({
       !sidebarOpen;
 
 
+    const nextMode =
+      nextFixed
+        ? 'fixed'
+        : 'cursor';
+
+
     setSidebarOpen(
       nextFixed
     );
 
 
     // --------------------------------------------------------
-    // When changing from fixed -> cursor while the mouse is
-    // already inside the sidebar, keep it open until mouse
-    // leaves. This prevents an abrupt collapse under cursor.
+    // If switching from fixed → hover while cursor is already
+    // inside, keep it expanded until the user leaves.
     // --------------------------------------------------------
 
-    setHovered(
+    if (
       !nextFixed
-    );
+    ) {
+
+      setHovered(
+        true
+      );
+
+    } else {
+
+      setHovered(
+        false
+      );
+
+    }
 
 
     try {
 
       window.localStorage.setItem(
         SIDEBAR_MODE_KEY,
-        nextFixed
-          ? 'fixed'
-          : 'cursor'
+        nextMode
+      );
+
+
+      window.dispatchEvent(
+
+        new CustomEvent(
+          'growth-os-sidebar-mode-updated',
+          {
+            detail:
+              nextMode,
+          }
+        )
+
       );
 
     } catch (
@@ -714,6 +801,7 @@ export default function AppSidebar({
         openTimer.current
       );
 
+
       openTimer.current =
         null;
 
@@ -728,6 +816,7 @@ export default function AppSidebar({
         closeTimer.current
       );
 
+
       closeTimer.current =
         null;
 
@@ -735,6 +824,10 @@ export default function AppSidebar({
 
   }
 
+
+  // ==========================================================
+  // HOVER OPEN
+  // ==========================================================
 
   function handleMouseEnter() {
 
@@ -754,6 +847,7 @@ export default function AppSidebar({
       clearTimeout(
         closeTimer.current
       );
+
 
       closeTimer.current =
         null;
@@ -776,6 +870,10 @@ export default function AppSidebar({
   }
 
 
+  // ==========================================================
+  // HOVER CLOSE
+  // ==========================================================
+
   function handleMouseLeave() {
 
     if (
@@ -794,6 +892,7 @@ export default function AppSidebar({
       clearTimeout(
         openTimer.current
       );
+
 
       openTimer.current =
         null;
@@ -816,6 +915,10 @@ export default function AppSidebar({
   }
 
 
+  // ==========================================================
+  // CLEANUP
+  // ==========================================================
+
   useEffect(
     () => {
 
@@ -831,435 +934,23 @@ export default function AppSidebar({
 
 
   // ==========================================================
-  // SETTINGS STATE
-  // ==========================================================
-
-  const [
-    platformSettings,
-    setPlatformSettings,
-  ] =
-    useState<
-      PlatformSettings
-    >({
-
-      tools:
-        [],
-
-      plan: {
-
-        currentPlan:
-          'advanced',
-
-      },
-
-    });
-
-
-  // ==========================================================
-  // READ SAVED SETTINGS
-  // ==========================================================
-
-  function readSettings() {
-
-    try {
-
-      const raw =
-        window
-          .localStorage
-          .getItem(
-            STORAGE_KEY
-          );
-
-
-      if (!raw) {
-
-        setPlatformSettings({
-
-          tools:
-            [],
-
-          plan: {
-
-            currentPlan:
-              'advanced',
-
-          },
-
-        });
-
-
-        return;
-
-      }
-
-
-      const parsed =
-        JSON.parse(
-          raw
-        );
-
-
-      setPlatformSettings(
-        parsed
-      );
-
-    } catch (
-      error
-    ) {
-
-      console.error(
-        'SIDEBAR_SETTINGS_READ_ERROR',
-        error
-      );
-
-    }
-
-  }
-
-
-  // ==========================================================
-  // INITIAL SETTINGS LOAD
-  // ==========================================================
-
-  useEffect(
-    () => {
-
-      readSettings();
-
-
-      function handleSettingsUpdate(
-        event: Event
-      ) {
-
-        const customEvent =
-          event as
-            CustomEvent<
-              PlatformSettings
-            >;
-
-
-        if (
-          customEvent.detail
-        ) {
-
-          setPlatformSettings(
-            customEvent.detail
-          );
-
-          return;
-
-        }
-
-
-        readSettings();
-
-      }
-
-
-      function handleStorage() {
-
-        readSettings();
-
-      }
-
-
-      window.addEventListener(
-        'growth-os-settings-updated',
-        handleSettingsUpdate
-      );
-
-
-      window.addEventListener(
-        'storage',
-        handleStorage
-      );
-
-
-      return () => {
-
-        window.removeEventListener(
-          'growth-os-settings-updated',
-          handleSettingsUpdate
-        );
-
-
-        window.removeEventListener(
-          'storage',
-          handleStorage
-        );
-
-      };
-
-    },
-    []
-  );
-
-
-  // ==========================================================
-  // CURRENT PLAN
-  // ==========================================================
-
-  const currentPlan =
-    (
-      platformSettings
-        ?.plan
-        ?.currentPlan
-      ||
-      'advanced'
-    ) as Plan;
-
-
-  // ==========================================================
-  // TOOL LOOKUP MAP
-  // ==========================================================
-
-  const toolMap =
-    useMemo(
-      () => {
-
-        const map =
-          new Map<
-            string,
-            ToolSetting
-          >();
-
-
-        for (
-          const tool
-          of platformSettings.tools
-          ||
-          []
-        ) {
-
-          map.set(
-            tool.id,
-            tool
-          );
-
-        }
-
-
-        return map;
-
-      },
-      [
-        platformSettings,
-      ]
-    );
-
-
-  // ==========================================================
-  // TOOL ACCESS
-  // ==========================================================
-
-  function getToolState(
-    toolId:
-      string |
-      null
-  ) {
-
-    if (!toolId) {
-
-      return {
-
-        visible:
-          true,
-
-        allowed:
-          true,
-
-        requiredPlan:
-          null as Plan | null,
-
-      };
-
-    }
-
-
-    const tool =
-      toolMap.get(
-        toolId
-      );
-
-
-    if (!tool) {
-
-      return {
-
-        visible:
-          true,
-
-        allowed:
-          true,
-
-        requiredPlan:
-          null as Plan | null,
-
-      };
-
-    }
-
-
-    if (!tool.enabled) {
-
-      return {
-
-        visible:
-          false,
-
-        allowed:
-          false,
-
-        requiredPlan:
-          tool.requiredPlan,
-
-      };
-
-    }
-
-
-    const currentLevel =
-      PLAN_ORDER[
-        currentPlan
-      ];
-
-
-    const requiredLevel =
-      PLAN_ORDER[
-        tool.requiredPlan
-      ];
-
-
-    return {
-
-      visible:
-        true,
-
-      allowed:
-        currentLevel >=
-        requiredLevel,
-
-      requiredPlan:
-        tool.requiredPlan,
-
-    };
-
-  }
-
-
-  // ==========================================================
-  // SAFETY GUARD
-  // ==========================================================
-
-  useEffect(
-    () => {
-
-      for (
-        const group
-        of groups
-      ) {
-
-        for (
-          const item
-          of group.items
-        ) {
-
-          if (
-            item.name !==
-            activeTab
-          ) {
-
-            continue;
-
-          }
-
-
-          const access =
-            getToolState(
-              item.toolId
-            );
-
-
-          if (
-            !access.visible
-          ) {
-
-            setActiveTab(
-              'CEO Summary'
-            );
-
-            return;
-
-          }
-
-
-          if (
-            !access.allowed
-          ) {
-
-            setActiveTab(
-              'Settings'
-            );
-
-            return;
-
-          }
-
-        }
-
-      }
-
-    },
-    [
-      platformSettings,
-      activeTab,
-      setActiveTab,
-    ]
-  );
-
-
-  // ==========================================================
   // SELECT MODULE
+  //
+  // IMPORTANT:
+  //
+  // No plan calculation.
+  // No tool.enabled.
+  // No requiredPlan.
+  // No local entitlement.
+  //
+  // Access will later already be resolved before navigation is
+  // given to this component.
   // ==========================================================
 
   function selectModule(
-
     module:
-      string,
-
-    toolId:
-      string |
-      null
-
+      string
   ) {
-
-    const access =
-      getToolState(
-        toolId
-      );
-
-
-    if (
-      !access.visible
-    ) {
-
-      return;
-
-    }
-
-
-    if (
-      !access.allowed
-    ) {
-
-      setActiveTab(
-        'Settings'
-      );
-
-      return;
-
-    }
-
 
     setActiveTab(
       module
@@ -1275,15 +966,20 @@ export default function AppSidebar({
   return (
 
     // ========================================================
-    // FIXED 64PX LAYOUT SLOT
+    // LAYOUT SLOT
     //
-    // The page always reserves 64px.
-    // Expanded sidebar overlays to 220px.
+    // Hover mode:
+    // page reserves 64px
+    // sidebar overlays to 220px
+    //
+    // Fixed mode:
+    // page reserves 220px
     // ========================================================
 
     <div
       className={`
         relative
+
         h-screen
         shrink-0
 
@@ -1293,8 +989,10 @@ export default function AppSidebar({
 
         ${
           sidebarOpen
-          ? 'w-[220px]'
-          : 'w-[64px]'
+
+            ? 'w-[220px]'
+
+            : 'w-[64px]'
         }
       `}
     >
@@ -1346,7 +1044,13 @@ export default function AppSidebar({
         `}
       >
 
-        <div className="flex h-full flex-col">
+        <div
+          className="
+            flex
+            h-full
+            flex-col
+          "
+        >
 
 
           {/* =================================================
@@ -1376,7 +1080,6 @@ export default function AppSidebar({
                 gap-3
               "
             >
-
 
               <div
                 className="
@@ -1408,6 +1111,7 @@ export default function AppSidebar({
               <div
                 className={`
                   min-w-0
+
                   whitespace-nowrap
 
                   transition-all
@@ -1423,6 +1127,7 @@ export default function AppSidebar({
 
                       : `
                         pointer-events-none
+
                         -translate-x-1
                         opacity-0
                       `
@@ -1445,6 +1150,7 @@ export default function AppSidebar({
                   className="
                     text-[10px]
                     font-medium
+
                     text-slate-400
                   "
                 >
@@ -1457,7 +1163,7 @@ export default function AppSidebar({
 
 
             {/* ===============================================
-                SIDEBAR MODE TOGGLE
+                FIXED / HOVER TOGGLE
             =============================================== */}
 
             {expanded && (
@@ -1476,7 +1182,9 @@ export default function AppSidebar({
 
                 title={
                   sidebarOpen
-                    ? 'Switch to cursor mode'
+
+                    ? 'Switch to hover mode'
+
                     : 'Keep sidebar fixed'
                 }
 
@@ -1566,6 +1274,7 @@ export default function AppSidebar({
           <div
             className="
               flex-1
+
               overflow-y-auto
               overflow-x-hidden
 
@@ -1574,240 +1283,184 @@ export default function AppSidebar({
             "
           >
 
-
             {groups.map(
-              group => {
+              group => (
+
+                <div
+
+                  key={
+                    group.label
+                  }
+
+                  className="mb-3"
+
+                >
 
 
-                const visibleItems =
-                  group.items.filter(
-                    item =>
-                      getToolState(
-                        item.toolId
-                      ).visible
-                  );
-
-
-                if (
-                  visibleItems.length ===
-                  0
-                ) {
-
-                  return null;
-
-                }
-
-
-                return (
+                  {/* =========================================
+                      GROUP LABEL
+                  ========================================= */}
 
                   <div
+                    className={`
+                      mb-2
+                      h-[12px]
 
-                    key={
-                      group.label
-                    }
+                      whitespace-nowrap
 
-                    className="mb-3"
+                      px-3
 
+                      text-[9px]
+                      font-bold
+                      uppercase
+                      tracking-[0.17em]
+
+                      text-slate-600
+
+                      transition-opacity
+                      duration-150
+
+                      ${
+                        expanded
+
+                          ? 'opacity-100'
+
+                          : 'opacity-0'
+                      }
+                    `}
                   >
+                    {group.label}
+                  </div>
 
 
-                    {/* =======================================
-                        GROUP LABEL
-                    ======================================= */}
+                  {/* =========================================
+                      ITEMS
+                  ========================================= */}
 
-                    <div
-                      className={`
-                        mb-2
-                        h-[12px]
+                  <div className="space-y-1">
 
-                        whitespace-nowrap
+                    {group.items.map(
+                      item => {
 
-                        px-3
-
-                        text-[9px]
-                        font-bold
-                        uppercase
-                        tracking-[0.17em]
-
-                        text-slate-600
-
-                        transition-opacity
-                        duration-150
-
-                        ${
-                          expanded
-                            ? 'opacity-100'
-                            : 'opacity-0'
-                        }
-                      `}
-                    >
-                      {group.label}
-                    </div>
+                        const Icon =
+                          item.icon;
 
 
-                    <div className="space-y-1">
+                        const active =
+                          activeTab ===
+                          item.name;
 
 
-                      {visibleItems.map(
-                        item => {
-
-                          const Icon =
-                            item.icon;
-
-
-                          const active =
-                            activeTab ===
-                            item.name;
+                        const activeSubTab =
+                          activeSubTabs[
+                            item.name
+                          ];
 
 
-                          const activeSubTab =
-                            activeSubTabs[
+                        return (
+
+                          <div
+                            key={
                               item.name
-                            ];
+                            }
+                          >
 
 
-                          const access =
-                            getToolState(
-                              item.toolId
-                            );
+                            {/* =================================
+                                MODULE BUTTON
+                            ================================= */}
 
+                            <button
 
-                          return (
+                              type="button"
 
-                            <div
-                              key={
-                                item.name
+                              title={
+                                item.label
                               }
+
+                              onClick={() =>
+                                selectModule(
+                                  item.name
+                                )
+                              }
+
+                              className={`
+                                flex
+                                h-[34px]
+                                w-full
+                                items-center
+
+                                rounded-xl
+
+                                transition-all
+                                duration-150
+
+                                ${
+                                  expanded
+
+                                    ? `
+                                      gap-3
+                                      px-3
+                                    `
+
+                                    : `
+                                      justify-center
+                                    `
+                                }
+
+                                ${
+                                  active
+
+                                    ? `
+                                      bg-white
+
+                                      text-slate-950
+
+                                      shadow-sm
+                                    `
+
+                                    : `
+                                      text-slate-400
+
+                                      hover:bg-white/[0.06]
+                                      hover:text-white
+                                    `
+                                }
+                              `}
                             >
 
+                              <Icon
 
-                              {/* ===========================
-                                  MODULE
-                              =========================== */}
-
-                              <button
-
-                                type="button"
-
-                                title={
-
-                                  access.allowed
-
-                                    ? item.label
-
-                                    : `${item.label} — ${prettyPlan(
-                                        access.requiredPlan
-                                      )} plan required`
-
+                                size={
+                                  16
                                 }
 
-                                onClick={() =>
-                                  selectModule(
-                                    item.name,
-                                    item.toolId
-                                  )
+                                strokeWidth={
+                                  active
+
+                                    ? 2.3
+
+                                    : 1.8
                                 }
 
-                                className={`
-                                  flex
-                                  h-[34px]
-                                  w-full
-                                  items-center
+                                className="shrink-0"
 
-                                  rounded-xl
-
-                                  transition-colors
-                                  duration-150
-
-                                  ${
-                                    expanded
-
-                                      ? `
-                                        gap-3
-                                        px-3
-                                      `
-
-                                      : `
-                                        justify-center
-                                      `
-                                  }
-
-                                  ${
-                                    active
-
-                                      ? `
-                                        bg-white
-                                        text-slate-950
-                                        shadow-sm
-                                      `
-
-                                      : access.allowed
-
-                                        ? `
-                                          text-slate-300
-
-                                          hover:bg-white/[0.08]
-                                          hover:text-white
-                                        `
-
-                                        : `
-                                          text-slate-500
-
-                                          hover:bg-white/[0.04]
-                                          hover:text-slate-400
-                                        `
-                                  }
-                                `}
-                              >
+                              />
 
 
-                                <Icon
+                              {expanded && (
 
-                                  size={
-                                    17
-                                  }
-
-                                  className="shrink-0"
-
-                                  strokeWidth={
-                                    active
-                                      ? 2.4
-                                      : 1.8
-                                  }
-
-                                />
-
-
-                                <div
-                                  className={`
-                                    flex
-                                    min-w-0
-                                    flex-1
-                                    items-center
-
-                                    whitespace-nowrap
-
-                                    transition-opacity
-                                    duration-150
-
-                                    ${
-                                      expanded
-
-                                        ? `
-                                          opacity-100
-                                        `
-
-                                        : `
-                                          pointer-events-none
-                                          opacity-0
-                                        `
-                                    }
-                                  `}
-                                >
+                                <>
 
                                   <span
                                     className="
-                                      text-[13px]
+                                      min-w-0
+                                      flex-1
+
+                                      truncate
+
+                                      text-left
+                                      text-[12px]
                                       font-semibold
                                     "
                                   >
@@ -1815,203 +1468,184 @@ export default function AppSidebar({
                                   </span>
 
 
-                                  {!access.allowed ? (
+                                  {item.children.length >
+                                    0 && (
 
-                                    <Lock
+                                    <ChevronDown
 
                                       size={
                                         13
                                       }
 
-                                      className="
-                                        ml-auto
+                                      className={`
                                         shrink-0
-                                        text-slate-600
-                                      "
+
+                                        transition-transform
+                                        duration-150
+
+                                        ${
+                                          active
+
+                                            ? 'rotate-180'
+
+                                            : ''
+                                        }
+                                      `}
 
                                     />
 
-                                  ) : (
+                                  )}
 
-                                    item.children.length >
-                                      0 && (
+                                </>
 
-                                      <ChevronDown
+                              )}
 
-                                        size={
-                                          14
-                                        }
+                            </button>
 
-                                        className={`
-                                          ml-auto
-                                          shrink-0
 
-                                          transition-transform
+                            {/* =================================
+                                SUB NAVIGATION
+                            ================================= */}
 
-                                          ${
-                                            active
-                                              ? 'rotate-180'
-                                              : ''
+                            {expanded
+                              &&
+                              active
+                              &&
+                              item.children.length >
+                                0 && (
+
+                              <div
+                                className="
+                                  ml-[22px]
+                                  mt-1
+
+                                  border-l
+                                  border-white/10
+
+                                  pl-3
+                                "
+                              >
+
+                                <div className="space-y-0.5">
+
+                                  {item.children.map(
+                                    subTab => {
+
+                                      const selected =
+                                        activeSubTab ===
+                                        subTab;
+
+
+                                      return (
+
+                                        <button
+
+                                          key={
+                                            subTab
                                           }
-                                        `}
 
-                                      />
+                                          type="button"
 
-                                    )
+                                          onClick={() =>
+                                            setActiveSubTab(
+                                              item.name,
+                                              subTab
+                                            )
+                                          }
 
+                                          className={`
+                                            relative
+
+                                            flex
+                                            min-h-[28px]
+                                            w-full
+                                            items-center
+
+                                            rounded-lg
+
+                                            px-2.5
+                                            py-1.5
+
+                                            text-left
+                                            text-[10px]
+                                            font-medium
+
+                                            transition-colors
+                                            duration-150
+
+                                            ${
+                                              selected
+
+                                                ? `
+                                                  bg-white/[0.08]
+
+                                                  text-white
+                                                `
+
+                                                : `
+                                                  text-slate-500
+
+                                                  hover:bg-white/[0.04]
+                                                  hover:text-slate-200
+                                                `
+                                            }
+                                          `}
+                                        >
+
+                                          {selected && (
+
+                                            <span
+                                              className="
+                                                absolute
+
+                                                -left-[13px]
+
+                                                h-4
+                                                w-[2px]
+
+                                                rounded-full
+
+                                                bg-violet-400
+                                              "
+                                            />
+
+                                          )}
+
+
+                                          {subTab}
+
+                                        </button>
+
+                                      );
+
+                                    }
                                   )}
 
                                 </div>
 
-                              </button>
+                              </div>
 
+                            )}
 
-                              {/* ===========================
-                                  SUB NAVIGATION
-                              =========================== */}
+                          </div>
 
-                              {expanded &&
-                                active &&
-                                access.allowed &&
-                                item.children.length >
-                                  0 && (
+                        );
 
-                                <div
-                                  className="
-                                    ml-[22px]
-                                    mt-1
-
-                                    border-l
-                                    border-white/10
-
-                                    pl-3
-                                  "
-                                >
-
-                                  <div className="space-y-0.5">
-
-
-                                    {item.children.map(
-                                      subTab => {
-
-                                        const selected =
-                                          activeSubTab ===
-                                          subTab;
-
-
-                                        return (
-
-                                          <button
-
-                                            key={
-                                              subTab
-                                            }
-
-                                            type="button"
-
-                                            onClick={() =>
-                                              setActiveSubTab(
-                                                item.name,
-                                                subTab
-                                              )
-                                            }
-
-                                            className={`
-                                              relative
-
-                                              flex
-                                              w-full
-                                              items-center
-
-                                              rounded-lg
-
-                                              px-2.5
-                                              py-1.5
-
-                                              text-left
-                                              text-[11px]
-
-                                              transition
-
-                                              ${
-                                                selected
-
-                                                  ? `
-                                                    bg-violet-500/10
-
-                                                    font-bold
-
-                                                    text-violet-300
-                                                  `
-
-                                                  : `
-                                                    font-medium
-
-                                                    text-slate-400
-
-                                                    hover:bg-white/[0.06]
-                                                    hover:text-white
-                                                  `
-                                              }
-                                            `}
-                                          >
-
-
-                                            {selected && (
-
-                                              <span
-                                                className="
-                                                  absolute
-                                                  -left-[13px]
-
-                                                  h-4
-                                                  w-[2px]
-
-                                                  rounded-full
-
-                                                  bg-violet-400
-                                                "
-                                              />
-
-                                            )}
-
-
-                                            {subTab}
-
-                                          </button>
-
-                                        );
-
-                                      }
-                                    )}
-
-                                  </div>
-
-                                </div>
-
-                              )}
-
-                            </div>
-
-                          );
-
-                        }
-                      )}
-
-                    </div>
+                      }
+                    )}
 
                   </div>
 
-                );
+                </div>
 
-              }
+              )
             )}
 
           </div>
 
 
           {/* =================================================
-              GLOBAL SETTINGS
+              PERSONAL SETTINGS
           ================================================= */}
 
           <div
@@ -2067,6 +1701,7 @@ export default function AppSidebar({
 
                     ? `
                       bg-white
+
                       text-slate-950
                     `
 
@@ -2080,185 +1715,40 @@ export default function AppSidebar({
               `}
             >
 
-
               <Settings
 
                 size={
-                  17
+                  16
                 }
-
-                className="shrink-0"
 
                 strokeWidth={
                   activeTab ===
                     'Settings'
-                    ? 2.4
+
+                    ? 2.3
+
                     : 1.8
                 }
+
+                className="shrink-0"
 
               />
 
 
-              <span
-                className={`
-                  whitespace-nowrap
-
-                  text-[13px]
-                  font-semibold
-
-                  transition-opacity
-                  duration-150
-
-                  ${
-                    expanded
-
-                      ? `
-                        opacity-100
-                      `
-
-                      : `
-                        pointer-events-none
-                        opacity-0
-                      `
-                  }
-                `}
-              >
-                Settings
-              </span>
-
-            </button>
-
-          </div>
-
-
-          {/* =================================================
-              STATUS
-          ================================================= */}
-
-          <div
-            className="
-              shrink-0
-
-              border-t
-              border-white/5
-
-              p-3
-            "
-          >
-
-
-            {expanded ? (
-
-              <div
-                className="
-                  rounded-xl
-
-                  border
-                  border-white/[0.10]
-
-                  bg-white/[0.05]
-
-                  p-3
-                "
-              >
-
-                <div
-                  className="
-                    flex
-                    items-center
-                    gap-2
-
-                    whitespace-nowrap
-                  "
-                >
-
-
-                  <span
-                    className="
-                      relative
-                      flex
-                      h-2
-                      w-2
-                      shrink-0
-                    "
-                  >
-
-                    <span
-                      className="
-                        absolute
-
-                        inline-flex
-
-                        h-full
-                        w-full
-
-                        animate-ping
-
-                        rounded-full
-
-                        bg-emerald-400
-
-                        opacity-50
-                      "
-                    />
-
-
-                    <span
-                      className="
-                        relative
-
-                        inline-flex
-
-                        h-2
-                        w-2
-
-                        rounded-full
-
-                        bg-emerald-500
-                      "
-                    />
-
-                  </span>
-
-
-                  <span
-                    className="
-                      text-[11px]
-                      font-semibold
-                      text-slate-300
-                    "
-                  >
-                    Live data connected
-                  </span>
-
-                </div>
-
-              </div>
-
-            ) : (
-
-              <div
-                className="
-                  flex
-                  justify-center
-                  py-2
-                "
-              >
+              {expanded && (
 
                 <span
                   className="
-                    h-2
-                    w-2
-
-                    rounded-full
-
-                    bg-emerald-500
+                    text-[12px]
+                    font-semibold
                   "
-                />
+                >
+                  Settings
+                </span>
 
-              </div>
+              )}
 
-            )}
+            </button>
 
           </div>
 
@@ -2268,38 +1758,6 @@ export default function AppSidebar({
 
     </div>
 
-  );
-
-}
-
-
-// ============================================================
-// HELPERS
-// ============================================================
-
-function prettyPlan(
-  value:
-    Plan |
-    null
-) {
-
-  if (!value) {
-
-    return '';
-
-  }
-
-
-  return (
-    value
-      .charAt(
-        0
-      )
-      .toUpperCase()
-    +
-    value.slice(
-      1
-    )
   );
 
 }

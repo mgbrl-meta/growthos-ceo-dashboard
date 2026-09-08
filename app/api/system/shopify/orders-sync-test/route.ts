@@ -31,16 +31,29 @@ export const runtime =
 //      ↓
 // authenticated tenant
 //      ↓
-// Shopify connection
-//      ↓
-// selected Shopify account
+// Shopify connection/account
 //      ↓
 // Pub/Sub
 //      ↓
-// Cloud Run Shopify worker
+// Growth OS Shopify worker
 //
-// Q3C:
-// Worker fetches first real Shopify Orders page.
+// Supports:
+//
+// manual
+// incremental
+// reconciliation
+//
+// manual:
+//
+// latest Orders page only.
+//
+// incremental / reconciliation:
+//
+// bounded UPDATED_AT window
+//      ↓
+// worker paginates until exhausted.
+//
+// No Shopify credential enters Pub/Sub.
 // ============================================================
 
 export async function POST(
@@ -50,11 +63,12 @@ export async function POST(
   try {
 
     // ========================================================
-    // TENANT
+    // 1. TENANT
     // ========================================================
 
     const {
       tenant,
+      identity,
     } =
       await resolveRequestTenantContext(
         request
@@ -62,7 +76,239 @@ export async function POST(
 
 
     // ========================================================
-    // SHOPIFY CONNECTION
+    // 2. REQUEST BODY
+    // ========================================================
+
+    const body =
+      await request
+        .json()
+        .catch(
+          () => ({})
+        );
+
+
+    const syncType =
+      String(
+        body?.syncType
+        ||
+        'manual'
+      )
+        .trim()
+        .toLowerCase();
+
+
+    const allowedSyncTypes =
+      new Set([
+        'manual',
+        'incremental',
+        'reconciliation',
+      ]);
+
+
+    if (
+      !allowedSyncTypes.has(
+        syncType
+      )
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_ORDERS_SYNC_TYPE_INVALID',
+
+          allowedSyncTypes:
+            Array.from(
+              allowedSyncTypes
+            ),
+
+        },
+        {
+          status:
+            400,
+        }
+      );
+
+    }
+
+
+    const isWindowedSync =
+      syncType ===
+        'incremental'
+      ||
+      syncType ===
+        'reconciliation';
+
+
+    let from:
+      string | null =
+        null;
+
+
+    let to:
+      string | null =
+        null;
+
+
+    let cursor:
+      string | null =
+        null;
+
+
+    // ========================================================
+    // 3. WINDOWED SYNC VALIDATION
+    // ========================================================
+
+    if (
+      isWindowedSync
+    ) {
+
+      from =
+        String(
+          body?.from
+          ||
+          ''
+        ).trim();
+
+
+      to =
+        String(
+          body?.to
+          ||
+          ''
+        ).trim();
+
+
+      if (
+        !from
+        ||
+        !to
+      ) {
+
+        return NextResponse.json(
+          {
+
+            ok:
+              false,
+
+            error:
+              'SHOPIFY_ORDERS_SYNC_WINDOW_REQUIRED',
+
+            required: {
+
+              from:
+                true,
+
+              to:
+                true,
+
+            },
+
+          },
+          {
+            status:
+              400,
+          }
+        );
+
+      }
+
+
+      const fromTime =
+        Date.parse(
+          from
+        );
+
+
+      const toTime =
+        Date.parse(
+          to
+        );
+
+
+      if (
+        Number.isNaN(
+          fromTime
+        )
+        ||
+        Number.isNaN(
+          toTime
+        )
+      ) {
+
+        return NextResponse.json(
+          {
+
+            ok:
+              false,
+
+            error:
+              'SHOPIFY_ORDERS_SYNC_WINDOW_INVALID',
+
+          },
+          {
+            status:
+              400,
+          }
+        );
+
+      }
+
+
+      if (
+        fromTime >=
+          toTime
+      ) {
+
+        return NextResponse.json(
+          {
+
+            ok:
+              false,
+
+            error:
+              'SHOPIFY_ORDERS_SYNC_WINDOW_RANGE_INVALID',
+
+          },
+          {
+            status:
+              400,
+          }
+        );
+
+      }
+
+
+      // Canonicalize timestamps before Pub/Sub.
+      from =
+        new Date(
+          fromTime
+        ).toISOString();
+
+
+      to =
+        new Date(
+          toTime
+        ).toISOString();
+
+
+      cursor =
+        String(
+          body?.cursor
+          ||
+          ''
+        ).trim()
+        ||
+        null;
+
+    }
+
+
+    // ========================================================
+    // 4. SHOPIFY CONNECTION
     // ========================================================
 
     const connection =
@@ -126,7 +372,7 @@ export async function POST(
 
 
     // ========================================================
-    // SELECTED SHOPIFY ACCOUNT
+    // 5. SELECTED SHOPIFY ACCOUNT
     // ========================================================
 
     const account =
@@ -163,7 +409,7 @@ export async function POST(
 
 
     // ========================================================
-    // CONNECTION / ACCOUNT INTEGRITY
+    // 6. CONNECTION / ACCOUNT INTEGRITY
     // ========================================================
 
     if (
@@ -191,9 +437,17 @@ export async function POST(
 
 
     // ========================================================
-    // PUBLISH REAL ORDERS JOB
+    // 7. PUBLISH ORDERS JOB
     //
-    // No Shopify credential enters Pub/Sub.
+    // manual:
+    //
+    // window = null/null
+    //
+    // incremental/reconciliation:
+    //
+    // window.from
+    // window.to
+    // cursor
     // ========================================================
 
     const published =
@@ -218,16 +472,27 @@ export async function POST(
           'orders',
 
         syncType:
-          'manual',
+          syncType as
+            | 'manual'
+            | 'incremental'
+            | 'reconciliation',
 
         requestedBy:
+          identity?.userId
+          ??
           null,
+
+        from,
+
+        to,
+
+        cursor,
 
       });
 
 
     // ========================================================
-    // RESPONSE
+    // 8. RESPONSE
     // ========================================================
 
     return NextResponse.json(
@@ -237,7 +502,11 @@ export async function POST(
           true,
 
         step:
-          'SHOPIFY_ORDERS_CONTEXT_TEST_QUEUED',
+          isWindowedSync
+            ?
+              'SHOPIFY_ORDERS_WINDOW_SYNC_QUEUED'
+            :
+              'SHOPIFY_ORDERS_MANUAL_SYNC_QUEUED',
 
         data: {
 
@@ -255,6 +524,12 @@ export async function POST(
 
           syncType:
             published.job.syncType,
+
+          window:
+            published.job.window,
+
+          cursor:
+            published.job.cursor,
 
         },
 
@@ -341,10 +616,10 @@ export async function POST(
         message:
           process.env.NODE_ENV ===
             'development'
-
-            ? message
-
-            : undefined,
+            ?
+              message
+            :
+              undefined,
 
       },
       {

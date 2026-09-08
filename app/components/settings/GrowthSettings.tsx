@@ -1,584 +1,278 @@
 'use client';
 
 import {
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
   useEffect,
   useState,
 } from 'react';
 
 import {
+  AlertCircle,
   Boxes,
+  CalendarDays,
   CheckCircle2,
   CreditCard,
-  Database,
-  PlugZap,
-  RefreshCw,
+  LayoutDashboard,
+  PanelLeft,
+  Plug,
+  RotateCcw,
   Save,
   Settings2,
-  ShieldCheck,
   SlidersHorizontal,
   Users,
+  UserRound,
+  WalletCards,
 } from 'lucide-react';
 
 
-/* ============================================================
-   TYPES
-============================================================ */
+// ============================================================
+// SETTINGS TYPES
+// ============================================================
 
 type SettingsTab =
-  | 'General'
-  | 'Tools & Modules'
+  | 'Workspace'
+  | 'Plan & Billing'
+  | 'Modules'
   | 'Integrations'
-  | 'Business Rules'
-  | 'Data & Sync'
   | 'Users & Access'
-  | 'Plans & Usage';
+  | 'My Preferences';
 
 
-type Plan =
-  | 'starter'
-  | 'pro'
-  | 'advanced'
-  | 'enterprise';
+type SidebarMode =
+  | 'cursor'
+  | 'fixed';
 
 
-type BillingCycle =
-  | 'monthly'
-  | 'annual';
+type TableDensity =
+  | 'compact'
+  | 'comfortable';
 
 
-type ToolConfig = {
-  id: string;
-  name: string;
-  description: string;
-
-  enabled: boolean;
-
-  requiredPlan: Plan;
-
-  source: string;
-
-  status:
-    | 'connected'
-    | 'review'
-    | 'disabled';
-};
+type DefaultLandingPage =
+  | 'CEO Summary'
+  | 'Meta OS'
+  | 'Google OS'
+  | 'Attribution OS'
+  | 'Retention OS'
+  | 'Product OS';
 
 
-type IntegrationConfig = {
-  id: string;
-  name: string;
-
-  status:
-    | 'connected'
-    | 'not_connected'
-    | 'review';
-
-  account: string;
-
-  lastSync: string;
-};
+type DefaultDateRange =
+  | '7'
+  | '14'
+  | '30'
+  | '90';
 
 
-type PlatformSettings = {
+type UserPreferences = {
 
-  general: {
+  tableDensity:
+    TableDensity;
 
-    workspaceName: string;
+  defaultLandingPage:
+    DefaultLandingPage;
 
-    storeDomain: string;
-
-    currency: string;
-
-    timezone: string;
-
-    financialYearStart: string;
-
-    defaultDateRange: string;
-
-  };
-
-
-  tools:
-    ToolConfig[];
-
-
-  integrations:
-    IntegrationConfig[];
-
-
-  businessRules: {
-
-    meta: {
-
-      targetRoas: number;
-
-      targetCpa: number;
-
-      minSpend: number;
-
-      minPurchases: number;
-
-      scalePct: number;
-
-    };
-
-
-    google: {
-
-      targetRoas: number;
-
-      maxCpa: number;
-
-      minClicks: number;
-
-      wasteLimit: number;
-
-    };
-
-
-    attribution: {
-
-      defaultModel: string;
-
-      sessionWindowMinutes: number;
-
-      deterministicOnly: boolean;
-
-      includeDirect: boolean;
-
-    };
-
-  };
-
-
-  plan: {
-
-    currentPlan:
-      Plan;
-
-    billingCycle:
-      BillingCycle;
-
-  };
+  defaultDateRange:
+    DefaultDateRange;
 
 };
 
 
-/* ============================================================
-   DEFAULT SETTINGS
-============================================================ */
+// ============================================================
+// AUTH / WORKSPACE RESPONSE
+// ============================================================
 
-const DEFAULT_SETTINGS: PlatformSettings = {
+type AuthMeResponse = {
 
-  general: {
+  ok:
+    boolean;
+
+  authenticated:
+    boolean;
+
+  user?: {
+
+    userId:
+      string;
+
+    email:
+      string | null;
+
+    fullName:
+      string | null;
+
+    role:
+      string | null;
+
+  };
+
+  activeContext?: {
+
+    workspaceId:
+      string | null;
 
     workspaceName:
-      'Brillare',
+      string | null;
 
-    storeDomain:
-      'brillare.co.in',
+    workspaceSlug:
+      string | null;
+
+    brandId:
+      string | null;
+
+    brandName:
+      string | null;
+
+    brandSlug:
+      string | null;
 
     currency:
-      'INR',
+      string | null;
 
     timezone:
-      'Asia/Kolkata',
+      string | null;
 
-    financialYearStart:
-      'April',
+    role:
+      string | null;
 
-    defaultDateRange:
-      'Last 30 Days',
+  };
 
-  },
+  auth?: {
 
+    source:
+      string | null;
 
-  tools: [
+    method:
+      string | null;
 
-    {
-      id:
-        'meta',
+  };
 
-      name:
-        'Meta OS',
+  providerContext?: {
 
-      description:
-        'Paid social intelligence, campaign analysis and budget decisions.',
+    shopId:
+      string | null;
 
-      enabled:
-        true,
+    shopDomain:
+      string | null;
 
-      requiredPlan:
-        'pro',
-
-      source:
-        'Meta Ads + BigQuery',
-
-      status:
-        'connected',
-    },
-
-
-    {
-      id:
-        'google',
-
-      name:
-        'Google OS',
-
-      description:
-        'Search, Shopping, keyword and intent intelligence.',
-
-      enabled:
-        true,
-
-      requiredPlan:
-        'pro',
-
-      source:
-        'Google Ads + BigQuery',
-
-      status:
-        'connected',
-    },
-
-
-    {
-      id:
-        'attribution',
-
-      name:
-        'Attribution OS',
-
-      description:
-        'Deterministic customer journey and marketing attribution.',
-
-      enabled:
-        true,
-
-      requiredPlan:
-        'advanced',
-
-      source:
-        'Shopify Pixel + BigQuery',
-
-      status:
-        'connected',
-    },
-
-
-    {
-      id:
-        'retention',
-
-      name:
-        'Retention OS',
-
-      description:
-        'Customer lifecycle, opportunities, actions and learning loop.',
-
-      enabled:
-        true,
-
-      requiredPlan:
-        'advanced',
-
-      source:
-        'Shopify + BigQuery',
-
-      status:
-        'connected',
-    },
-
-
-    {
-      id:
-        'product',
-
-      name:
-        'Product OS',
-
-      description:
-        'SKU performance, demand, forecasting and inventory intelligence.',
-
-      enabled:
-        true,
-
-      requiredPlan:
-        'pro',
-
-      source:
-        'Shopify + BigQuery',
-
-      status:
-        'connected',
-    },
-
-
-    {
-      id:
-        'ai',
-
-      name:
-        'AI Intelligence',
-
-      description:
-        'Cross-system reasoning, business Q&A and autonomous agents.',
-
-      enabled:
-        false,
-
-      requiredPlan:
-        'enterprise',
-
-      source:
-        'LLM + Growth OS',
-
-      status:
-        'disabled',
-    },
-
-  ],
-
-
-  integrations: [
-
-    {
-      id:
-        'shopify',
-
-      name:
-        'Shopify',
-
-      status:
-        'connected',
-
-      account:
-        'Brillare',
-
-      lastSync:
-        'Realtime',
-    },
-
-
-    {
-      id:
-        'bigquery',
-
-      name:
-        'Google BigQuery',
-
-      status:
-        'connected',
-
-      account:
-        'shopify-colab',
-
-      lastSync:
-        'Connected',
-    },
-
-
-    {
-      id:
-        'meta',
-
-      name:
-        'Meta Ads',
-
-      status:
-        'connected',
-
-      account:
-        'Configured',
-
-      lastSync:
-        'Data available',
-    },
-
-
-    {
-      id:
-        'google',
-
-      name:
-        'Google Ads',
-
-      status:
-        'connected',
-
-      account:
-        'Configured',
-
-      lastSync:
-        'Data available',
-    },
-
-
-    {
-      id:
-        'whatsapp',
-
-      name:
-        'WhatsApp',
-
-      status:
-        'review',
-
-      account:
-        'Not configured globally',
-
-      lastSync:
-        '—',
-    },
-
-
-    {
-      id:
-        'slack',
-
-      name:
-        'Slack',
-
-      status:
-        'not_connected',
-
-      account:
-        'Not connected',
-
-      lastSync:
-        '—',
-    },
-
-  ],
-
-
-  businessRules: {
-
-    meta: {
-
-      targetRoas:
-        0.8,
-
-      targetCpa:
-        1800,
-
-      minSpend:
-        10000,
-
-      minPurchases:
-        3,
-
-      scalePct:
-        10,
-
-    },
-
-
-    google: {
-
-      targetRoas:
-        5,
-
-      maxCpa:
-        1000,
-
-      minClicks:
-        20,
-
-      wasteLimit:
-        5000,
-
-    },
-
-
-    attribution: {
-
-      defaultModel:
-        'LAST_NON_DIRECT',
-
-      sessionWindowMinutes:
-        30,
-
-      deterministicOnly:
-        true,
-
-      includeDirect:
-        true,
-
-    },
-
-  },
-
-
-  plan: {
-
-    currentPlan:
-      'advanced',
-
-    billingCycle:
-      'monthly',
-
-  },
+  };
 
 };
 
 
-const STORAGE_KEY =
-  'growth_os_global_settings_v1';
+// ============================================================
+// STORAGE
+//
+// PERSONAL UI PREFERENCES ONLY.
+//
+// NO:
+//
+// brand
+// plan
+// billing
+// modules
+// integrations
+// users
+// permissions
+// entitlement
+//
+// are stored here.
+// ============================================================
+
+const USER_PREFERENCES_KEY =
+  'growth_os_user_preferences_v1';
 
 
-/* ============================================================
-   SETTINGS NAVIGATION
-============================================================ */
+const SIDEBAR_MODE_KEY =
+  'growth_os_sidebar_mode_v1';
 
-const SETTINGS_TABS: {
-  name: SettingsTab;
-  icon: any;
-}[] = [
+
+// ============================================================
+// DEFAULT PERSONAL PREFERENCES
+// ============================================================
+
+const DEFAULT_PREFERENCES:
+  UserPreferences = {
+
+  tableDensity:
+    'compact',
+
+  defaultLandingPage:
+    'CEO Summary',
+
+  defaultDateRange:
+    '30',
+
+};
+
+
+// ============================================================
+// SETTINGS NAVIGATION
+// ============================================================
+
+const SETTINGS_TABS:
+  Array<{
+    id:
+      SettingsTab;
+
+    label:
+      string;
+
+    icon:
+      any;
+  }> = [
 
   {
-    name:
-      'General',
+    id:
+      'Workspace',
+
+    label:
+      'Workspace',
 
     icon:
       Settings2,
   },
 
   {
-    name:
-      'Tools & Modules',
+    id:
+      'Plan & Billing',
+
+    label:
+      'Plan & Billing',
+
+    icon:
+      CreditCard,
+  },
+
+  {
+    id:
+      'Modules',
+
+    label:
+      'Modules',
 
     icon:
       Boxes,
   },
 
   {
-    name:
+    id:
+      'Integrations',
+
+    label:
       'Integrations',
 
     icon:
-      PlugZap,
+      Plug,
   },
 
   {
-    name:
-      'Business Rules',
+    id:
+      'Users & Access',
 
-    icon:
-      SlidersHorizontal,
-  },
-
-  {
-    name:
-      'Data & Sync',
-
-    icon:
-      Database,
-  },
-
-  {
-    name:
+    label:
       'Users & Access',
 
     icon:
@@ -586,37 +280,131 @@ const SETTINGS_TABS: {
   },
 
   {
-    name:
-      'Plans & Usage',
+    id:
+      'My Preferences',
+
+    label:
+      'My Preferences',
 
     icon:
-      CreditCard,
+      UserRound,
   },
 
 ];
 
 
-/* ============================================================
-   MAIN COMPONENT
-============================================================ */
+// ============================================================
+// LANDING PAGE OPTIONS
+// ============================================================
+
+const LANDING_PAGE_OPTIONS:
+  Array<{
+    value:
+      DefaultLandingPage;
+
+    label:
+      string;
+  }> = [
+
+  {
+    value:
+      'CEO Summary',
+
+    label:
+      'Command Center',
+  },
+
+  {
+    value:
+      'Meta OS',
+
+    label:
+      'Meta',
+  },
+
+  {
+    value:
+      'Google OS',
+
+    label:
+      'Google',
+  },
+
+  {
+    value:
+      'Attribution OS',
+
+    label:
+      'Attribution',
+  },
+
+  {
+    value:
+      'Retention OS',
+
+    label:
+      'Retention',
+  },
+
+  {
+    value:
+      'Product OS',
+
+    label:
+      'Product',
+  },
+
+];
+
+
+// ============================================================
+// MAIN
+// ============================================================
 
 export default function GrowthSettings() {
+
+
+  // ==========================================================
+  // SETTINGS NAVIGATION
+  // ==========================================================
 
   const [
     activeTab,
     setActiveTab,
   ] =
     useState<SettingsTab>(
-      'General'
+      'Workspace'
+    );
+
+
+  // ==========================================================
+  // PERSONAL PREFERENCES
+  // ==========================================================
+
+  const [
+    sidebarMode,
+    setSidebarMode,
+  ] =
+    useState<SidebarMode>(
+      'cursor'
     );
 
 
   const [
-    settings,
-    setSettings,
+    preferences,
+    setPreferences,
   ] =
-    useState<PlatformSettings>(
-      DEFAULT_SETTINGS
+    useState<UserPreferences>(
+      DEFAULT_PREFERENCES
+    );
+
+
+  const [
+    preferencesLoaded,
+    setPreferencesLoaded,
+  ] =
+    useState(
+      false
     );
 
 
@@ -629,161 +417,263 @@ export default function GrowthSettings() {
     );
 
 
-  /* =========================================================
-     LOAD LOCAL SETTINGS
-  ========================================================= */
+  // ==========================================================
+  // AUTHENTICATED WORKSPACE
+  //
+  // SERVER-OWNED BUSINESS DATA.
+  // ==========================================================
+
+  const [
+    authContext,
+    setAuthContext,
+  ] =
+    useState<AuthMeResponse | null>(
+      null
+    );
+
+
+  const [
+    authLoading,
+    setAuthLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    authError,
+    setAuthError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  // ==========================================================
+  // LOAD PERSONAL PREFERENCES
+  // ==========================================================
 
   useEffect(
     () => {
 
       try {
 
-        const raw =
+        const storedSidebarMode =
           window.localStorage.getItem(
-            STORAGE_KEY
+            SIDEBAR_MODE_KEY
           );
 
 
-        if (!raw) {
+        if (
+          storedSidebarMode ===
+            'fixed'
+          ||
+          storedSidebarMode ===
+            'cursor'
+        ) {
 
-          return;
+          setSidebarMode(
+            storedSidebarMode
+          );
 
         }
 
 
-        const parsed =
-          JSON.parse(
-            raw
+        const storedPreferences =
+          window.localStorage.getItem(
+            USER_PREFERENCES_KEY
           );
 
 
-        setSettings({
+        if (
+          storedPreferences
+        ) {
 
-          ...DEFAULT_SETTINGS,
-
-          ...parsed,
-
-
-          general: {
-
-            ...DEFAULT_SETTINGS.general,
-
-            ...(parsed.general || {}),
-
-          },
+          const parsed =
+            JSON.parse(
+              storedPreferences
+            ) as Partial<UserPreferences>;
 
 
-          tools:
+          setPreferences({
 
-            Array.isArray(
-              parsed.tools
-            )
+            ...DEFAULT_PREFERENCES,
 
-              ? parsed.tools
+            ...parsed,
 
-              : DEFAULT_SETTINGS.tools,
+          });
 
-
-          integrations:
-
-            Array.isArray(
-              parsed.integrations
-            )
-
-              ? parsed.integrations
-
-              : DEFAULT_SETTINGS.integrations,
-
-
-          businessRules: {
-
-            meta: {
-
-              ...DEFAULT_SETTINGS.businessRules.meta,
-
-              ...(parsed.businessRules?.meta || {}),
-
-            },
-
-
-            google: {
-
-              ...DEFAULT_SETTINGS.businessRules.google,
-
-              ...(parsed.businessRules?.google || {}),
-
-            },
-
-
-            attribution: {
-
-              ...DEFAULT_SETTINGS.businessRules.attribution,
-
-              ...(parsed.businessRules?.attribution || {}),
-
-            },
-
-          },
-
-
-          plan: {
-
-            ...DEFAULT_SETTINGS.plan,
-
-            ...(parsed.plan || {}),
-
-          },
-
-        });
-
+        }
 
       } catch (
         error
       ) {
 
         console.error(
-          'GLOBAL_SETTINGS_LOAD_ERROR',
+          'GROWTH_OS_USER_PREFERENCES_LOAD_ERROR',
           error
         );
 
       }
+
+
+      setPreferencesLoaded(
+        true
+      );
 
     },
     []
   );
 
 
-  /* =========================================================
-     SAVE SETTINGS
-  ========================================================= */
+  // ==========================================================
+  // LOAD AUTHENTICATED WORKSPACE
+  // ==========================================================
 
-  function saveSettings() {
+  async function loadAuthContext() {
+
+    setAuthLoading(
+      true
+    );
+
+
+    setAuthError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/auth/me',
+          {
+            method:
+              'GET',
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+          }
+        );
+
+
+      const json:
+        AuthMeResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+        ||
+        !json.authenticated
+      ) {
+
+        throw new Error(
+          'Unable to load authenticated workspace'
+        );
+
+      }
+
+
+      setAuthContext(
+        json
+      );
+
+    } catch (
+      error: any
+    ) {
+
+      console.error(
+        'GROWTH_OS_SETTINGS_AUTH_CONTEXT_ERROR',
+        error
+      );
+
+
+      setAuthContext(
+        null
+      );
+
+
+      setAuthError(
+        String(
+          error?.message
+          ||
+          'Unable to load workspace'
+        )
+      );
+
+    } finally {
+
+      setAuthLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadAuthContext();
+
+    },
+    []
+  );
+
+
+  // ==========================================================
+  // SAVE PERSONAL PREFERENCES
+  // ==========================================================
+
+  function savePreferences() {
 
     try {
 
       window.localStorage.setItem(
+        SIDEBAR_MODE_KEY,
+        sidebarMode
+      );
 
-        STORAGE_KEY,
 
+      window.localStorage.setItem(
+        USER_PREFERENCES_KEY,
         JSON.stringify(
-          settings
+          preferences
+        )
+      );
+
+
+      window.dispatchEvent(
+
+        new CustomEvent(
+          'growth-os-sidebar-mode-updated',
+          {
+            detail:
+              sidebarMode,
+          }
         )
 
       );
 
 
-      /*
-       * Same-browser-tab event.
-       *
-       * AppSidebar listens for this and updates immediately.
-       */
       window.dispatchEvent(
 
         new CustomEvent(
-          'growth-os-settings-updated',
+          'growth-os-user-preferences-updated',
           {
             detail:
-              settings,
+              preferences,
           }
         )
 
@@ -796,23 +686,19 @@ export default function GrowthSettings() {
 
 
       window.setTimeout(
-        () => {
-
+        () =>
           setSaved(
             false
-          );
-
-        },
-        1800
+          ),
+        1600
       );
-
 
     } catch (
       error
     ) {
 
       console.error(
-        'GLOBAL_SETTINGS_SAVE_ERROR',
+        'GROWTH_OS_USER_PREFERENCES_SAVE_ERROR',
         error
       );
 
@@ -821,126 +707,119 @@ export default function GrowthSettings() {
   }
 
 
-  /* =========================================================
-     TOOL UPDATE
-  ========================================================= */
+  // ==========================================================
+  // RESET PERSONAL PREFERENCES
+  // ==========================================================
 
-  function updateTool(
-    id: string,
-    patch: Partial<ToolConfig>
+  function resetPreferences() {
+
+    const nextSidebarMode:
+      SidebarMode =
+        'cursor';
+
+
+    const nextPreferences:
+      UserPreferences = {
+        ...DEFAULT_PREFERENCES,
+      };
+
+
+    setSidebarMode(
+      nextSidebarMode
+    );
+
+
+    setPreferences(
+      nextPreferences
+    );
+
+
+    try {
+
+      window.localStorage.setItem(
+        SIDEBAR_MODE_KEY,
+        nextSidebarMode
+      );
+
+
+      window.localStorage.setItem(
+        USER_PREFERENCES_KEY,
+        JSON.stringify(
+          nextPreferences
+        )
+      );
+
+
+      window.dispatchEvent(
+
+        new CustomEvent(
+          'growth-os-sidebar-mode-updated',
+          {
+            detail:
+              nextSidebarMode,
+          }
+        )
+
+      );
+
+
+      window.dispatchEvent(
+
+        new CustomEvent(
+          'growth-os-user-preferences-updated',
+          {
+            detail:
+              nextPreferences,
+          }
+        )
+
+      );
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        'GROWTH_OS_USER_PREFERENCES_RESET_ERROR',
+        error
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // LOADING PERSONAL SETTINGS
+  // ==========================================================
+
+  if (
+    !preferencesLoaded
   ) {
 
-    setSettings(
-      previous => ({
+    return (
 
-        ...previous,
+      <section className="gos-panel !p-4">
 
-        tools:
-          previous.tools.map(
-            tool => {
+        <p
+          className="
+            text-[10px]
+            text-slate-500
+          "
+        >
+          Loading settings...
+        </p>
 
-              if (
-                tool.id !==
-                id
-              ) {
+      </section>
 
-                return tool;
-
-              }
-
-
-              return {
-
-                ...tool,
-
-                ...patch,
-
-              };
-
-            }
-          ),
-
-      })
     );
 
   }
 
 
-  /* =========================================================
-     UPDATE META RULE
-  ========================================================= */
-
-  function updateMetaRule(
-    key:
-      keyof PlatformSettings['businessRules']['meta'],
-    value: number
-  ) {
-
-    setSettings(
-      previous => ({
-
-        ...previous,
-
-        businessRules: {
-
-          ...previous.businessRules,
-
-          meta: {
-
-            ...previous.businessRules.meta,
-
-            [key]:
-              value,
-
-          },
-
-        },
-
-      })
-    );
-
-  }
-
-
-  /* =========================================================
-     UPDATE GOOGLE RULE
-  ========================================================= */
-
-  function updateGoogleRule(
-    key:
-      keyof PlatformSettings['businessRules']['google'],
-    value: number
-  ) {
-
-    setSettings(
-      previous => ({
-
-        ...previous,
-
-        businessRules: {
-
-          ...previous.businessRules,
-
-          google: {
-
-            ...previous.businessRules.google,
-
-            [key]:
-              value,
-
-          },
-
-        },
-
-      })
-    );
-
-  }
-
-
-  /* =========================================================
-     UI
-  ========================================================= */
+  // ==========================================================
+  // UI
+  // ==========================================================
 
   return (
 
@@ -948,75 +827,73 @@ export default function GrowthSettings() {
 
 
       {/* =====================================================
-          PAGE HEADER
+          SETTINGS INTRO
       ===================================================== */}
 
-      <section className="flex flex-wrap items-start justify-between gap-2.5">
+      <section className="gos-panel !p-3">
 
-        <div>
-
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
-            Growth OS
-          </p>
-
-
-          <h1 className="mt-1 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
-            Settings
-          </h1>
-
-
-          <p className="mt-1 max-w-2xl text-[11px] text-slate-500">
-            Manage workspace configuration, tools, integrations,
-            business rules and commercial access.
-          </p>
-
-        </div>
-
-
-        <button
-          type="button"
-
-          onClick={
-            saveSettings
-          }
-
+        <div
           className="
             flex
-            h-8
             items-center
-            gap-2
-            rounded-xl
-            bg-slate-950
-            px-3
-            text-[10px]
-            font-semibold
-            text-white
-            shadow-sm
-            transition
-            hover:bg-slate-800
+            gap-3
           "
         >
 
-          {saved ? (
+          <div
+            className="
+              flex
+              h-9
+              w-9
+              shrink-0
+              items-center
+              justify-center
 
-            <CheckCircle2
-              size={15}
+              rounded-[9px]
+
+              bg-violet-50
+
+              text-violet-600
+            "
+          >
+
+            <Settings2
+              size={16}
             />
 
-          ) : (
-
-            <Save
-              size={15}
-            />
-
-          )}
+          </div>
 
 
-          {saved
-            ? 'Saved'
-            : 'Save Changes'}
+          <div>
 
-        </button>
+            <h2
+              className="
+                text-[14px]
+                font-semibold
+                tracking-[-0.025em]
+
+                text-slate-950
+              "
+            >
+              Settings
+            </h2>
+
+
+            <p
+              className="
+                mt-0.5
+
+                text-[9px]
+
+                text-slate-500
+              "
+            >
+              Review your workspace, subscription, modules, connections, access and personal preferences.
+            </p>
+
+          </div>
+
+        </div>
 
       </section>
 
@@ -1025,86 +902,114 @@ export default function GrowthSettings() {
           SETTINGS SHELL
       ===================================================== */}
 
-      <section className="grid grid-cols-1 gap-3 lg:grid-cols-[230px_minmax(0,1fr)]">
+      <div
+        className="
+          grid
+          grid-cols-1
+          gap-3
+
+          lg:grid-cols-[230px_minmax(0,1fr)]
+        "
+      >
 
 
         {/* ===================================================
-            LOCAL SETTINGS NAV
+            LEFT NAVIGATION
         =================================================== */}
 
-        <aside className="self-start rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+        <section
+          className="
+            gos-panel
+            !p-2
 
-          {SETTINGS_TABS.map(
-            item => {
+            self-start
+          "
+        >
 
-              const Icon =
-                item.icon;
+          <nav className="space-y-1">
+
+            {SETTINGS_TABS.map(
+              tab => {
+
+                const Icon =
+                  tab.icon;
 
 
-              const selected =
-                activeTab ===
-                item.name;
+                const active =
+                  activeTab ===
+                  tab.id;
 
 
-              return (
+                return (
 
-                <button
-                  key={
-                    item.name
-                  }
+                  <button
 
-                  type="button"
-
-                  onClick={() =>
-                    setActiveTab(
-                      item.name
-                    )
-                  }
-
-                  className={`
-                    flex
-                    w-full
-                    items-center
-                    gap-3
-                    rounded-xl
-                    px-3
-                    py-2.5
-                    text-left
-                    text-[10px]
-                    font-bold
-                    transition
-
-                    ${
-                      selected
-
-                        ? `
-                          bg-slate-950
-                          text-white
-                        `
-
-                        : `
-                          text-slate-500
-                          hover:bg-slate-50
-                          hover:text-slate-950
-                        `
+                    key={
+                      tab.id
                     }
-                  `}
-                >
 
-                  <Icon
-                    size={15}
-                  />
+                    type="button"
 
-                  {item.name}
+                    onClick={() =>
+                      setActiveTab(
+                        tab.id
+                      )
+                    }
 
-                </button>
+                    className={`
+                      flex
+                      h-[34px]
+                      w-full
+                      items-center
+                      gap-2.5
 
-              );
+                      rounded-[8px]
 
-            }
-          )}
+                      px-3
 
-        </aside>
+                      text-left
+                      text-[10px]
+                      font-semibold
+
+                      transition
+
+                      ${
+                        active
+
+                          ? `
+                            bg-slate-950
+                            text-white
+                          `
+
+                          : `
+                            text-slate-500
+
+                            hover:bg-slate-100
+                            hover:text-slate-900
+                          `
+                      }
+                    `}
+                  >
+
+                    <Icon
+                      size={14}
+                    />
+
+
+                    <span>
+                      {tab.label}
+                    </span>
+
+                  </button>
+
+                );
+
+              }
+            )}
+
+          </nav>
+
+        </section>
 
 
         {/* ===================================================
@@ -1115,561 +1020,55 @@ export default function GrowthSettings() {
 
 
           {/* =================================================
-              GENERAL
+              WORKSPACE
           ================================================= */}
 
           {activeTab ===
-            'General' && (
+            'Workspace' && (
 
-            <SettingsPanel
-              title="General"
-              description="Workspace-wide settings used across Growth OS."
-            >
+            <WorkspaceSettings
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              authContext={
+                authContext
+              }
 
+              loading={
+                authLoading
+              }
 
-                <Field
-                  label="Workspace Name"
-                >
+              error={
+                authError
+              }
 
-                  <input
+              reload={
+                loadAuthContext
+              }
 
-                    value={
-                      settings.general.workspaceName
-                    }
-
-                    onChange={
-                      event => {
-
-                        const value =
-                          event.target.value;
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            general: {
-
-                              ...previous.general,
-
-                              workspaceName:
-                                value,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  />
-
-                </Field>
-
-
-                <Field
-                  label="Store Domain"
-                >
-
-                  <input
-
-                    value={
-                      settings.general.storeDomain
-                    }
-
-                    onChange={
-                      event => {
-
-                        const value =
-                          event.target.value;
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            general: {
-
-                              ...previous.general,
-
-                              storeDomain:
-                                value,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  />
-
-                </Field>
-
-
-                <Field
-                  label="Currency"
-                >
-
-                  <select
-
-                    value={
-                      settings.general.currency
-                    }
-
-                    onChange={
-                      event => {
-
-                        const value =
-                          event.target.value;
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            general: {
-
-                              ...previous.general,
-
-                              currency:
-                                value,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  >
-
-                    <option value="INR">
-                      INR — Indian Rupee
-                    </option>
-
-                    <option value="USD">
-                      USD — US Dollar
-                    </option>
-
-                    <option value="GBP">
-                      GBP — Pound
-                    </option>
-
-                    <option value="EUR">
-                      EUR — Euro
-                    </option>
-
-                  </select>
-
-                </Field>
-
-
-                <Field
-                  label="Timezone"
-                >
-
-                  <select
-
-                    value={
-                      settings.general.timezone
-                    }
-
-                    onChange={
-                      event => {
-
-                        const value =
-                          event.target.value;
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            general: {
-
-                              ...previous.general,
-
-                              timezone:
-                                value,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  >
-
-                    <option value="Asia/Kolkata">
-                      Asia/Kolkata
-                    </option>
-
-                    <option value="UTC">
-                      UTC
-                    </option>
-
-                    <option value="America/New_York">
-                      America/New York
-                    </option>
-
-                    <option value="Europe/London">
-                      Europe/London
-                    </option>
-
-                  </select>
-
-                </Field>
-
-
-                <Field
-                  label="Financial Year Starts"
-                >
-
-                  <select
-
-                    value={
-                      settings.general.financialYearStart
-                    }
-
-                    onChange={
-                      event => {
-
-                        const value =
-                          event.target.value;
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            general: {
-
-                              ...previous.general,
-
-                              financialYearStart:
-                                value,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  >
-
-                    <option value="January">
-                      January
-                    </option>
-
-                    <option value="April">
-                      April
-                    </option>
-
-                    <option value="July">
-                      July
-                    </option>
-
-                    <option value="October">
-                      October
-                    </option>
-
-                  </select>
-
-                </Field>
-
-
-                <Field
-                  label="Default Date Range"
-                >
-
-                  <select
-
-                    value={
-                      settings.general.defaultDateRange
-                    }
-
-                    onChange={
-                      event => {
-
-                        const value =
-                          event.target.value;
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            general: {
-
-                              ...previous.general,
-
-                              defaultDateRange:
-                                value,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  >
-
-                    <option value="Yesterday">
-                      Yesterday
-                    </option>
-
-                    <option value="Last 7 Days">
-                      Last 7 Days
-                    </option>
-
-                    <option value="Last 14 Days">
-                      Last 14 Days
-                    </option>
-
-                    <option value="Last 30 Days">
-                      Last 30 Days
-                    </option>
-
-                    <option value="Month to Date">
-                      Month to Date
-                    </option>
-
-                  </select>
-
-                </Field>
-
-
-              </div>
-
-            </SettingsPanel>
+            />
 
           )}
 
 
           {/* =================================================
-              TOOLS & MODULES
+              PLAN & BILLING
           ================================================= */}
 
           {activeTab ===
-            'Tools & Modules' && (
+            'Plan & Billing' && (
 
-            <SettingsPanel
-              title="Tools & Modules"
-              description="Control which operating systems are available and which plan unlocks them."
-            >
+            <PlanBillingSettings />
 
-              <div className="space-y-3">
-
-                {settings.tools.map(
-                  tool => (
-
-                    <div
-                      key={
-                        tool.id
-                      }
-
-                      className="
-                        grid
-                        grid-cols-1
-                        gap-2.5
-                        rounded-lg
-                        border
-                        border-slate-200
-                        p-4
-                        lg:grid-cols-[minmax(0,1.4fr)_180px_150px_100px]
-                        lg:items-center
-                      "
-                    >
+          )}
 
 
-                      <div>
+          {/* =================================================
+              MODULES
+          ================================================= */}
 
-                        <div className="flex items-center gap-2">
+          {activeTab ===
+            'Modules' && (
 
-                          <h3 className="text-[11px] font-semibold text-slate-950">
-                            {tool.name}
-                          </h3>
-
-
-                          <StatusBadge
-                            status={
-                              tool.status
-                            }
-                          />
-
-                        </div>
-
-
-                        <p className="mt-1 text-[10px] leading-5 text-slate-500">
-                          {tool.description}
-                        </p>
-
-
-                        <p className="mt-2 text-[10px] font-semibold text-slate-400">
-                          {tool.source}
-                        </p>
-
-                      </div>
-
-
-                      <Field
-                        label="Required Plan"
-                      >
-
-                        <select
-
-                          value={
-                            tool.requiredPlan
-                          }
-
-                          onChange={
-                            event => {
-
-                              const nextPlan =
-                                parsePlan(
-                                  event.target.value
-                                );
-
-
-                              updateTool(
-                                tool.id,
-                                {
-                                  requiredPlan:
-                                    nextPlan,
-                                }
-                              );
-
-                            }
-                          }
-
-                          className={
-                            inputClass
-                          }
-
-                        >
-
-                          <option value="starter">
-                            Starter
-                          </option>
-
-                          <option value="pro">
-                            Pro
-                          </option>
-
-                          <option value="advanced">
-                            Advanced
-                          </option>
-
-                          <option value="enterprise">
-                            Enterprise
-                          </option>
-
-                        </select>
-
-                      </Field>
-
-
-                      <div>
-
-                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          Availability
-                        </p>
-
-
-                        <span className="text-[10px] font-bold text-slate-600">
-
-                          {tool.enabled
-                            ? 'Enabled'
-                            : 'Disabled'}
-
-                        </span>
-
-                      </div>
-
-
-                      <div className="flex justify-end">
-
-                        <Toggle
-
-                          checked={
-                            tool.enabled
-                          }
-
-                          onChange={
-                            value => {
-
-                              updateTool(
-                                tool.id,
-                                {
-
-                                  enabled:
-                                    value,
-
-                                  status:
-                                    value
-                                      ? 'connected'
-                                      : 'disabled',
-
-                                }
-                              );
-
-                            }
-                          }
-
-                        />
-
-                      </div>
-
-                    </div>
-
-                  )
-                )}
-
-              </div>
-
-            </SettingsPanel>
+            <ModuleSettings />
 
           )}
 
@@ -1681,968 +1080,1470 @@ export default function GrowthSettings() {
           {activeTab ===
             'Integrations' && (
 
-            <SettingsPanel
-              title="Integrations"
-              description="Manage external platforms and Growth OS data connections."
-            >
-
-              <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-
-                {settings.integrations.map(
-                  integration => (
-
-                    <div
-                      key={
-                        integration.id
-                      }
-
-                      className="rounded-lg border border-slate-200 p-3"
-                    >
-
-                      <div className="flex items-start justify-between gap-2.5">
-
-                        <div>
-
-                          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-
-                            <PlugZap
-                              size={16}
-                            />
-
-                          </div>
-
-
-                          <h3 className="mt-2.5 text-[11px] font-semibold text-slate-950">
-                            {integration.name}
-                          </h3>
-
-
-                          <p className="mt-1 text-[10px] text-slate-500">
-                            {integration.account}
-                          </p>
-
-                        </div>
-
-
-                        <StatusBadge
-                          status={
-                            integration.status
-                          }
-                        />
-
-                      </div>
-
-
-                      <div className="mt-2.5 border-t border-slate-100 pt-4">
-
-                        <div className="flex items-center justify-between">
-
-                          <span className="text-[10px] font-bold uppercase text-slate-400">
-                            Last Sync
-                          </span>
-
-
-                          <span className="text-[10px] font-semibold text-slate-700">
-                            {integration.lastSync}
-                          </span>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                  )
-                )}
-
-              </div>
-
-            </SettingsPanel>
+            <IntegrationSettings />
 
           )}
 
 
           {/* =================================================
-              BUSINESS RULES
-          ================================================= */}
-
-          {activeTab ===
-            'Business Rules' && (
-
-            <div className="space-y-3">
-
-
-              {/* META */}
-
-              <SettingsPanel
-                title="Meta OS Rules"
-                description="Default decision thresholds used by Meta intelligence."
-              >
-
-                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5">
-
-                  <NumberField
-
-                    label="Target ROAS"
-
-                    value={
-                      settings.businessRules.meta.targetRoas
-                    }
-
-                    onChange={
-                      value =>
-                        updateMetaRule(
-                          'targetRoas',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Target CPA"
-
-                    value={
-                      settings.businessRules.meta.targetCpa
-                    }
-
-                    onChange={
-                      value =>
-                        updateMetaRule(
-                          'targetCpa',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Min Spend"
-
-                    value={
-                      settings.businessRules.meta.minSpend
-                    }
-
-                    onChange={
-                      value =>
-                        updateMetaRule(
-                          'minSpend',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Min Purchases"
-
-                    value={
-                      settings.businessRules.meta.minPurchases
-                    }
-
-                    onChange={
-                      value =>
-                        updateMetaRule(
-                          'minPurchases',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Scale %"
-
-                    value={
-                      settings.businessRules.meta.scalePct
-                    }
-
-                    onChange={
-                      value =>
-                        updateMetaRule(
-                          'scalePct',
-                          value
-                        )
-                    }
-
-                  />
-
-                </div>
-
-              </SettingsPanel>
-
-
-              {/* GOOGLE */}
-
-              <SettingsPanel
-                title="Google OS Rules"
-                description="Default search and Shopping efficiency thresholds."
-              >
-
-                <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-
-                  <NumberField
-
-                    label="Target ROAS"
-
-                    value={
-                      settings.businessRules.google.targetRoas
-                    }
-
-                    onChange={
-                      value =>
-                        updateGoogleRule(
-                          'targetRoas',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Max CPA"
-
-                    value={
-                      settings.businessRules.google.maxCpa
-                    }
-
-                    onChange={
-                      value =>
-                        updateGoogleRule(
-                          'maxCpa',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Minimum Clicks"
-
-                    value={
-                      settings.businessRules.google.minClicks
-                    }
-
-                    onChange={
-                      value =>
-                        updateGoogleRule(
-                          'minClicks',
-                          value
-                        )
-                    }
-
-                  />
-
-
-                  <NumberField
-
-                    label="Waste Limit"
-
-                    value={
-                      settings.businessRules.google.wasteLimit
-                    }
-
-                    onChange={
-                      value =>
-                        updateGoogleRule(
-                          'wasteLimit',
-                          value
-                        )
-                    }
-
-                  />
-
-                </div>
-
-              </SettingsPanel>
-
-
-              {/* ATTRIBUTION */}
-
-              <SettingsPanel
-                title="Attribution Rules"
-                description="Global defaults for deterministic attribution and journey analysis."
-              >
-
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-
-
-                  <Field
-                    label="Default Attribution Model"
-                  >
-
-                    <select
-
-                      value={
-                        settings.businessRules.attribution.defaultModel
-                      }
-
-                      onChange={
-                        event => {
-
-                          const value =
-                            event.target.value;
-
-
-                          setSettings(
-                            previous => ({
-
-                              ...previous,
-
-                              businessRules: {
-
-                                ...previous.businessRules,
-
-                                attribution: {
-
-                                  ...previous.businessRules.attribution,
-
-                                  defaultModel:
-                                    value,
-
-                                },
-
-                              },
-
-                            })
-                          );
-
-                        }
-                      }
-
-                      className={
-                        inputClass
-                      }
-
-                    >
-
-                      <option value="FIRST_TOUCH">
-                        First Touch
-                      </option>
-
-                      <option value="LAST_TOUCH">
-                        Last Touch
-                      </option>
-
-                      <option value="LAST_NON_DIRECT">
-                        Last Non Direct
-                      </option>
-
-                      <option value="LINEAR">
-                        Linear
-                      </option>
-
-                      <option value="POSITION_40_20_40">
-                        Position 40/20/40
-                      </option>
-
-                      <option value="TIME_DECAY_7D">
-                        Time Decay 7D
-                      </option>
-
-                    </select>
-
-                  </Field>
-
-
-                  <NumberField
-
-                    label="Session Window Minutes"
-
-                    value={
-                      settings.businessRules.attribution.sessionWindowMinutes
-                    }
-
-                    onChange={
-                      value =>
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            businessRules: {
-
-                              ...previous.businessRules,
-
-                              attribution: {
-
-                                ...previous.businessRules.attribution,
-
-                                sessionWindowMinutes:
-                                  value,
-
-                              },
-
-                            },
-
-                          })
-                        )
-                    }
-
-                  />
-
-
-                  <BooleanSetting
-
-                    title="Deterministic Attribution Only"
-
-                    description="Do not use fuzzy identity matching."
-
-                    checked={
-                      settings.businessRules.attribution.deterministicOnly
-                    }
-
-                    onChange={
-                      value =>
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            businessRules: {
-
-                              ...previous.businessRules,
-
-                              attribution: {
-
-                                ...previous.businessRules.attribution,
-
-                                deterministicOnly:
-                                  value,
-
-                              },
-
-                            },
-
-                          })
-                        )
-                    }
-
-                  />
-
-
-                  <BooleanSetting
-
-                    title="Include Direct"
-
-                    description="Keep Direct as a visible journey channel."
-
-                    checked={
-                      settings.businessRules.attribution.includeDirect
-                    }
-
-                    onChange={
-                      value =>
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            businessRules: {
-
-                              ...previous.businessRules,
-
-                              attribution: {
-
-                                ...previous.businessRules.attribution,
-
-                                includeDirect:
-                                  value,
-
-                              },
-
-                            },
-
-                          })
-                        )
-                    }
-
-                  />
-
-                </div>
-
-              </SettingsPanel>
-
-            </div>
-
-          )}
-
-
-          {/* =================================================
-              DATA & SYNC
-          ================================================= */}
-
-          {activeTab ===
-            'Data & Sync' && (
-
-            <SettingsPanel
-              title="Data & Sync"
-              description="Operational visibility into Growth OS data pipelines."
-            >
-
-              <div className="space-y-3">
-
-                <SyncRow
-                  name="Shopify Orders"
-                  mode="Realtime + Incremental"
-                  schedule="Continuous"
-                  status="Healthy"
-                />
-
-
-                <SyncRow
-                  name="Meta Ads"
-                  mode="Scheduled Import"
-                  schedule="Daily"
-                  status="Healthy"
-                />
-
-
-                <SyncRow
-                  name="Google Ads"
-                  mode="Scheduled Import"
-                  schedule="Daily"
-                  status="Healthy"
-                />
-
-
-                <SyncRow
-                  name="Attribution Pixel"
-                  mode="Realtime"
-                  schedule="Continuous"
-                  status="Healthy"
-                />
-
-
-                <SyncRow
-                  name="Attribution Master Refresh"
-                  mode="BigQuery Procedure"
-                  schedule="Daily"
-                  status="Review"
-                />
-
-              </div>
-
-
-              <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
-
-                <div className="flex gap-3">
-
-                  <Database
-                    size={18}
-                    className="mt-0.5 text-slate-500"
-                  />
-
-
-                  <div>
-
-                    <p className="text-[11px] font-semibold text-slate-900">
-                      V2: live scheduler control
-                    </p>
-
-
-                    <p className="mt-1 text-[10px] leading-5 text-slate-500">
-                      This screen will later read Cloud Scheduler,
-                      BigQuery refresh history and Cloud Run health
-                      directly instead of static configuration.
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </SettingsPanel>
-
-          )}
-
-
-          {/* =================================================
-              USERS & ACCESS
+              USERS
           ================================================= */}
 
           {activeTab ===
             'Users & Access' && (
 
-            <SettingsPanel
-              title="Users & Access"
-              description="Role-based access control for Growth OS."
-            >
-
-              <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
-
-                <RoleCard
-                  title="Owner"
-                  description="Full platform, billing and configuration access."
-                  permissions="All tools"
-                />
-
-
-                <RoleCard
-                  title="Admin"
-                  description="Manage tools, data and business settings."
-                  permissions="All tools except billing"
-                />
-
-
-                <RoleCard
-                  title="Viewer"
-                  description="Read-only reporting and intelligence."
-                  permissions="Configured modules"
-                />
-
-              </div>
-
-
-              <div className="mt-3 rounded-lg bg-slate-50 p-3">
-
-                <div className="flex gap-3">
-
-                  <ShieldCheck
-                    size={18}
-                    className="text-violet-600"
-                  />
-
-
-                  <div>
-
-                    <p className="text-[11px] font-semibold">
-                      Authentication integration comes next
-                    </p>
-
-
-                    <p className="mt-1 text-[10px] leading-5 text-slate-500">
-                      User roles will be linked to the Shopify-installed
-                      entry path and public Growth OS authentication.
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </SettingsPanel>
+            <UserAccessSettings />
 
           )}
 
 
           {/* =================================================
-              PLANS & USAGE
+              PERSONAL PREFERENCES
           ================================================= */}
 
           {activeTab ===
-            'Plans & Usage' && (
+            'My Preferences' && (
 
-            <SettingsPanel
-              title="Plans & Usage"
-              description="Configure Growth OS commercial plans and tool entitlements."
-            >
+            <PreferenceSettings
 
-              <div className="mb-3 grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              sidebarMode={
+                sidebarMode
+              }
 
+              setSidebarMode={
+                setSidebarMode
+              }
 
-                <Field
-                  label="Current Plan"
-                >
+              preferences={
+                preferences
+              }
 
-                  <select
+              setPreferences={
+                setPreferences
+              }
 
-                    value={
-                      settings.plan.currentPlan
-                    }
+              saved={
+                saved
+              }
 
-                    onChange={
-                      event => {
+              savePreferences={
+                savePreferences
+              }
 
-                        const nextPlan =
-                          parsePlan(
-                            event.target.value
-                          );
+              resetPreferences={
+                resetPreferences
+              }
 
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            plan: {
-
-                              ...previous.plan,
-
-                              currentPlan:
-                                nextPlan,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  >
-
-                    <option value="starter">
-                      Starter
-                    </option>
-
-                    <option value="pro">
-                      Pro
-                    </option>
-
-                    <option value="advanced">
-                      Advanced
-                    </option>
-
-                    <option value="enterprise">
-                      Enterprise
-                    </option>
-
-                  </select>
-
-                </Field>
-
-
-                <Field
-                  label="Billing Cycle"
-                >
-
-                  <select
-
-                    value={
-                      settings.plan.billingCycle
-                    }
-
-                    onChange={
-                      event => {
-
-                        const nextBillingCycle =
-                          parseBillingCycle(
-                            event.target.value
-                          );
-
-
-                        setSettings(
-                          previous => ({
-
-                            ...previous,
-
-                            plan: {
-
-                              ...previous.plan,
-
-                              billingCycle:
-                                nextBillingCycle,
-
-                            },
-
-                          })
-                        );
-
-                      }
-                    }
-
-                    className={
-                      inputClass
-                    }
-
-                  >
-
-                    <option value="monthly">
-                      Monthly
-                    </option>
-
-                    <option value="annual">
-                      Annual
-                    </option>
-
-                  </select>
-
-                </Field>
-
-              </div>
-
-
-              {/* PLAN ENTITLEMENT TABLE */}
-
-              <div className="overflow-hidden rounded-lg border border-slate-200">
-
-                <div className="overflow-x-auto">
-
-                  <table className="w-full min-w-[760px]">
-
-                    <thead>
-
-                      <tr className="bg-slate-50">
-
-                        <th className={tableHead}>
-                          Tool
-                        </th>
-
-                        <th className={tableHead}>
-                          Required Plan
-                        </th>
-
-                        <th className={tableHead}>
-                          Enabled
-                        </th>
-
-                        <th className={tableHead}>
-                          Access
-                        </th>
-
-                      </tr>
-
-                    </thead>
-
-
-                    <tbody>
-
-                      {settings.tools.map(
-                        tool => {
-
-                          const allowed =
-                            hasPlanAccess(
-                              settings.plan.currentPlan,
-                              tool.requiredPlan
-                            );
-
-
-                          return (
-
-                            <tr
-                              key={
-                                tool.id
-                              }
-
-                              className="border-t border-slate-100"
-                            >
-
-                              <td className={tableCell}>
-
-                                <strong className="text-slate-900">
-                                  {tool.name}
-                                </strong>
-
-                              </td>
-
-
-                              <td className={tableCell}>
-
-                                {prettyPlan(
-                                  tool.requiredPlan
-                                )}
-
-                              </td>
-
-
-                              <td className={tableCell}>
-
-                                {tool.enabled
-                                  ? 'Yes'
-                                  : 'No'}
-
-                              </td>
-
-
-                              <td className={tableCell}>
-
-                                <span
-                                  className={`
-                                    inline-flex
-                                    rounded-full
-                                    px-2.5
-                                    py-1
-                                    text-[10px]
-                                    font-semibold
-
-                                    ${
-                                      allowed
-
-                                        ? 'bg-emerald-50 text-emerald-700'
-
-                                        : 'bg-amber-50 text-amber-700'
-                                    }
-                                  `}
-                                >
-
-                                  {allowed
-                                    ? 'Included'
-                                    : 'Upgrade required'}
-
-                                </span>
-
-                              </td>
-
-                            </tr>
-
-                          );
-
-                        }
-                      )}
-
-                    </tbody>
-
-                  </table>
-
-                </div>
-
-              </div>
-
-
-              {/* USAGE PLACEHOLDERS */}
-
-              <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-4">
-
-                <UsageCard
-                  label="Orders"
-                  value="Not connected"
-                />
-
-
-                <UsageCard
-                  label="Tracked Visitors"
-                  value="Not connected"
-                />
-
-
-                <UsageCard
-                  label="AI Requests"
-                  value="Not connected"
-                />
-
-
-                <UsageCard
-                  label="Users"
-                  value="Not connected"
-                />
-
-              </div>
-
-            </SettingsPanel>
+            />
 
           )}
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// WORKSPACE
+//
+// REAL SERVER DATA
+//
+// Source:
+//
+// signed session
+//      ↓
+// /api/auth/me
+//      ↓
+// growthos_control workspaces / brands
+// ============================================================
+
+function WorkspaceSettings({
+
+  authContext,
+
+  loading,
+
+  error,
+
+  reload,
+
+}: {
+
+  authContext:
+    AuthMeResponse |
+    null;
+
+  loading:
+    boolean;
+
+  error:
+    string |
+    null;
+
+  reload:
+    () => void;
+
+}) {
+
+
+  const context =
+    authContext?.activeContext;
+
+
+  const user =
+    authContext?.user;
+
+
+  const auth =
+    authContext?.auth;
+
+
+  if (
+    loading
+  ) {
+
+    return (
+
+      <div className="space-y-3">
+
+        <SectionHeader
+
+          icon={
+            Settings2
+          }
+
+          title="Workspace"
+
+          description="Business and workspace information associated with your current Growth OS brand."
+
+        />
+
+
+        <section className="gos-panel !p-4">
+
+          <p className="text-[10px] text-slate-500">
+            Loading authenticated workspace...
+          </p>
+
+        </section>
+
+      </div>
+
+    );
+
+  }
+
+
+  if (
+    error
+    ||
+    !context
+  ) {
+
+    return (
+
+      <div className="space-y-3">
+
+        <SectionHeader
+
+          icon={
+            Settings2
+          }
+
+          title="Workspace"
+
+          description="Business and workspace information associated with your current Growth OS brand."
+
+        />
+
+
+        <section
+          className="
+            rounded-[10px]
+
+            border
+            border-red-200
+
+            bg-red-50
+
+            p-3
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              justify-between
+              gap-3
+            "
+          >
+
+            <div
+              className="
+                flex
+                items-start
+                gap-2
+              "
+            >
+
+              <AlertCircle
+                size={14}
+                className="
+                  mt-0.5
+
+                  text-red-600
+                "
+              />
+
+
+              <div>
+
+                <p
+                  className="
+                    text-[10px]
+                    font-semibold
+
+                    text-red-800
+                  "
+                >
+                  Unable to load workspace
+                </p>
+
+
+                <p
+                  className="
+                    mt-0.5
+
+                    text-[9px]
+
+                    text-red-700
+                  "
+                >
+                  {error ||
+                    'Authenticated workspace context is unavailable.'}
+                </p>
+
+              </div>
+
+            </div>
+
+
+            <button
+
+              type="button"
+
+              onClick={
+                reload
+              }
+
+              className="
+                h-7
+                shrink-0
+
+                rounded-[7px]
+
+                border
+                border-red-200
+
+                bg-white
+
+                px-2.5
+
+                text-[9px]
+                font-semibold
+
+                text-red-700
+              "
+            >
+              Retry
+            </button>
+
+          </div>
+
+        </section>
+
+      </div>
+
+    );
+
+  }
+
+
+  return (
+
+    <div className="space-y-3">
+
+
+      <SectionHeader
+
+        icon={
+          Settings2
+        }
+
+        title="Workspace"
+
+        description="Business and workspace information associated with your current Growth OS brand."
+
+      />
+
+
+      {/* =====================================================
+          IDENTITY
+      ===================================================== */}
+
+      <section className="gos-panel !p-3.5">
+
+        <h3 className="gos-section-title">
+          Workspace Identity
+        </h3>
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+          "
+        >
+
+          <ServerValue
+
+            label="Workspace Name"
+
+            value={
+              context.workspaceName
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="Brand"
+
+            value={
+              context.brandName
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="Workspace ID"
+
+            value={
+              context.workspaceId
+            }
+
+            mono
+
+          />
+
+
+          <ServerValue
+
+            label="Brand ID"
+
+            value={
+              context.brandId
+            }
+
+            mono
+
+          />
+
+
+          <ServerValue
+
+            label="Workspace Slug"
+
+            value={
+              context.workspaceSlug
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="Brand Slug"
+
+            value={
+              context.brandSlug
+            }
+
+          />
+
+        </div>
+
+      </section>
+
+
+      {/* =====================================================
+          LOCALIZATION
+      ===================================================== */}
+
+      <section className="gos-panel !p-3.5">
+
+        <h3 className="gos-section-title">
+          Business Configuration
+        </h3>
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+          "
+        >
+
+          <ServerValue
+
+            label="Currency"
+
+            value={
+              context.currency
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="Timezone"
+
+            value={
+              context.timezone
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="Workspace Status"
+
+            value="Active"
+
+            status="green"
+
+          />
+
+
+          <ServerValue
+
+            label="Your Role"
+
+            value={
+              formatRole(
+                context.role
+              )
+            }
+
+          />
+
+        </div>
+
+      </section>
+
+
+      {/* =====================================================
+          CURRENT USER
+      ===================================================== */}
+
+      <section className="gos-panel !p-3.5">
+
+        <h3 className="gos-section-title">
+          Current User
+        </h3>
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+          "
+        >
+
+          <ServerValue
+
+            label="Email"
+
+            value={
+              user?.email
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="Name"
+
+            value={
+              user?.fullName
+            }
+
+          />
+
+
+          <ServerValue
+
+            label="User ID"
+
+            value={
+              user?.userId
+            }
+
+            mono
+
+          />
+
+
+          <ServerValue
+
+            label="Authentication"
+
+            value={
+              formatAuthMethod(
+                auth?.method
+              )
+            }
+
+          />
+
+        </div>
+
+
+        <ServerNotice
+          text="Workspace identity is read from the authenticated Growth OS session and server-side control plane. It cannot be changed through browser storage."
+        />
+
+      </section>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// PLAN + BILLING
+//
+// NEXT SERVER CONNECTION.
+// ============================================================
+
+function PlanBillingSettings() {
+
+  return (
+
+    <div className="space-y-3">
+
+      <SectionHeader
+
+        icon={
+          WalletCards
+        }
+
+        title="Plan & Billing"
+
+        description="Review your current Growth OS plan, capacity, usage and available upgrades."
+
+      />
+
+
+      <section
+        className="
+          grid
+          grid-cols-2
+          gap-2
+
+          xl:grid-cols-4
+        "
+      >
+
+        <ServerMetric
+          label="Current Plan"
+        />
+
+        <ServerMetric
+          label="Monthly Allowance"
+        />
+
+        <ServerMetric
+          label="Current Usage"
+        />
+
+        <ServerMetric
+          label="User Allowance"
+        />
+
+      </section>
+
+
+      <section className="gos-panel !p-3.5">
+
+        <div
+          className="
+            flex
+            flex-col
+            gap-3
+
+            sm:flex-row
+            sm:items-center
+            sm:justify-between
+          "
+        >
+
+          <div>
+
+            <h3 className="gos-section-title">
+              Subscription
+            </h3>
+
+
+            <p
+              className="
+                mt-0.5
+
+                text-[9px]
+
+                text-slate-500
+              "
+            >
+              Billing cycle, renewal, invoices and commercial usage will appear here.
+            </p>
+
+          </div>
+
+
+          <button
+
+            type="button"
+
+            disabled
+
+            className="
+              h-8
+
+              rounded-[8px]
+
+              bg-slate-100
+
+              px-3
+
+              text-[9px]
+              font-semibold
+
+              text-slate-400
+            "
+          >
+            Compare Plans
+          </button>
+
+        </div>
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+          "
+        >
+
+          <ServerValue
+            label="Billing Cycle"
+            value={null}
+          />
+
+          <ServerValue
+            label="Next Renewal"
+            value={null}
+          />
+
+          <ServerValue
+            label="Current Period"
+            value={null}
+          />
+
+          <ServerValue
+            label="Usage Reset"
+            value={null}
+          />
+
+        </div>
+
+
+        <ServerNotice
+          text="Plan and usage will be read from the brand subscription and usage control plane. Customers can initiate an upgrade without directly modifying entitlement."
+        />
+
+      </section>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// MODULES
+// ============================================================
+
+function ModuleSettings() {
+
+  return (
+
+    <div className="space-y-3">
+
+      <SectionHeader
+
+        icon={
+          Boxes
+        }
+
+        title="Modules"
+
+        description="See which Growth OS capabilities are included in your current plan."
+
+      />
+
+
+      <section className="gos-panel !p-0">
+
+        <div
+          className="
+            border-b
+            border-slate-200
+
+            px-3
+            py-2.5
+          "
+        >
+
+          <h3 className="gos-section-title">
+            Module Access
+          </h3>
+
+
+          <p
+            className="
+              mt-0.5
+
+              text-[9px]
+
+              text-slate-500
+            "
+          >
+            Plan entitlement and brand-specific module access will be shown here.
+          </p>
+
+        </div>
+
+
+        <EmptyServerState
+
+          icon={
+            Boxes
+          }
+
+          title="Module entitlement is server controlled"
+
+          description="Available, enabled and upgrade-eligible modules will be loaded from the Growth OS control plane."
+
+        />
+
+      </section>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// INTEGRATIONS
+// ============================================================
+
+function IntegrationSettings() {
+
+  return (
+
+    <div className="space-y-3">
+
+      <SectionHeader
+
+        icon={
+          Plug
+        }
+
+        title="Integrations"
+
+        description="Review the platforms connected to this Growth OS workspace."
+
+      />
+
+
+      <section className="gos-panel !p-0">
+
+        <div
+          className="
+            border-b
+            border-slate-200
+
+            px-3
+            py-2.5
+          "
+        >
+
+          <h3 className="gos-section-title">
+            Connected Sources
+          </h3>
+
+
+          <p
+            className="
+              mt-0.5
+
+              text-[9px]
+
+              text-slate-500
+            "
+          >
+            Shopify, Meta, Google and other source connections will appear here.
+          </p>
+
+        </div>
+
+
+        <EmptyServerState
+
+          icon={
+            Plug
+          }
+
+          title="Integration data will come from the server"
+
+          description="Connection status, account identity and data readiness will be read from the shared integration control plane."
+
+        />
+
+      </section>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// USERS
+// ============================================================
+
+function UserAccessSettings() {
+
+  return (
+
+    <div className="space-y-3">
+
+      <SectionHeader
+
+        icon={
+          Users
+        }
+
+        title="Users & Access"
+
+        description="Review people who can access the current brand and their membership roles."
+
+      />
+
+
+      <section className="gos-panel !p-0">
+
+        <div
+          className="
+            border-b
+            border-slate-200
+
+            px-3
+            py-2.5
+          "
+        >
+
+          <h3 className="gos-section-title">
+            Workspace Users
+          </h3>
+
+
+          <p
+            className="
+              mt-0.5
+
+              text-[9px]
+
+              text-slate-500
+            "
+          >
+            Owner, Admin, Analyst and Viewer memberships will be displayed here.
+          </p>
+
+        </div>
+
+
+        <EmptyServerState
+
+          icon={
+            Users
+          }
+
+          title="User access is centrally managed"
+
+          description="Memberships will be loaded from growthos_control.users and brand_memberships."
+
+        />
+
+      </section>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// PERSONAL PREFERENCES
+// ============================================================
+
+function PreferenceSettings({
+
+  sidebarMode,
+
+  setSidebarMode,
+
+  preferences,
+
+  setPreferences,
+
+  saved,
+
+  savePreferences,
+
+  resetPreferences,
+
+}: {
+
+  sidebarMode:
+    SidebarMode;
+
+  setSidebarMode:
+    (
+      mode:
+        SidebarMode
+    ) => void;
+
+  preferences:
+    UserPreferences;
+
+  setPreferences:
+    Dispatch<
+      SetStateAction<
+        UserPreferences
+      >
+    >;
+
+  saved:
+    boolean;
+
+  savePreferences:
+    () => void;
+
+  resetPreferences:
+    () => void;
+
+}) {
+
+  return (
+
+    <div className="space-y-3">
+
+
+      <section className="gos-panel !p-3.5">
+
+        <div
+          className="
+            flex
+            flex-col
+            gap-3
+
+            sm:flex-row
+            sm:items-center
+            sm:justify-between
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              gap-3
+            "
+          >
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                shrink-0
+                items-center
+                justify-center
+
+                rounded-[9px]
+
+                bg-violet-50
+
+                text-violet-600
+              "
+            >
+
+              <UserRound
+                size={16}
+              />
+
+            </div>
+
+
+            <div>
+
+              <h2
+                className="
+                  text-[14px]
+                  font-semibold
+
+                  text-slate-950
+                "
+              >
+                My Preferences
+              </h2>
+
+
+              <p
+                className="
+                  mt-0.5
+
+                  text-[9px]
+
+                  text-slate-500
+                "
+              >
+                Personal interface preferences that apply only to you.
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <div className="flex gap-2">
+
+            <button
+
+              type="button"
+
+              onClick={
+                resetPreferences
+              }
+
+              className="
+                inline-flex
+                h-8
+                items-center
+                gap-1.5
+
+                rounded-[8px]
+
+                border
+                border-slate-200
+
+                bg-white
+
+                px-3
+
+                text-[9px]
+                font-semibold
+
+                text-slate-600
+              "
+            >
+
+              <RotateCcw
+                size={12}
+              />
+
+              Reset
+
+            </button>
+
+
+            <button
+
+              type="button"
+
+              onClick={
+                savePreferences
+              }
+
+              className={`
+                inline-flex
+                h-8
+                items-center
+                gap-1.5
+
+                rounded-[8px]
+
+                px-3
+
+                text-[9px]
+                font-semibold
+
+                ${
+                  saved
+
+                    ? `
+                      bg-emerald-600
+                      text-white
+                    `
+
+                    : `
+                      bg-slate-950
+                      text-white
+                    `
+                }
+              `}
+            >
+
+              {saved ? (
+
+                <>
+                  <CheckCircle2
+                    size={12}
+                  />
+
+                  Saved
+                </>
+
+              ) : (
+
+                <>
+                  <Save
+                    size={12}
+                  />
+
+                  Save
+                </>
+
+              )}
+
+            </button>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <section className="gos-panel !p-3.5">
+
+        <SectionHeading
+
+          icon={
+            SlidersHorizontal
+          }
+
+          title="Interface"
+
+          description="Choose how the Growth OS workspace behaves for you."
+
+        />
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-3
+
+            lg:grid-cols-2
+          "
+        >
+
+          <PreferenceRow
+
+            icon={
+              PanelLeft
+            }
+
+            title="Sidebar"
+
+            description="Choose between hover expansion or a permanently fixed sidebar."
+
+          >
+
+            <SegmentedControl
+
+              options={[
+                {
+                  value:
+                    'cursor',
+
+                  label:
+                    'Hover',
+                },
+
+                {
+                  value:
+                    'fixed',
+
+                  label:
+                    'Fixed',
+                },
+              ]}
+
+              value={
+                sidebarMode
+              }
+
+              onChange={
+                value =>
+                  setSidebarMode(
+                    value as SidebarMode
+                  )
+              }
+
+            />
+
+          </PreferenceRow>
+
+
+          <PreferenceRow
+
+            icon={
+              LayoutDashboard
+            }
+
+            title="Table Density"
+
+            description="Control how much information appears vertically in data-heavy screens."
+
+          >
+
+            <SegmentedControl
+
+              options={[
+                {
+                  value:
+                    'compact',
+
+                  label:
+                    'Compact',
+                },
+
+                {
+                  value:
+                    'comfortable',
+
+                  label:
+                    'Comfortable',
+                },
+              ]}
+
+              value={
+                preferences.tableDensity
+              }
+
+              onChange={
+                value =>
+                  setPreferences(
+                    previous => ({
+
+                      ...previous,
+
+                      tableDensity:
+                        value as TableDensity,
+
+                    })
+                  )
+              }
+
+            />
+
+          </PreferenceRow>
+
+        </div>
+
+      </section>
+
+
+      <section className="gos-panel !p-3.5">
+
+        <SectionHeading
+
+          icon={
+            CalendarDays
+          }
+
+          title="Personal Defaults"
+
+          description="Choose the initial Growth OS view you prefer."
+
+        />
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-3
+
+            md:grid-cols-2
+          "
+        >
+
+          <FormField
+            label="Default Landing Page"
+          >
+
+            <select
+
+              value={
+                preferences.defaultLandingPage
+              }
+
+              onChange={
+                event =>
+                  setPreferences(
+                    previous => ({
+
+                      ...previous,
+
+                      defaultLandingPage:
+                        event.target.value as DefaultLandingPage,
+
+                    })
+                  )
+              }
+
+              className="gos-input w-full"
+
+            >
+
+              {LANDING_PAGE_OPTIONS.map(
+                option => (
+
+                  <option
+                    key={
+                      option.value
+                    }
+                    value={
+                      option.value
+                    }
+                  >
+                    {option.label}
+                  </option>
+
+                )
+              )}
+
+            </select>
+
+          </FormField>
+
+
+          <FormField
+            label="Default Date Range"
+          >
+
+            <select
+
+              value={
+                preferences.defaultDateRange
+              }
+
+              onChange={
+                event =>
+                  setPreferences(
+                    previous => ({
+
+                      ...previous,
+
+                      defaultDateRange:
+                        event.target.value as DefaultDateRange,
+
+                    })
+                  )
+              }
+
+              className="gos-input w-full"
+
+            >
+
+              <option value="7">
+                Last 7 Days
+              </option>
+
+              <option value="14">
+                Last 14 Days
+              </option>
+
+              <option value="30">
+                Last 30 Days
+              </option>
+
+              <option value="90">
+                Last 90 Days
+              </option>
+
+            </select>
+
+          </FormField>
 
         </div>
 
@@ -2655,51 +2556,98 @@ export default function GrowthSettings() {
 }
 
 
-/* ============================================================
-   UI CONSTANTS
-============================================================ */
+// ============================================================
+// SECTION HEADER
+// ============================================================
 
-const inputClass =
-  'h-8 w-full rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100';
+function SectionHeader({
 
+  icon:
+    Icon,
 
-const tableHead =
-  'px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400';
-
-
-const tableCell =
-  'px-3 py-2 text-[10px] text-slate-600';
-
-
-/* ============================================================
-   SETTINGS PANEL
-============================================================ */
-
-function SettingsPanel({
   title,
+
   description,
-  children,
-}: any) {
+
+}: {
+
+  icon:
+    any;
+
+  title:
+    string;
+
+  description:
+    string;
+
+}) {
 
   return (
 
-    <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <section className="gos-panel !p-3.5">
 
-      <div className="mb-3">
+      <div
+        className="
+          flex
+          items-start
+          gap-3
+        "
+      >
 
-        <h2 className="text-base font-semibold tracking-[-0.025em] text-slate-950">
-          {title}
-        </h2>
+        <div
+          className="
+            flex
+            h-9
+            w-9
+            shrink-0
+            items-center
+            justify-center
+
+            rounded-[9px]
+
+            bg-violet-50
+
+            text-violet-600
+          "
+        >
+
+          <Icon
+            size={16}
+          />
+
+        </div>
 
 
-        <p className="mt-1 text-[10px] text-slate-500">
-          {description}
-        </p>
+        <div>
+
+          <h2
+            className="
+              text-[14px]
+              font-semibold
+
+              text-slate-950
+            "
+          >
+            {title}
+          </h2>
+
+
+          <p
+            className="
+              mt-0.5
+
+              text-[9px]
+              leading-4
+
+              text-slate-500
+            "
+          >
+            {description}
+          </p>
+
+        </div>
 
       </div>
-
-
-      {children}
 
     </section>
 
@@ -2708,22 +2656,743 @@ function SettingsPanel({
 }
 
 
-/* ============================================================
-   FIELD
-============================================================ */
+// ============================================================
+// SECTION HEADING
+// ============================================================
 
-function Field({
-  label,
-  children,
-}: any) {
+function SectionHeading({
+
+  icon:
+    Icon,
+
+  title,
+
+  description,
+
+}: {
+
+  icon:
+    any;
+
+  title:
+    string;
+
+  description:
+    string;
+
+}) {
 
   return (
 
-    <label>
+    <div
+      className="
+        flex
+        items-start
+        gap-2.5
+      "
+    >
 
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+      <div
+        className="
+          flex
+          h-8
+          w-8
+          shrink-0
+          items-center
+          justify-center
+
+          rounded-[8px]
+
+          bg-slate-100
+
+          text-slate-600
+        "
+      >
+
+        <Icon
+          size={14}
+        />
+
+      </div>
+
+
+      <div>
+
+        <h3
+          className="
+            text-[12px]
+            font-semibold
+
+            text-slate-900
+          "
+        >
+          {title}
+        </h3>
+
+
+        <p
+          className="
+            mt-0.5
+
+            text-[9px]
+            leading-4
+
+            text-slate-500
+          "
+        >
+          {description}
+        </p>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// SERVER VALUE
+// ============================================================
+
+function ServerValue({
+
+  label,
+
+  value,
+
+  mono =
+    false,
+
+  status,
+
+}: {
+
+  label:
+    string;
+
+  value:
+    string |
+    null |
+    undefined;
+
+  mono?:
+    boolean;
+
+  status?:
+    'green';
+
+}) {
+
+  return (
+
+    <div
+      className="
+        flex
+        min-h-[40px]
+        items-center
+        justify-between
+        gap-3
+
+        rounded-[8px]
+
+        border
+        border-slate-200
+
+        bg-slate-50
+
+        px-3
+      "
+    >
+
+      <span
+        className="
+          text-[9px]
+
+          text-slate-500
+        "
+      >
+        {label}
+      </span>
+
+
+      {status ===
+        'green' ? (
+
+        <span
+          className="
+            rounded-full
+
+            border
+            border-emerald-200
+
+            bg-emerald-50
+
+            px-2
+            py-0.5
+
+            text-[8px]
+            font-semibold
+
+            text-emerald-700
+          "
+        >
+          {value ||
+            '—'}
+        </span>
+
+      ) : (
+
+        <span
+          className={`
+            max-w-[65%]
+
+            truncate
+
+            text-right
+            text-[10px]
+            font-semibold
+
+            ${
+              value
+
+                ? 'text-slate-800'
+
+                : 'text-slate-400'
+            }
+
+            ${
+              mono
+
+                ? 'font-mono'
+
+                : ''
+            }
+          `}
+        >
+          {value ||
+            '—'}
+        </span>
+
+      )}
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// SERVER METRIC PLACEHOLDER
+// ============================================================
+
+function ServerMetric({
+
+  label,
+
+}: {
+
+  label:
+    string;
+
+}) {
+
+  return (
+
+    <div
+      className="
+        gos-card
+
+        min-h-[70px]
+
+        px-3
+        py-2.5
+      "
+    >
+
+      <p className="gos-label">
         {label}
       </p>
+
+
+      <p
+        className="
+          mt-2
+
+          text-[17px]
+          font-semibold
+
+          text-slate-400
+        "
+      >
+        —
+      </p>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// SERVER NOTICE
+// ============================================================
+
+function ServerNotice({
+
+  text,
+
+}: {
+
+  text:
+    string;
+
+}) {
+
+  return (
+
+    <div
+      className="
+        mt-3
+
+        rounded-[9px]
+
+        border
+        border-violet-200
+
+        bg-violet-50
+
+        px-3
+        py-2.5
+      "
+    >
+
+      <p
+        className="
+          text-[8px]
+          leading-4
+
+          text-violet-700
+        "
+      >
+        {text}
+      </p>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// EMPTY SERVER STATE
+// ============================================================
+
+function EmptyServerState({
+
+  icon:
+    Icon,
+
+  title,
+
+  description,
+
+}: {
+
+  icon:
+    any;
+
+  title:
+    string;
+
+  description:
+    string;
+
+}) {
+
+  return (
+
+    <div
+      className="
+        flex
+        min-h-[180px]
+        items-center
+        justify-center
+
+        px-4
+        py-8
+      "
+    >
+
+      <div
+        className="
+          max-w-[430px]
+
+          text-center
+        "
+      >
+
+        <div
+          className="
+            mx-auto
+
+            flex
+            h-9
+            w-9
+            items-center
+            justify-center
+
+            rounded-[9px]
+
+            bg-slate-100
+
+            text-slate-500
+          "
+        >
+
+          <Icon
+            size={16}
+          />
+
+        </div>
+
+
+        <p
+          className="
+            mt-2.5
+
+            text-[11px]
+            font-semibold
+
+            text-slate-800
+          "
+        >
+          {title}
+        </p>
+
+
+        <p
+          className="
+            mx-auto
+            mt-1
+
+            max-w-[400px]
+
+            text-[9px]
+            leading-4
+
+            text-slate-500
+          "
+        >
+          {description}
+        </p>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// PREFERENCE ROW
+// ============================================================
+
+function PreferenceRow({
+
+  icon:
+    Icon,
+
+  title,
+
+  description,
+
+  children,
+
+}: {
+
+  icon:
+    any;
+
+  title:
+    string;
+
+  description:
+    string;
+
+  children:
+    ReactNode;
+
+}) {
+
+  return (
+
+    <div
+      className="
+        flex
+        min-h-[78px]
+        items-center
+        justify-between
+        gap-4
+
+        rounded-[10px]
+
+        border
+        border-slate-200
+
+        bg-slate-50
+
+        px-3
+        py-2.5
+      "
+    >
+
+      <div
+        className="
+          flex
+          min-w-0
+          items-start
+          gap-2.5
+        "
+      >
+
+        <div
+          className="
+            flex
+            h-7
+            w-7
+            shrink-0
+            items-center
+            justify-center
+
+            rounded-[7px]
+
+            bg-white
+
+            text-slate-500
+
+            shadow-sm
+          "
+        >
+
+          <Icon
+            size={13}
+          />
+
+        </div>
+
+
+        <div className="min-w-0">
+
+          <p
+            className="
+              text-[10px]
+              font-semibold
+
+              text-slate-800
+            "
+          >
+            {title}
+          </p>
+
+
+          <p
+            className="
+              mt-0.5
+
+              max-w-[430px]
+
+              text-[8px]
+              leading-4
+
+              text-slate-500
+            "
+          >
+            {description}
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <div className="shrink-0">
+
+        {children}
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// SEGMENTED CONTROL
+// ============================================================
+
+function SegmentedControl({
+
+  options,
+
+  value,
+
+  onChange,
+
+}: {
+
+  options:
+    Array<{
+      value:
+        string;
+
+      label:
+        string;
+    }>;
+
+  value:
+    string;
+
+  onChange:
+    (
+      value:
+        string
+    ) => void;
+
+}) {
+
+  return (
+
+    <div
+      className="
+        flex
+
+        rounded-[8px]
+
+        border
+        border-slate-200
+
+        bg-white
+
+        p-0.5
+      "
+    >
+
+      {options.map(
+        option => {
+
+          const active =
+            option.value ===
+            value;
+
+
+          return (
+
+            <button
+
+              key={
+                option.value
+              }
+
+              type="button"
+
+              onClick={() =>
+                onChange(
+                  option.value
+                )
+              }
+
+              className={`
+                h-7
+
+                rounded-[6px]
+
+                px-2.5
+
+                text-[9px]
+                font-semibold
+
+                transition
+
+                ${
+                  active
+
+                    ? `
+                      bg-slate-950
+                      text-white
+                    `
+
+                    : `
+                      text-slate-500
+
+                      hover:bg-slate-100
+                      hover:text-slate-800
+                    `
+                }
+              `}
+            >
+              {option.label}
+            </button>
+
+          );
+
+        }
+      )}
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// FORM FIELD
+// ============================================================
+
+function FormField({
+
+  label,
+
+  children,
+
+}: {
+
+  label:
+    string;
+
+  children:
+    ReactNode;
+
+}) {
+
+  return (
+
+    <label className="block">
+
+      <span
+        className="
+          mb-1.5
+          block
+
+          text-[9px]
+          font-semibold
+          uppercase
+          tracking-[0.05em]
+
+          text-slate-500
+        "
+      >
+        {label}
+      </span>
 
 
       {children}
@@ -2735,520 +3404,84 @@ function Field({
 }
 
 
-/* ============================================================
-   NUMBER FIELD
-============================================================ */
-
-function NumberField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (
-    value: number
-  ) => void;
-}) {
-
-  return (
-
-    <Field
-      label={
-        label
-      }
-    >
-
-      <input
-
-        type="number"
-
-        value={
-          value
-        }
-
-        onChange={
-          event => {
-
-            const nextValue =
-              Number(
-                event.target.value
-              );
-
-
-            onChange(
-              Number.isFinite(
-                nextValue
-              )
-                ? nextValue
-                : 0
-            );
-
-          }
-        }
-
-        className={
-          inputClass
-        }
-
-      />
-
-    </Field>
-
-  );
-
-}
-
-
-/* ============================================================
-   TOGGLE
-============================================================ */
-
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (
-    value: boolean
-  ) => void;
-}) {
-
-  return (
-
-    <button
-
-      type="button"
-
-      aria-pressed={
-        checked
-      }
-
-      onClick={() =>
-        onChange(
-          !checked
-        )
-      }
-
-      className={`
-        relative
-        h-6
-        w-9
-        rounded-full
-        transition
-
-        ${
-          checked
-            ? 'bg-violet-600'
-            : 'bg-slate-300'
-        }
-      `}
-    >
-
-      <span
-        className={`
-          absolute
-          top-1
-          h-4
-          w-4
-          rounded-full
-          bg-white
-          shadow
-          transition-all
-
-          ${
-            checked
-              ? 'left-6'
-              : 'left-1'
-          }
-        `}
-      />
-
-    </button>
-
-  );
-
-}
-
-
-/* ============================================================
-   STATUS BADGE
-============================================================ */
-
-function StatusBadge({
-  status,
-}: {
-  status: string;
-}) {
-
-  const connected =
-    status ===
-    'connected';
-
-
-  const disabled =
-    status ===
-    'disabled'
-    ||
-    status ===
-    'not_connected';
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-        rounded-full
-        px-2.5
-        py-1
-        text-[9px]
-        font-semibold
-        uppercase
-        tracking-wide
-
-        ${
-          connected
-
-            ? 'bg-emerald-50 text-emerald-700'
-
-            : disabled
-
-              ? 'bg-slate-100 text-slate-500'
-
-              : 'bg-amber-50 text-amber-700'
-        }
-      `}
-    >
-
-      {String(
-        status
-      ).replaceAll(
-        '_',
-        ' '
-      )}
-
-    </span>
-
-  );
-
-}
-
-
-/* ============================================================
-   BOOLEAN SETTING
-============================================================ */
-
-function BooleanSetting({
-  title,
-  description,
-  checked,
-  onChange,
-}: {
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (
-    value: boolean
-  ) => void;
-}) {
-
-  return (
-
-    <div className="flex items-center justify-between gap-2.5 rounded-xl border border-slate-200 p-4">
-
-      <div>
-
-        <p className="text-[10px] font-semibold text-slate-900">
-          {title}
-        </p>
-
-
-        <p className="mt-1 text-[10px] text-slate-500">
-          {description}
-        </p>
-
-      </div>
-
-
-      <Toggle
-        checked={
-          checked
-        }
-
-        onChange={
-          onChange
-        }
-      />
-
-    </div>
-
-  );
-
-}
-
-
-/* ============================================================
-   SYNC ROW
-============================================================ */
-
-function SyncRow({
-  name,
-  mode,
-  schedule,
-  status,
-}: {
-  name: string;
-  mode: string;
-  schedule: string;
-  status: string;
-}) {
-
-  return (
-
-    <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 px-3 py-2 md:grid-cols-[minmax(0,1fr)_180px_120px_90px] md:items-center">
-
-      <div>
-
-        <p className="text-[10px] font-semibold text-slate-900">
-          {name}
-        </p>
-
-
-        <p className="mt-1 text-[10px] text-slate-400">
-          {mode}
-        </p>
-
-      </div>
-
-
-      <span className="text-[10px] font-semibold text-slate-600">
-        {schedule}
-      </span>
-
-
-      <span className="text-[10px] font-semibold text-slate-600">
-        {status}
-      </span>
-
-
-      <button
-
-        type="button"
-
-        className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
-
-      >
-
-        <RefreshCw
-          size={11}
-        />
-
-        Run
-
-      </button>
-
-    </div>
-
-  );
-
-}
-
-
-/* ============================================================
-   ROLE CARD
-============================================================ */
-
-function RoleCard({
-  title,
-  description,
-  permissions,
-}: {
-  title: string;
-  description: string;
-  permissions: string;
-}) {
-
-  return (
-
-    <div className="rounded-lg border border-slate-200 p-3">
-
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-
-        <Users
-          size={16}
-        />
-
-      </div>
-
-
-      <h3 className="mt-2.5 text-[11px] font-semibold text-slate-900">
-        {title}
-      </h3>
-
-
-      <p className="mt-1 text-[10px] leading-5 text-slate-500">
-        {description}
-      </p>
-
-
-      <p className="mt-2.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        {permissions}
-      </p>
-
-    </div>
-
-  );
-
-}
-
-
-/* ============================================================
-   USAGE CARD
-============================================================ */
-
-function UsageCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-
-  return (
-
-    <div className="rounded-xl bg-slate-50 p-4">
-
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-        {label}
-      </p>
-
-
-      <p className="mt-2 text-[11px] font-semibold text-slate-900">
-        {value}
-      </p>
-
-    </div>
-
-  );
-
-}
-
-
-/* ============================================================
-   PARSERS
-
-   These intentionally avoid inline "as Plan" inside JSX.
-============================================================ */
-
-function parsePlan(
-  value: string
-): Plan {
-
-  if (
-    value ===
-    'starter'
-    ||
-    value ===
-    'pro'
-    ||
-    value ===
-    'advanced'
-    ||
-    value ===
-    'enterprise'
-  ) {
-
-    return value;
+// ============================================================
+// FORMAT ROLE
+// ============================================================
+
+function formatRole(
+  value:
+    string |
+    null |
+    undefined
+) {
+
+  if (!value) {
+
+    return null;
 
   }
 
 
-  return 'starter';
-
-}
-
-
-function parseBillingCycle(
-  value: string
-): BillingCycle {
-
-  if (
-    value ===
-    'annual'
-  ) {
-
-    return 'annual';
-
-  }
-
-
-  return 'monthly';
-
-}
-
-
-/* ============================================================
-   PLAN ACCESS
-============================================================ */
-
-const PLAN_ORDER:
-  Record<
-    Plan,
-    number
-  > = {
-
-  starter:
-    1,
-
-  pro:
-    2,
-
-  advanced:
-    3,
-
-  enterprise:
-    4,
-
-};
-
-
-function hasPlanAccess(
-  current: Plan,
-  required: Plan
-) {
-
-  return (
-    PLAN_ORDER[
-      current
-    ]
-    >=
-    PLAN_ORDER[
-      required
-    ]
-  );
-
-}
-
-
-/* ============================================================
-   PLAN LABEL
-============================================================ */
-
-function prettyPlan(
-  value: Plan
-) {
-
-  return (
-    value
-      .charAt(
-        0
-      )
-      .toUpperCase()
-    +
-    value.slice(
-      1
+  return value
+    .split(
+      '_'
     )
-  );
+    .map(
+      part =>
+        part
+          .charAt(
+            0
+          )
+          .toUpperCase()
+        +
+        part.slice(
+          1
+        )
+    )
+    .join(
+      ' '
+    );
 
+}
+
+
+// ============================================================
+// FORMAT AUTH METHOD
+// ============================================================
+
+function formatAuthMethod(
+  value:
+    string |
+    null |
+    undefined
+) {
+
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  if (
+    value ===
+    'password'
+  ) {
+
+    return 'Password';
+
+  }
+
+
+  if (
+    value ===
+    'shopify'
+  ) {
+
+    return 'Shopify';
+
+  }
+
+
+  return value;
 }
