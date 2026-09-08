@@ -26,6 +26,10 @@ import {
 } from '@/lib/integrations/providers/shopify-installation';
 
 import {
+  ensureShopifyOrdersWebhookSubscriptions,
+} from '@/lib/integrations/providers/shopify-webhooks';
+
+import {
   setGrowthOsSessionCookie,
 } from '@/lib/auth/session';
 
@@ -401,6 +405,44 @@ export async function GET(
 
       });
 
+  
+        // ========================================================
+    // 14. ENSURE REALTIME SHOPIFY ORDERS WEBHOOKS
+    //
+    // Shopify
+    //      ↓
+    // orders/create
+    // orders/updated
+    //      ↓
+    // one public Growth OS receiver
+    //
+    // The receiver will NOT write the webhook JSON directly.
+    //
+    // It queues the Order identity so the worker can retrieve
+    // the canonical GraphQL Order representation and feed the
+    // existing RAW / STATE warehouse writer.
+    // ========================================================
+
+    const ordersWebhookUrl =
+      new URL(
+        '/api/integrations/shopify/webhooks/orders',
+        request.nextUrl.origin
+      )
+        .toString();
+
+
+    await ensureShopifyOrdersWebhookSubscriptions({
+
+      shopDomain:
+        canonicalShop.shopDomain,
+
+      accessToken:
+        credential.accessToken,
+
+      webhookUri:
+        ordersWebhookUrl,
+
+    });
 
     // ========================================================
     // 14. CREATE GROWTH OS SHOPIFY SESSION

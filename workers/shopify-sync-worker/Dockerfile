@@ -16,10 +16,12 @@ RUN npm ci --omit=dev
 # ============================================================
 
 COPY server.js ./
+
 COPY shopify-context.js ./
 COPY shopify-auth.js ./
 COPY shopify-api.js ./
 COPY shopify-writer.js ./
+
 COPY shopify-bulk.js ./
 COPY shopify-backfill-state.js ./
 COPY shopify-bulk-loader.js ./
@@ -28,6 +30,13 @@ COPY shopify-bq-stage.js ./
 COPY shopify-bulk-warehouse.js ./
 COPY shopify-backfill-processor.js ./
 COPY shopify-backfill-supervisor.js ./
+
+# ============================================================
+# SHOPIFY INCREMENTAL ORCHESTRATION
+# ============================================================
+
+COPY shopify-incremental-state.js ./
+COPY shopify-incremental-supervisor.js ./
 
 
 # ============================================================

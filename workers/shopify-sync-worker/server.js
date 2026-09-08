@@ -7,6 +7,7 @@ import {
 import {
   fetchOrdersPage,
   fetchEarliestShopifyOrder,
+  fetchShopifyOrderById,
 } from './shopify-api.js';
 
 import {
@@ -55,6 +56,16 @@ import {
 import {
   superviseShopifyBackfills,
 } from './shopify-backfill-supervisor.js';
+
+import {
+  superviseShopifyOrdersIncremental,
+} from './shopify-incremental-supervisor.js';
+
+import {
+  claimShopifyOrdersIncrementalRun,
+  completeShopifyOrdersIncrementalRun,
+  failShopifyOrdersIncrementalRun,
+} from './shopify-incremental-state.js';
 
 
 // ============================================================
@@ -404,6 +415,7 @@ function validateShopifyMessage(
     new Set([
       'shopify.queue.test',
       'shopify.sync.requested',
+      'shopify.order.webhook',
     ]);
 
 
@@ -512,6 +524,26 @@ function validateShopifyMessage(
       ??
       null,
 
+        orderId:
+      payload.orderId
+      ??
+      null,
+
+    webhookTopic:
+      payload.webhookTopic
+      ??
+      null,
+
+    webhookId:
+      payload.webhookId
+      ??
+      null,
+
+    shopDomain:
+      payload.shopDomain
+      ??
+      null,  
+
   };
 
 
@@ -570,6 +602,72 @@ function validateShopifyMessage(
     eventType ===
       'shopify.queue.test'
   ) {
+
+    return job;
+
+  }
+
+    // ==========================================================
+  // REALTIME ORDER WEBHOOK
+  // ==========================================================
+
+  if (
+    eventType ===
+      'shopify.order.webhook'
+  ) {
+
+    job.entity =
+      'orders';
+
+
+    job.orderId =
+      requireString(
+        job.orderId,
+        'SHOPIFY_WEBHOOK_ORDER_ID_MISSING'
+      );
+
+
+    if (
+      !job.orderId.startsWith(
+        'gid://shopify/Order/'
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_WEBHOOK_ORDER_ID_INVALID'
+      );
+
+    }
+
+
+    job.webhookTopic =
+      requireString(
+        job.webhookTopic,
+        'SHOPIFY_WEBHOOK_TOPIC_MISSING'
+      );
+
+
+    const allowedWebhookTopics =
+      new Set([
+
+        'orders/create',
+        'orders/updated',
+
+      ]);
+
+
+    if (
+      !allowedWebhookTopics.has(
+        job.webhookTopic
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_WEBHOOK_TOPIC_INVALID'
+      );
+
+    }
+
 
     return job;
 
@@ -769,6 +867,9 @@ app.post(
     const startedAt =
       Date.now();
 
+    let incrementalLifecycle =
+      null;
+
 
     try {
 
@@ -839,6 +940,143 @@ app.post(
 
       }
 
+            // ======================================================
+      // REALTIME SHOPIFY ORDER WEBHOOK
+      //
+      // Webhook message contains only identity.
+      //
+      // Worker:
+      //
+      // 1. resolves Secret Manager credential
+      // 2. fetches canonical GraphQL Order
+      // 3. writes through existing canonical writer
+      //
+      // Pub/Sub duplicate delivery is safe because the writer
+      // hashes/dedupes canonical Order payloads.
+      // ======================================================
+
+      if (
+        job.eventType ===
+          'shopify.order.webhook'
+      ) {
+
+        const runtime =
+          await resolveShopifyRuntimeContext(
+            job
+          );
+
+
+        const fetched =
+          await fetchShopifyOrderById(
+
+            runtime,
+
+            job.orderId
+
+          );
+
+
+        if (
+          !fetched.order
+        ) {
+
+          throw new Error(
+            'SHOPIFY_WEBHOOK_ORDER_NOT_FOUND'
+          );
+
+        }
+
+
+        const warehouse =
+          await writeShopifyOrders({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            orders: [
+
+              fetched.order,
+
+            ],
+
+          });
+
+
+        console.log(
+          'SHOPIFY_ORDER_WEBHOOK_COMPLETED',
+          {
+
+            pubsubMessageId:
+              message.messageId
+              ??
+              null,
+
+            jobId:
+              job.jobId,
+
+            webhookId:
+              job.webhookId
+              ??
+              null,
+
+            webhookTopic:
+              job.webhookTopic,
+
+            orderId:
+              job.orderId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            orderUpdatedAt:
+              fetched
+                .order
+                .updatedAt
+              ??
+              null,
+
+            tokenRefreshed:
+              fetched.tokenRefreshed,
+
+            warehouseReceived:
+              warehouse.received,
+
+            warehouseChanged:
+              warehouse.changed,
+
+            warehouseSkipped:
+              warehouse.skipped,
+
+            warehouseLoaded:
+              warehouse.loaded,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          }
+        );
+
+
+        return res
+          .status(204)
+          .end();
+
+      }
+
 
       // ======================================================
       // CURRENT IMPLEMENTATION: ORDERS
@@ -854,6 +1092,136 @@ app.post(
         );
 
       }
+
+      // ======================================================
+// INCREMENTAL RUN CLAIM
+//
+// Supervisor creates:
+// state = dispatching
+// run   = queued
+//
+// Worker claims:
+// queued -> running
+//
+// Duplicate Pub/Sub deliveries therefore cannot
+// execute the same run twice.
+// ======================================================
+
+if (
+  job.entity ===
+    'orders'
+  &&
+  job.syncType ===
+    'incremental'
+) {
+
+  const runClaim =
+    await claimShopifyOrdersIncrementalRun({
+
+      runId:
+        job.jobId,
+
+      workspaceId:
+        job.workspaceId,
+
+      brandId:
+        job.brandId,
+
+      connectionId:
+        job.connectionId,
+
+    });
+
+
+  if (
+    !runClaim.claimed
+  ) {
+
+    console.log(
+      'SHOPIFY_INCREMENTAL_RUN_NOT_CLAIMED',
+      {
+
+        pubsubMessageId:
+          message.messageId
+          ??
+          null,
+
+        runId:
+          job.jobId,
+
+        workspaceId:
+          job.workspaceId,
+
+        brandId:
+          job.brandId,
+
+        connectionId:
+          job.connectionId,
+
+      }
+    );
+
+
+    // Duplicate/already processed message.
+    // ACK Pub/Sub.
+    return res
+      .status(204)
+      .end();
+
+  }
+
+
+  incrementalLifecycle = {
+
+    runId:
+      job.jobId,
+
+    workspaceId:
+      job.workspaceId,
+
+    brandId:
+      job.brandId,
+
+    connectionId:
+      job.connectionId,
+
+    windowEnd:
+      requireString(
+        job.window?.to,
+        'SHOPIFY_INCREMENTAL_WINDOW_END_MISSING'
+      ),
+
+  };
+
+
+  console.log(
+    'SHOPIFY_INCREMENTAL_RUN_CLAIMED',
+    {
+
+      pubsubMessageId:
+        message.messageId
+        ??
+        null,
+
+      runId:
+        job.jobId,
+
+      workspaceId:
+        job.workspaceId,
+
+      brandId:
+        job.brandId,
+
+      connectionId:
+        job.connectionId,
+
+      windowEnd:
+        incrementalLifecycle.windowEnd,
+
+    }
+  );
+
+}
 
 
       // ======================================================
@@ -1068,8 +1436,24 @@ app.post(
       }
 
 
-      // ======================================================
-      // NORMAL / INCREMENTAL ORDERS
+            // ======================================================
+      // NORMAL / INCREMENTAL / RECONCILIATION ORDERS
+      //
+      // manual:
+      //
+      // latest 25 only
+      //
+      // incremental / reconciliation:
+      //
+      // bounded UPDATED_AT window
+      //      ↓
+      // 250 records/page
+      //      ↓
+      // cursor pagination
+      //      ↓
+      // exhaust entire window
+      //
+      // Warehouse writes are idempotent through RAW/STATE.
       // ======================================================
 
       const runtime =
@@ -1078,55 +1462,487 @@ app.post(
         );
 
 
-      const page =
-        await fetchOrdersPage(
+      const isWindowedSync =
+        job.syncType ===
+          'incremental'
+        ||
+        job.syncType ===
+          'reconciliation';
 
-          runtime,
 
+      // ======================================================
+      // WINDOW VALIDATION
+      // ======================================================
+
+      let from =
+        null;
+
+
+      let to =
+        null;
+
+
+      if (
+        isWindowedSync
+      ) {
+
+        if (
+          !job.window
+          ||
+          typeof job.window !==
+            'object'
+          ||
+          Array.isArray(
+            job.window
+          )
+        ) {
+
+          throw new Error(
+            'SHOPIFY_INCREMENTAL_WINDOW_MISSING'
+          );
+
+        }
+
+
+        from =
+          requireString(
+            job.window.from,
+            'SHOPIFY_INCREMENTAL_FROM_MISSING'
+          );
+
+
+        to =
+          requireString(
+            job.window.to,
+            'SHOPIFY_INCREMENTAL_TO_MISSING'
+          );
+
+
+        const fromTime =
+          Date.parse(
+            from
+          );
+
+
+        const toTime =
+          Date.parse(
+            to
+          );
+
+
+        if (
+          Number.isNaN(
+            fromTime
+          )
+          ||
+          Number.isNaN(
+            toTime
+          )
+        ) {
+
+          throw new Error(
+            'SHOPIFY_INCREMENTAL_WINDOW_INVALID'
+          );
+
+        }
+
+
+        if (
+          fromTime >=
+            toTime
+        ) {
+
+          throw new Error(
+            'SHOPIFY_INCREMENTAL_WINDOW_RANGE_INVALID'
+          );
+
+        }
+
+      }
+
+
+      // ======================================================
+      // PAGINATION STATE
+      // ======================================================
+
+      const pageSize =
+        isWindowedSync
+          ?
+            250
+          :
+            25;
+
+
+      const maxPages =
+        1000;
+
+
+      let cursor =
+        job.cursor
+          ?
+            String(
+              job.cursor
+            ).trim()
+          :
+            null;
+
+
+      let pageNumber =
+        0;
+
+
+      let totalFetched =
+        0;
+
+
+      let totalReceived =
+        0;
+
+
+      let totalChanged =
+        0;
+
+
+      let totalSkipped =
+        0;
+
+
+      let totalLoaded =
+        0;
+
+
+      let tokenRefreshed =
+        false;
+
+
+      let firstOrder =
+        null;
+
+
+      let lastOrder =
+        null;
+
+
+      let finalCursor =
+        cursor;
+
+
+      // ======================================================
+      // PAGE LOOP
+      //
+      // Manual:
+      // one page only.
+      //
+      // Incremental / reconciliation:
+      // continue until Shopify says hasNextPage = false.
+      // ======================================================
+
+      while (
+        true
+      ) {
+
+        pageNumber +=
+          1;
+
+
+        if (
+          pageNumber >
+            maxPages
+        ) {
+
+          throw new Error(
+            'SHOPIFY_INCREMENTAL_PAGE_LIMIT_EXCEEDED'
+          );
+
+        }
+
+
+        const page =
+          await fetchOrdersPage(
+
+            runtime,
+
+            {
+
+              first:
+                pageSize,
+
+              after:
+                cursor,
+
+              from:
+                from,
+
+              to:
+                to,
+
+              reverse:
+                isWindowedSync
+                  ?
+                    false
+                  :
+                    true,
+
+            }
+
+          );
+
+
+        if (
+          page.tokenRefreshed
+        ) {
+
+          tokenRefreshed =
+            true;
+
+        }
+
+
+        if (
+          !firstOrder
+          &&
+          page.orders.length > 0
+        ) {
+
+          firstOrder =
+            page.orders[0];
+
+        }
+
+
+        if (
+          page.orders.length > 0
+        ) {
+
+          lastOrder =
+            page.orders[
+              page.orders.length - 1
+            ];
+
+        }
+
+
+        // ====================================================
+        // WAREHOUSE WRITE
+        // ====================================================
+
+        const warehouse =
+          await writeShopifyOrders({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            orders:
+              page.orders,
+
+          });
+
+
+        totalFetched +=
+          page.orders.length;
+
+
+        totalReceived +=
+          Number(
+            warehouse.received
+            ??
+            0
+          );
+
+
+        totalChanged +=
+          Number(
+            warehouse.changed
+            ??
+            0
+          );
+
+
+        totalSkipped +=
+          Number(
+            warehouse.skipped
+            ??
+            0
+          );
+
+
+        totalLoaded +=
+          Number(
+            warehouse.loaded
+            ??
+            0
+          );
+
+
+        finalCursor =
+          page
+            .pageInfo
+            .endCursor
+          ??
+          finalCursor;
+
+
+        // ====================================================
+        // PAGE DIAGNOSTIC
+        // ====================================================
+
+        console.log(
+          'SHOPIFY_ORDERS_INCREMENTAL_PAGE',
           {
 
-            first:
-              25,
+            pubsubMessageId:
+              message.messageId
+              ??
+              null,
+
+            jobId:
+              job.jobId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            syncType:
+              job.syncType,
+
+            pageNumber,
+
+            pageSize,
+
+            from,
+
+            to,
+
+            recordsFetched:
+              page.orders.length,
+
+            hasNextPage:
+              page.pageInfo.hasNextPage,
+
+            cursorPresent:
+              Boolean(
+                page.pageInfo.endCursor
+              ),
+
+            firstUpdatedAt:
+              page.orders[0]
+                ?.updatedAt
+              ??
+              null,
+
+            lastUpdatedAt:
+              page.orders[
+                page.orders.length - 1
+              ]
+                ?.updatedAt
+              ??
+              null,
+
+            warehouseReceived:
+              warehouse.received,
+
+            warehouseChanged:
+              warehouse.changed,
+
+            warehouseSkipped:
+              warehouse.skipped,
+
+            warehouseLoaded:
+              warehouse.loaded,
 
           }
-
         );
 
 
-      const warehouse =
-        await writeShopifyOrders({
+        // ====================================================
+        // MANUAL MODE
+        //
+        // Preserve current behavior:
+        // latest page only.
+        // ====================================================
 
-          workspaceId:
-            job.workspaceId,
+        if (
+          !isWindowedSync
+        ) {
 
-          brandId:
-            job.brandId,
+          break;
 
-          integrationAccountId:
-            job.integrationAccountId,
-
-          orders:
-            page.orders,
-
-        });
+        }
 
 
-      const firstOrder =
-        page.orders[0]
-        ??
-        null;
+        // ====================================================
+        // WINDOW EXHAUSTED
+        // ====================================================
+
+        if (
+          !page
+            .pageInfo
+            .hasNextPage
+        ) {
+
+          break;
+
+        }
 
 
-      const lastOrder =
-        page.orders[
-          page.orders.length - 1
-        ]
-        ??
-        null;
+        // ====================================================
+        // CONTINUATION CURSOR REQUIRED
+        // ====================================================
 
+        const nextCursor =
+          String(
+            page
+              .pageInfo
+              .endCursor
+            ??
+            ''
+          ).trim();
+
+
+        if (!nextCursor) {
+
+          throw new Error(
+            'SHOPIFY_INCREMENTAL_CURSOR_MISSING'
+          );
+
+        }
+
+
+        if (
+          nextCursor ===
+            cursor
+        ) {
+
+          throw new Error(
+            'SHOPIFY_INCREMENTAL_CURSOR_NOT_ADVANCING'
+          );
+
+        }
+
+
+        cursor =
+          nextCursor;
+
+      }
+
+
+      // ======================================================
+      // COMPLETE SYNC SUMMARY
+      // ======================================================
 
       console.log(
-        'SHOPIFY_ORDERS_PAGE_FETCHED',
+        'SHOPIFY_ORDERS_SYNC_COMPLETED',
         {
 
           pubsubMessageId:
@@ -1143,19 +1959,24 @@ app.post(
           brandId:
             job.brandId,
 
+          integrationAccountId:
+            job.integrationAccountId,
+
           entity:
             'orders',
 
+          syncType:
+            job.syncType,
+
+          from,
+
+          to,
+
+          pagesProcessed:
+            pageNumber,
+
           recordsFetched:
-            page.orders.length,
-
-          hasNextPage:
-            page.pageInfo.hasNextPage,
-
-          cursorPresent:
-            Boolean(
-              page.pageInfo.endCursor
-            ),
+            totalFetched,
 
           firstOrderId:
             firstOrder?.id
@@ -1177,23 +1998,24 @@ app.post(
             ??
             null,
 
-          tokenRefreshed:
-            page.tokenRefreshed,
+          finalCursorPresent:
+            Boolean(
+              finalCursor
+            ),
+
+          tokenRefreshed,
 
           warehouseReceived:
-            warehouse.received,
+            totalReceived,
 
           warehouseChanged:
-            warehouse.changed,
+            totalChanged,
 
           warehouseSkipped:
-            warehouse.skipped,
+            totalSkipped,
 
           warehouseLoaded:
-            warehouse.loaded,
-
-          warehouseBatchId:
-            warehouse.batchId,
+            totalLoaded,
 
           durationMs:
             Date.now()
@@ -1202,6 +2024,66 @@ app.post(
 
         }
       );
+
+      // ======================================================
+// COMPLETE INCREMENTAL RUN
+//
+// Persistent watermark = successful window.to
+//
+// We deliberately DO NOT save:
+// - Shopify pagination cursor
+// - last order.updatedAt
+// ======================================================
+
+if (
+  incrementalLifecycle
+) {
+
+  await completeShopifyOrdersIncrementalRun({
+
+    ...incrementalLifecycle,
+
+    recordsFetched:
+      totalFetched,
+
+    recordsLoaded:
+      totalLoaded,
+
+    recordsRejected:
+      0,
+
+  });
+
+
+  console.log(
+    'SHOPIFY_INCREMENTAL_RUN_COMPLETED',
+    {
+
+      runId:
+        incrementalLifecycle.runId,
+
+      workspaceId:
+        incrementalLifecycle.workspaceId,
+
+      brandId:
+        incrementalLifecycle.brandId,
+
+      connectionId:
+        incrementalLifecycle.connectionId,
+
+      windowEnd:
+        incrementalLifecycle.windowEnd,
+
+      recordsFetched:
+        totalFetched,
+
+      recordsLoaded:
+        totalLoaded,
+
+    }
+  );
+
+}
 
 
       return res
@@ -1220,6 +2102,69 @@ app.post(
           'Unknown Shopify worker failure'
         );
 
+      if (
+  incrementalLifecycle
+) {
+
+  try {
+
+    await failShopifyOrdersIncrementalRun({
+
+      ...incrementalLifecycle,
+
+      errorMessage:
+        message,
+
+    });
+
+
+    console.error(
+      'SHOPIFY_INCREMENTAL_RUN_FAILED',
+      {
+
+        runId:
+          incrementalLifecycle.runId,
+
+        workspaceId:
+          incrementalLifecycle.workspaceId,
+
+        brandId:
+          incrementalLifecycle.brandId,
+
+        connectionId:
+          incrementalLifecycle.connectionId,
+
+        error:
+          message,
+
+      }
+    );
+
+
+  } catch (
+    stateError
+  ) {
+
+    console.error(
+      'SHOPIFY_INCREMENTAL_FAILURE_STATE_UPDATE_FAILED',
+      {
+
+        runId:
+          incrementalLifecycle.runId,
+
+        message:
+          String(
+            stateError?.message
+            ||
+            'Unknown incremental state update failure'
+          ),
+
+      }
+    );
+
+  }
+
+}
 
       console.error(
         'SHOPIFY_WORKER_MESSAGE_FAILED',
@@ -2755,6 +3700,133 @@ app.post(
 
           error:
             'SHOPIFY_BACKFILL_SUPERVISOR_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+
+// ============================================================
+// AUTOMATIC SHOPIFY ORDERS INCREMENTAL SUPERVISOR
+//
+// Intended caller:
+//
+// Google Cloud Scheduler
+//        ↓
+// OIDC authenticated POST
+//
+// No workspace / brand is supplied.
+//
+// The supervisor discovers every eligible Shopify connection
+// from the Growth OS control plane.
+// ============================================================
+
+app.post(
+  '/internal/shopify/incremental-supervise',
+
+  async (
+    _req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const result =
+        await superviseShopifyOrdersIncremental();
+
+
+      console.log(
+        'SHOPIFY_INCREMENTAL_SUPERVISOR_RESULT',
+        {
+
+          runsRecovered:
+            result.recovery
+              ?.runsRecovered
+            ??
+            0,
+
+          statesRecovered:
+            result.recovery
+              ?.statesRecovered
+            ??
+            0,
+
+          discoveredCount:
+            result.discoveredCount,
+
+          dispatchedCount:
+            result.dispatchedCount,
+
+          skippedCount:
+            result.skippedCount,
+
+          failedCount:
+            result.failedCount,
+
+          durationMs:
+            result.durationMs,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          'Shopify incremental supervisor failed'
+        );
+
+
+      console.error(
+        'SHOPIFY_INCREMENTAL_SUPERVISOR_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_INCREMENTAL_SUPERVISOR_FAILED',
 
           message,
 
