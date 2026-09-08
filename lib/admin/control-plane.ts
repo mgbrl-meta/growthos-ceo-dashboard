@@ -1796,6 +1796,169 @@ export async function listGrowthOSModules():
 
 }
 
+// ============================================================
+// LIST PLAN MODULES
+// ============================================================
+
+export async function listGrowthOSPlanModules(
+  planId: string
+) {
+
+  await ensureGrowthOSAdminControlPlane();
+
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedPlanId =
+    String(
+      planId
+      ||
+      ''
+    ).trim();
+
+
+  if (!normalizedPlanId) {
+
+    throw new Error(
+      'planId is required'
+    );
+
+  }
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT
+
+          pm.plan_id,
+
+          pm.module_id,
+
+          pm.enabled,
+
+          m.module_name,
+
+          m.description,
+
+          m.category,
+
+          m.route_key,
+
+          m.status AS module_status,
+
+          m.setup_required
+
+        FROM
+          \`${projectId}.${DATASET_ID}.plan_modules\`
+          AS pm
+
+        LEFT JOIN
+          \`${projectId}.${DATASET_ID}.modules\`
+          AS m
+
+        ON
+          m.module_id =
+          pm.module_id
+
+        WHERE
+
+          pm.plan_id =
+            @plan_id
+
+        ORDER BY
+
+          CASE m.category
+
+            WHEN 'workspace'
+              THEN 1
+
+            WHEN 'growth'
+              THEN 2
+
+            WHEN 'customers'
+              THEN 3
+
+            WHEN 'commerce'
+              THEN 4
+
+            WHEN 'data'
+              THEN 5
+
+            WHEN 'system'
+              THEN 6
+
+            ELSE 99
+
+          END,
+
+          m.module_name
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        plan_id:
+          normalizedPlanId,
+
+      },
+
+      types: {
+
+        plan_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows
+    ||
+    []
+  ) as Array<{
+
+    plan_id:
+      string;
+
+    module_id:
+      string;
+
+    enabled:
+      boolean;
+
+    module_name:
+      string | null;
+
+    description:
+      string | null;
+
+    category:
+      string | null;
+
+    route_key:
+      string | null;
+
+    module_status:
+      string | null;
+
+    setup_required:
+      boolean | null;
+
+  }>;
+
+}
+
 
 // ============================================================
 // GET BRAND SUBSCRIPTION

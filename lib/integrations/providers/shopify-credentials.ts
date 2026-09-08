@@ -766,6 +766,221 @@ export async function refreshStoredShopifyCredential(
 // - refresh_token
 // ============================================================
 
+// ============================================================
+// GET VALID STORED SHOPIFY ACCESS TOKEN
+//
+// SERVER-ONLY.
+//
+// Used by internal Shopify operations that need the Admin API
+// without starting a new OAuth flow.
+//
+// Flow:
+//
+// Secret Manager latest
+//        ↓
+// verify canonical shop identity
+//        ↓
+// refresh if expiring within 5 minutes
+//        ↓
+// read newest secret version
+//        ↓
+// return current access token SERVER-SIDE ONLY
+//
+// IMPORTANT:
+//
+// Never expose the returned accessToken through an API response
+// or log it.
+// ============================================================
+
+export async function getValidStoredShopifyAccessToken(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    secretName:
+      string;
+
+    expectedShopId:
+      string;
+
+    expectedShopDomain:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // 1. VERIFY STORED CREDENTIAL + SHOP IDENTITY
+  // ==========================================================
+
+  const verified =
+    await verifyStoredShopifyCredential({
+
+      secretName:
+        input.secretName,
+
+      expectedShopId:
+        input.expectedShopId,
+
+      expectedShopDomain:
+        input.expectedShopDomain,
+
+    });
+
+
+  // ==========================================================
+  // 2. REFRESH WHEN EXPIRING SOON
+  //
+  // Five-minute safety margin.
+  // ==========================================================
+
+  let tokenRefreshed =
+    false;
+
+
+  const expiresAt =
+    verified.accessTokenExpiresAt
+      ?
+        Date.parse(
+          verified.accessTokenExpiresAt
+        )
+      :
+        null;
+
+
+  if (
+    expiresAt !==
+      null
+    &&
+    Number.isFinite(
+      expiresAt
+    )
+    &&
+    expiresAt <=
+      Date.now()
+      +
+      5 * 60 * 1000
+  ) {
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+  }
+
+
+  // ==========================================================
+  // 3. READ CURRENT SECRET VERSION
+  // ==========================================================
+
+  let stored =
+    await readIntegrationSecret<
+      StoredShopifyCredentialV1
+    >(
+      input.secretName
+    );
+
+
+  // ==========================================================
+  // 4. DEFENCE-IN-DEPTH VALIDATION
+  // ==========================================================
+
+  if (
+    stored.schema_version !==
+      1
+    ||
+    stored.credential_type !==
+      'shopify_offline_expiring'
+    ||
+    stored.provider !==
+      'shopify'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_STORED_CREDENTIAL_INVALID'
+    );
+
+  }
+
+
+  if (
+    stored.shop_id !==
+      input.expectedShopId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_STORED_SHOP_ID_MISMATCH'
+    );
+
+  }
+
+
+  if (
+    stored
+      .shop_domain
+      .toLowerCase()
+    !==
+    input
+      .expectedShopDomain
+      .toLowerCase()
+  ) {
+
+    throw new Error(
+      'SHOPIFY_STORED_SHOP_DOMAIN_MISMATCH'
+    );
+
+  }
+
+
+  if (!stored.access_token) {
+
+    throw new Error(
+      'SHOPIFY_STORED_ACCESS_TOKEN_MISSING'
+    );
+
+  }
+
+
+  // ==========================================================
+  // 5. RETURN SERVER-SIDE CREDENTIAL
+  //
+  // Caller must never serialize/log accessToken.
+  // ==========================================================
+
+  return {
+
+    accessToken:
+      stored.access_token,
+
+    shopId:
+      stored.shop_id,
+
+    shopDomain:
+      stored.shop_domain,
+
+    tokenRefreshed,
+
+  };
+
+}
+
 export async function queryEarliestOrderWithStoredShopifyCredential(
   input: {
 
