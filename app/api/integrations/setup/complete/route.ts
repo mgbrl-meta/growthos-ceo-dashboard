@@ -13,6 +13,7 @@ import {
 } from '@/lib/integrations/store';
 
 import {
+  ensureShopifyInitialCustomersHistory,
   ensureShopifyInitialOrdersHistory,
 } from '@/lib/integrations/providers/shopify-history-bootstrap';
 
@@ -43,30 +44,39 @@ export const runtime =
 //
 // setup ready
 //      ↓
-// inspect historical Orders coverage
+// ┌───────────────────────────────┐
+// │ Orders history ensure         │
+// │ Customers history ensure      │
+// └───────────────────────────────┘
 //      ↓
-// missing history?
+// growthos_ops queued windows
 //      ↓
-// create/ensure quarterly backfill
+// Scheduler + shared Supervisor
 //      ↓
-// Scheduler + Supervisor execute asynchronously
+// one Shopify Bulk pipeline per integration account
 //
 // IMPORTANT:
 //
-// Historical bootstrap is NON-BLOCKING from the merchant's
+// Historical bootstrap is NON-FATAL from the merchant's
 // setup perspective.
 //
-// Once connector setup has successfully become READY, a
-// temporary Shopify / BigQuery bootstrap failure must not
-// force the merchant to repeat setup.
+// Once setup_status becomes ready, a temporary Shopify,
+// BigQuery, Secret Manager, Pub/Sub or bootstrap failure must
+// not force the merchant to repeat connector setup.
 //
-// Bootstrap can be safely retried because:
+// Orders and Customers are attempted independently.
 //
-// - coverage inspection is read-only
-// - existing covering runs are detected
-// - bootstrap run IDs are deterministic
-// - window IDs are deterministic
-// - BigQuery creation uses MERGE
+// Therefore:
+//
+// Orders bootstrap failure
+//      ≠
+// Customers bootstrap skipped
+//
+// Customers bootstrap failure
+//      ≠
+// Orders bootstrap failure
+//
+// Both paths are independently idempotent and may be retried.
 //
 // Provider is NOT trusted from browser input.
 // ============================================================
@@ -212,7 +222,7 @@ export async function POST(
     // 4. TENANT AUTHORIZATION
     //
     // Browser cannot complete setup for another workspace or
-    // brand simply by supplying a connectionId.
+    // brand simply by supplying another connectionId.
     // ========================================================
 
     if (
@@ -247,7 +257,8 @@ export async function POST(
     //
     // This is the authoritative connector setup transition.
     //
-    // It must succeed before provider bootstrap begins.
+    // Provider-specific ingestion bootstrap begins ONLY after
+    // this transition succeeds.
     // ========================================================
 
     await markIntegrationSetupReady({
@@ -272,19 +283,28 @@ export async function POST(
     //
     // Shopify:
     //
-    // ensure initial Orders history.
+    // Orders history
+    // Customers history
     //
-    // IMPORTANT:
-    //
-    // Failure here does NOT roll setup_status back from ready.
+    // They are intentionally isolated from each other.
     // ========================================================
 
-    let bootstrap:
+    let ordersBootstrap:
       any =
         null;
 
 
-    let bootstrapError:
+    let customersBootstrap:
+      any =
+        null;
+
+
+    let ordersBootstrapError:
+      string | null =
+        null;
+
+
+    let customersBootstrapError:
       string | null =
         null;
 
@@ -294,9 +314,13 @@ export async function POST(
         'shopify'
     ) {
 
+      // ======================================================
+      // 6A. ORDERS HISTORY
+      // ======================================================
+
       try {
 
-        bootstrap =
+        ordersBootstrap =
           await ensureShopifyInitialOrdersHistory({
 
             workspaceId:
@@ -316,7 +340,7 @@ export async function POST(
 
 
         console.log(
-          'SHOPIFY_INITIAL_HISTORY_BOOTSTRAP_RESULT',
+          'SHOPIFY_INITIAL_ORDERS_HISTORY_BOOTSTRAP_RESULT',
           {
 
             workspaceId:
@@ -328,26 +352,26 @@ export async function POST(
             connectionId,
 
             decision:
-              bootstrap?.decision
+              ordersBootstrap?.decision
               ??
               null,
 
             backfillRequired:
-              bootstrap?.backfillRequired
+              ordersBootstrap?.backfillRequired
               ??
               false,
 
             created:
-              bootstrap?.created
+              ordersBootstrap?.created
               ??
               false,
 
             backfillRunId:
-              bootstrap
+              ordersBootstrap
                 ?.backfill
                 ?.backfillRunId
               ??
-              bootstrap
+              ordersBootstrap
                 ?.existingBackfill
                 ?.backfillRunId
               ??
@@ -361,16 +385,16 @@ export async function POST(
         bootstrapFailure: any
       ) {
 
-        bootstrapError =
+        ordersBootstrapError =
           String(
             bootstrapFailure?.message
             ||
-            'Shopify initial history bootstrap failed'
+            'Shopify initial Orders history bootstrap failed'
           );
 
 
         console.error(
-          'SHOPIFY_INITIAL_HISTORY_BOOTSTRAP_NON_FATAL',
+          'SHOPIFY_INITIAL_ORDERS_HISTORY_BOOTSTRAP_NON_FATAL',
           {
 
             workspaceId:
@@ -382,7 +406,114 @@ export async function POST(
             connectionId,
 
             message:
-              bootstrapError,
+              ordersBootstrapError,
+
+          }
+        );
+
+      }
+
+
+      // ======================================================
+      // 6B. CUSTOMERS HISTORY
+      //
+      // IMPORTANT:
+      //
+      // This is a separate try/catch from Orders.
+      //
+      // A temporary Orders problem must never prevent Customer
+      // history from being planned.
+      // ======================================================
+
+      try {
+
+        customersBootstrap =
+          await ensureShopifyInitialCustomersHistory({
+
+            workspaceId:
+              identity.workspaceId,
+
+            brandId:
+              identity.brandId,
+
+            connectionId,
+
+            requestedBy:
+              identity.userId
+              ??
+              null,
+
+          });
+
+
+        console.log(
+          'SHOPIFY_INITIAL_CUSTOMERS_HISTORY_BOOTSTRAP_RESULT',
+          {
+
+            workspaceId:
+              identity.workspaceId,
+
+            brandId:
+              identity.brandId,
+
+            connectionId,
+
+            decision:
+              customersBootstrap?.decision
+              ??
+              null,
+
+            backfillRequired:
+              customersBootstrap?.backfillRequired
+              ??
+              false,
+
+            created:
+              customersBootstrap?.created
+              ??
+              false,
+
+            backfillRunId:
+              customersBootstrap
+                ?.backfill
+                ?.backfillRunId
+              ??
+              customersBootstrap
+                ?.existingBackfill
+                ?.backfillRunId
+              ??
+              null,
+
+          }
+        );
+
+
+      } catch (
+        bootstrapFailure: any
+      ) {
+
+        customersBootstrapError =
+          String(
+            bootstrapFailure?.message
+            ||
+            'Shopify initial Customers history bootstrap failed'
+          );
+
+
+        console.error(
+          'SHOPIFY_INITIAL_CUSTOMERS_HISTORY_BOOTSTRAP_NON_FATAL',
+          {
+
+            workspaceId:
+              identity.workspaceId,
+
+            brandId:
+              identity.brandId,
+
+            connectionId,
+
+            message:
+              customersBootstrapError,
 
           }
         );
@@ -395,8 +526,17 @@ export async function POST(
     // ========================================================
     // 7. SUCCESS
     //
-    // Connector setup is complete regardless of whether a
-    // non-fatal provider bootstrap needs retrying later.
+    // Setup is complete regardless of any non-fatal historical
+    // bootstrap failure.
+    //
+    // BACKWARD COMPATIBILITY:
+    //
+    // bootstrap keeps the existing Orders response contract.
+    //
+    // customerBootstrap is additive.
+    //
+    // Existing setup clients that ignore bootstrap remain
+    // completely unaffected.
     // ========================================================
 
     return NextResponse.json({
@@ -412,6 +552,11 @@ export async function POST(
       setupStatus:
         'ready',
 
+
+      // ======================================================
+      // EXISTING ORDERS BOOTSTRAP RESPONSE
+      // ======================================================
+
       bootstrap:
         connection.provider ===
           'shopify'
@@ -422,47 +567,120 @@ export async function POST(
                 true,
 
               ok:
-                !bootstrapError,
+                !ordersBootstrapError,
 
               decision:
-                bootstrap?.decision
+                ordersBootstrap?.decision
                 ??
                 null,
 
               backfillRequired:
-                bootstrap?.backfillRequired
+                ordersBootstrap?.backfillRequired
                 ??
                 null,
 
               created:
-                bootstrap?.created
+                ordersBootstrap?.created
                 ??
                 false,
 
               backfillRunId:
-                bootstrap
+                ordersBootstrap
                   ?.backfill
                   ?.backfillRunId
                 ??
-                bootstrap
+                ordersBootstrap
                   ?.existingBackfill
                   ?.backfillRunId
                 ??
                 null,
 
               totalWindows:
-                bootstrap
+                ordersBootstrap
                   ?.backfill
                   ?.totalWindows
                 ??
-                bootstrap
+                ordersBootstrap
                   ?.plannedBackfill
                   ?.totalWindows
                 ??
                 null,
 
               error:
-                bootstrapError,
+                ordersBootstrapError,
+
+            }
+          :
+            {
+
+              attempted:
+                false,
+
+              ok:
+                true,
+
+            },
+
+
+      // ======================================================
+      // CUSTOMER BOOTSTRAP RESPONSE
+      //
+      // Additive response field.
+      //
+      // Does not change the existing Orders bootstrap contract.
+      // ======================================================
+
+      customerBootstrap:
+        connection.provider ===
+          'shopify'
+          ?
+            {
+
+              attempted:
+                true,
+
+              ok:
+                !customersBootstrapError,
+
+              decision:
+                customersBootstrap?.decision
+                ??
+                null,
+
+              backfillRequired:
+                customersBootstrap?.backfillRequired
+                ??
+                null,
+
+              created:
+                customersBootstrap?.created
+                ??
+                false,
+
+              backfillRunId:
+                customersBootstrap
+                  ?.backfill
+                  ?.backfillRunId
+                ??
+                customersBootstrap
+                  ?.existingBackfill
+                  ?.backfillRunId
+                ??
+                null,
+
+              totalWindows:
+                customersBootstrap
+                  ?.backfill
+                  ?.totalWindows
+                ??
+                customersBootstrap
+                  ?.plannedBackfill
+                  ?.totalWindows
+                ??
+                null,
+
+              error:
+                customersBootstrapError,
 
             }
           :
