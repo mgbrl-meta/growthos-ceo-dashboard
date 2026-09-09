@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   getGrowthOSBrandSubscription,
@@ -21,18 +21,17 @@ export const runtime =
 
 
 // ============================================================
-// BRAND SUBSCRIPTION
+// ADMIN BRAND SUBSCRIPTION
 //
-// Temporary authorization rule:
+// PLATFORM ADMIN ONLY.
 //
-// development:
-//   authenticated Growth OS user may call this endpoint.
+// GET:
+// reads the subscription for the active authenticated brand.
 //
-// production:
-//   disabled until platform-admin authorization is wired.
+// POST:
+// updates the active authenticated brand subscription.
 //
-// This prevents brand owners from changing their own commercial
-// entitlement in production.
+// Production write protection remains intentionally enabled.
 // ============================================================
 
 
@@ -41,39 +40,29 @@ export const runtime =
 // ============================================================
 
 export async function GET(
-  request: NextRequest
+  request:
+    NextRequest
 ) {
 
   try {
 
-    const identity =
-      await authenticateRequest(
+    // ========================================================
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    // ========================================================
+
+    const admin =
+      await requirePlatformAdmin(
         request
       );
 
 
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
+    // ========================================================
+    // 2. ACTIVE BRAND
+    // ========================================================
 
     const workspaceId =
       String(
-        identity.workspaceId
+        admin.workspaceId
         ||
         ''
       ).trim();
@@ -81,7 +70,7 @@ export async function GET(
 
     const brandId =
       String(
-        identity.brandId
+        admin.brandId
         ||
         ''
       ).trim();
@@ -95,11 +84,13 @@ export async function GET(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'ACTIVE_BRAND_REQUIRED',
+
         },
         {
           status:
@@ -109,6 +100,10 @@ export async function GET(
 
     }
 
+
+    // ========================================================
+    // 3. SUBSCRIPTION
+    // ========================================================
 
     const subscription =
       await getGrowthOSBrandSubscription(
@@ -124,29 +119,100 @@ export async function GET(
 
       subscription,
 
+      meta: {
+
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
+      },
+
     });
 
   } catch (
-    error: any
+    error:
+      any
   ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        'Unable to load subscription'
+      );
+
+
+    // ========================================================
+    // AUTH
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
 
     console.error(
       'ADMIN_BRAND_SUBSCRIPTION_GET_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
     return NextResponse.json(
       {
+
         ok:
           false,
 
         error:
-          String(
-            error?.message
-            ||
-            'Unable to load subscription'
-          ),
+          'Unable to load subscription',
+
       },
       {
         status:
@@ -162,17 +228,32 @@ export async function GET(
 // ============================================================
 // POST
 //
-// DEV-ONLY FOR NOW.
+// PLATFORM ADMIN ONLY.
 //
-// Later:
-// platform-admin authorization.
+// Production writes remain disabled until we explicitly enable
+// real Admin subscription mutation in a later phase.
 // ============================================================
 
 export async function POST(
-  request: NextRequest
+  request:
+    NextRequest
 ) {
 
   try {
+
+    // ========================================================
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    // ========================================================
+
+    const admin =
+      await requirePlatformAdmin(
+        request
+      );
+
+
+    // ========================================================
+    // 2. KEEP CURRENT PRODUCTION WRITE LOCK
+    // ========================================================
 
     if (
       process.env.NODE_ENV ===
@@ -181,11 +262,13 @@ export async function POST(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'ADMIN_SUBSCRIPTION_WRITE_DISABLED',
+
         },
         {
           status:
@@ -196,34 +279,13 @@ export async function POST(
     }
 
 
-    const identity =
-      await authenticateRequest(
-        request
-      );
-
-
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
+    // ========================================================
+    // 3. ACTIVE BRAND
+    // ========================================================
 
     const workspaceId =
       String(
-        identity.workspaceId
+        admin.workspaceId
         ||
         ''
       ).trim();
@@ -231,7 +293,7 @@ export async function POST(
 
     const brandId =
       String(
-        identity.brandId
+        admin.brandId
         ||
         ''
       ).trim();
@@ -245,11 +307,13 @@ export async function POST(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'ACTIVE_BRAND_REQUIRED',
+
         },
         {
           status:
@@ -259,6 +323,10 @@ export async function POST(
 
     }
 
+
+    // ========================================================
+    // 4. INPUT
+    // ========================================================
 
     const body =
       await request.json();
@@ -278,11 +346,13 @@ export async function POST(
 
       return NextResponse.json(
         {
+
           ok:
             false,
 
           error:
             'planId is required',
+
         },
         {
           status:
@@ -292,6 +362,10 @@ export async function POST(
 
     }
 
+
+    // ========================================================
+    // 5. UPDATE
+    // ========================================================
 
     const result =
       await upsertGrowthOSBrandSubscription({
@@ -319,29 +393,96 @@ export async function POST(
       subscription:
         result,
 
+      meta: {
+
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
+      },
+
     });
 
   } catch (
-    error: any
+    error:
+      any
   ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        'Unable to update subscription'
+      );
+
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
 
     console.error(
       'ADMIN_BRAND_SUBSCRIPTION_WRITE_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
     return NextResponse.json(
       {
+
         ok:
           false,
 
         error:
-          String(
-            error?.message
-            ||
-            'Unable to update subscription'
-          ),
+          'Unable to update subscription',
+
       },
       {
         status:

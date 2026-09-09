@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   getAdminUsersSnapshot,
@@ -24,19 +24,21 @@ export const runtime =
 //
 // GLOBAL READ-ONLY VIEW.
 //
+// PLATFORM ADMIN ONLY.
+//
 // Source:
 //
 // growthos_control.users
 // growthos_control.brand_memberships
 //
-// Important:
+// IMPORTANT:
 //
 // NEVER returns:
 //
-// password_hash
-// session credentials
-// JWT
-// provider tokens
+// - password_hash
+// - session credentials
+// - JWT
+// - provider tokens
 //
 // User/member mutations remain separate from this endpoint.
 // ============================================================
@@ -53,66 +55,24 @@ export async function GET(
   try {
 
     // ========================================================
-    // 1. AUTHENTICATE
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    //
+    // requirePlatformAdmin already rejects:
+    //
+    // - unauthenticated requests
+    // - Shopify embedded identities
+    // - authenticated client-only users
+    // - inactive / missing platform admins
     // ========================================================
 
-    const identity =
-      await authenticateRequest(
+    const admin =
+      await requirePlatformAdmin(
         request
       );
 
 
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
-
     // ========================================================
-    // 2. SHOPIFY EMBEDDED SESSION CANNOT READ GLOBAL USERS
-    // ========================================================
-
-    if (
-      identity.authMethod ===
-        'shopify'
-    ) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'ADMIN_ACCESS_REQUIRED',
-
-        },
-        {
-          status:
-            403,
-        }
-      );
-
-    }
-
-
-    // ========================================================
-    // 3. GLOBAL FAST READ
+    // 2. GLOBAL USER READ
     // ========================================================
 
     const snapshot =
@@ -120,7 +80,7 @@ export async function GET(
 
 
     // ========================================================
-    // 4. RESPONSE
+    // 3. RESPONSE
     // ========================================================
 
     return NextResponse.json({
@@ -150,6 +110,12 @@ export async function GET(
         readOnly:
           true,
 
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
       },
 
     });
@@ -166,6 +132,66 @@ export async function GET(
         'Unable to load Admin Users'
       );
 
+
+    // ========================================================
+    // 4. UNAUTHENTICATED
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. INTERNAL FAILURE
+    // ========================================================
 
     console.error(
       'ADMIN_USERS_ERROR',

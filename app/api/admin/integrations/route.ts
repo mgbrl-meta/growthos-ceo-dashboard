@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   getAdminIntegrationsSnapshot,
@@ -22,8 +22,9 @@ export const runtime =
 // ============================================================
 // ADMIN INTEGRATIONS
 //
-// Cross-client integration registry.
+// GLOBAL CROSS-CLIENT INTEGRATION REGISTRY.
 //
+// PLATFORM ADMIN ONLY.
 // READ ONLY.
 //
 // This endpoint does not:
@@ -34,8 +35,19 @@ export const runtime =
 // - modify selected accounts
 // - bootstrap integration tables
 //
-// Customer connection actions continue to use the existing
-// /api/integrations/* provider routes.
+// Customer connection actions continue to use:
+//
+// /api/integrations/*
+//
+// Authorization:
+//
+// authenticated Growth OS session
+//        ↓
+// growthos_control.platform_admins
+//        ↓
+// active platform admin
+//        ↓
+// access granted
 // ============================================================
 
 export async function GET(
@@ -50,71 +62,35 @@ export async function GET(
   try {
 
     // ========================================================
-    // AUTHENTICATION
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    //
+    // This already rejects:
+    //
+    // - unauthenticated requests
+    // - Shopify embedded authentication
+    // - normal client users
+    // - inactive / missing platform admins
+    //
+    // Therefore no additional authMethod check is required.
     // ========================================================
 
-    const identity =
-      await authenticateRequest(
+    const admin =
+      await requirePlatformAdmin(
         request
       );
 
 
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
-
     // ========================================================
-    // SHOPIFY EMBEDDED SESSION CANNOT ACCESS GLOBAL ADMIN DATA
-    // ========================================================
-
-    if (
-      identity.authMethod ===
-        'shopify'
-    ) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'ADMIN_ACCESS_REQUIRED',
-
-        },
-        {
-          status:
-            403,
-        }
-      );
-
-    }
-
-
-    // ========================================================
-    // READ GLOBAL CONNECTION STATE
+    // 2. READ GLOBAL CONNECTION STATE
     // ========================================================
 
     const snapshot =
       await getAdminIntegrationsSnapshot();
 
+
+    // ========================================================
+    // 3. RESPONSE
+    // ========================================================
 
     return NextResponse.json({
 
@@ -138,10 +114,21 @@ export async function GET(
           startedAt,
 
         source:
-          'growthos_control.integration_connections + integration_accounts',
+          [
+            'growthos_control.integration_connections',
+            'growthos_control.integration_accounts',
+          ].join(
+            ' + '
+          ),
 
         readOnly:
           true,
+
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
 
       },
 
@@ -159,6 +146,66 @@ export async function GET(
         'Unable to load Admin Integrations'
       );
 
+
+    // ========================================================
+    // 4. UNAUTHENTICATED
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. INTERNAL FAILURE
+    // ========================================================
 
     console.error(
       'ADMIN_INTEGRATIONS_ERROR',
@@ -183,6 +230,15 @@ export async function GET(
 
         error:
           'Unable to load Admin Integrations',
+
+        meta: {
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        },
 
       },
       {

@@ -8,8 +8,8 @@ import {
 } from '@/lib/auth/platform-admin';
 
 import {
-  getAdminSystemSnapshot,
-} from '@/lib/admin/system';
+  getAdminOverviewSnapshot,
+} from '@/lib/admin/overview';
 
 
 export const dynamic =
@@ -20,12 +20,14 @@ export const runtime =
 
 
 // ============================================================
-// ADMIN SYSTEM
+// ADMIN OVERVIEW
 //
-// GLOBAL READ-ONLY INFRASTRUCTURE SNAPSHOT.
+// GLOBAL CROSS-CLIENT AGGREGATION.
 //
 // PLATFORM ADMIN ONLY.
-// READ ONLY.
+//
+// This route does NOT establish a new source of truth.
+// It aggregates canonical Admin readers.
 // ============================================================
 
 export async function GET(
@@ -42,12 +44,11 @@ export async function GET(
     // ========================================================
     // 1. PLATFORM ADMIN AUTHORIZATION
     //
-    // requirePlatformAdmin already rejects:
+    // Authentication alone is insufficient.
     //
-    // - unauthenticated requests
-    // - Shopify embedded identities
-    // - authenticated client-only users
-    // - inactive / missing platform admins
+    // User must exist as ACTIVE in:
+    //
+    // growthos_control.platform_admins
     // ========================================================
 
     const admin =
@@ -57,11 +58,11 @@ export async function GET(
 
 
     // ========================================================
-    // 2. LOAD SYSTEM SNAPSHOT
+    // 2. LOAD OVERVIEW
     // ========================================================
 
-    const snapshot =
-      await getAdminSystemSnapshot();
+    const overview =
+      await getAdminOverviewSnapshot();
 
 
     // ========================================================
@@ -76,8 +77,7 @@ export async function GET(
       scope:
         'global',
 
-      system:
-        snapshot,
+      overview,
 
       meta: {
 
@@ -87,7 +87,18 @@ export async function GET(
           startedAt,
 
         source:
-          'runtime configuration + BigQuery INFORMATION_SCHEMA',
+          [
+            'admin.clients',
+            'admin.plans',
+            'admin.modules',
+            'admin.users',
+            'admin.integrations',
+            'admin.data-health',
+            'admin.sync-history',
+            'admin.system',
+          ].join(
+            ' + '
+          ),
 
         readOnly:
           true,
@@ -111,12 +122,12 @@ export async function GET(
       String(
         error?.message
         ||
-        'Unable to load Admin System'
+        'Unable to load Admin Overview'
       );
 
 
     // ========================================================
-    // 4. UNAUTHENTICATED
+    // UNAUTHENTICATED
     // ========================================================
 
     if (
@@ -144,7 +155,7 @@ export async function GET(
 
 
     // ========================================================
-    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // AUTHENTICATED BUT NOT PLATFORM ADMIN
     // ========================================================
 
     if (
@@ -172,11 +183,11 @@ export async function GET(
 
 
     // ========================================================
-    // 6. INTERNAL FAILURE
+    // INTERNAL FAILURE
     // ========================================================
 
     console.error(
-      'ADMIN_SYSTEM_ERROR',
+      'ADMIN_OVERVIEW_ERROR',
       {
 
         message,
@@ -197,7 +208,7 @@ export async function GET(
           false,
 
         error:
-          'Unable to load Admin System',
+          'Unable to load Admin Overview',
 
         meta: {
 

@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   getAdminDataHealthSnapshot,
@@ -24,6 +24,9 @@ export const runtime =
 //
 // GLOBAL CROSS-CLIENT READ.
 //
+// PLATFORM ADMIN ONLY.
+// READ ONLY.
+//
 // Source of truth:
 //
 // growthos_control.integration_connections
@@ -33,16 +36,16 @@ export const runtime =
 // IMPORTANT:
 //
 // This route:
+//
 // - does not bootstrap infrastructure
 // - does not mutate sync state
 // - does not run retries
 // - does not change connections
-//
-// It is an operational read only.
 // ============================================================
 
 export async function GET(
-  request: NextRequest
+  request:
+    NextRequest
 ) {
 
   const startedAt =
@@ -52,73 +55,24 @@ export async function GET(
   try {
 
     // ========================================================
-    // 1. REQUIRE AUTHENTICATION
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    //
+    // requirePlatformAdmin already rejects:
+    //
+    // - unauthenticated requests
+    // - Shopify embedded identities
+    // - authenticated client-only users
+    // - inactive / missing platform admins
     // ========================================================
 
-    const identity =
-      await authenticateRequest(
+    const admin =
+      await requirePlatformAdmin(
         request
       );
 
 
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
-
     // ========================================================
-    // 2. DO NOT ALLOW SHOPIFY EMBEDDED SESSION
-    //
-    // Data Health is platform-wide Admin functionality.
-    //
-    // NOTE:
-    // Dedicated platform-admin authorization should eventually
-    // replace this interim boundary across all /api/admin/*
-    // routes.
-    // ========================================================
-
-    if (
-      identity.authMethod ===
-        'shopify'
-    ) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'ADMIN_ACCESS_REQUIRED',
-
-        },
-        {
-          status:
-            403,
-        }
-      );
-
-    }
-
-
-    // ========================================================
-    // 3. LOAD GLOBAL HEALTH
+    // 2. LOAD GLOBAL DATA HEALTH
     // ========================================================
 
     const snapshot =
@@ -126,7 +80,7 @@ export async function GET(
 
 
     // ========================================================
-    // 4. RESPONSE
+    // 3. RESPONSE
     // ========================================================
 
     return NextResponse.json({
@@ -156,12 +110,19 @@ export async function GET(
         readOnly:
           true,
 
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
       },
 
     });
 
   } catch (
-    error: any
+    error:
+      any
   ) {
 
     const message =
@@ -172,15 +133,77 @@ export async function GET(
       );
 
 
+    // ========================================================
+    // 4. UNAUTHENTICATED
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. INTERNAL FAILURE
+    // ========================================================
+
     console.error(
       'ADMIN_DATA_HEALTH_ERROR',
       {
+
         message,
 
         durationMs:
           Date.now()
           -
           startedAt,
+
       }
     );
 

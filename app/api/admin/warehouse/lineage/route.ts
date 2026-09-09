@@ -1,6 +1,11 @@
 import {
+  NextRequest,
   NextResponse,
 } from 'next/server';
+
+import {
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   scanWarehouseLineage,
@@ -10,46 +15,138 @@ import {
 export const dynamic =
   'force-dynamic';
 
+export const runtime =
+  'nodejs';
 
-export async function GET() {
+
+// ============================================================
+// ADMIN WAREHOUSE LINEAGE
+//
+// PLATFORM ADMIN ONLY.
+// READ ONLY.
+// ============================================================
+
+export async function GET(
+  request:
+    NextRequest
+) {
 
   try {
 
+    // ========================================================
+    // 1. PLATFORM ADMIN
+    // ========================================================
+
+    const admin =
+      await requirePlatformAdmin(
+        request
+      );
+
+
+    // ========================================================
+    // 2. LINEAGE
+    // ========================================================
+
     const lineage =
-        await scanWarehouseLineage();
+      await scanWarehouseLineage();
 
 
-    return NextResponse.json(
-      {
+    return NextResponse.json({
 
-        ok:
-          true,
+      ok:
+        true,
 
-        data: {
-          lineage,
-        },
+      data: {
 
-        meta: {
+        lineage,
 
-          mode:
-            'read_only',
+      },
 
-          source:
-            'growth_os_repository',
+      meta: {
 
-        },
+        mode:
+          'read_only',
 
-      }
-    );
+        source:
+          'growth_os_repository',
+
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
+      },
+
+    });
 
 
   } catch (
-    error: any
+    error:
+      any
   ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        'Warehouse lineage scan failed'
+      );
+
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
 
     console.error(
       'WAREHOUSE_LINEAGE_ERROR',
-      error
+      {
+        message,
+      }
     );
 
 
@@ -60,8 +157,6 @@ export async function GET() {
           false,
 
         error:
-          error?.message
-          ||
           'Warehouse lineage scan failed',
 
       },

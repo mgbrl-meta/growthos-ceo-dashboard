@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   getAdminPlansSnapshot,
@@ -24,6 +24,7 @@ export const runtime =
 //
 // GLOBAL COMMERCIAL ENTITLEMENT REGISTRY.
 //
+// PLATFORM ADMIN ONLY.
 // READ ONLY.
 //
 // Source:
@@ -45,60 +46,34 @@ export async function GET(
 
   try {
 
-    const identity =
-      await authenticateRequest(
+    // ========================================================
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    //
+    // requirePlatformAdmin already rejects:
+    //
+    // - unauthenticated requests
+    // - Shopify embedded identities
+    // - authenticated client-only users
+    // - inactive / missing platform admins
+    // ========================================================
+
+    const admin =
+      await requirePlatformAdmin(
         request
       );
 
 
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
-
-    if (
-      identity.authMethod ===
-        'shopify'
-    ) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'ADMIN_ACCESS_REQUIRED',
-
-        },
-        {
-          status:
-            403,
-        }
-      );
-
-    }
-
+    // ========================================================
+    // 2. LOAD PLAN REGISTRY
+    // ========================================================
 
     const snapshot =
       await getAdminPlansSnapshot();
 
+
+    // ========================================================
+    // 3. RESPONSE
+    // ========================================================
 
     return NextResponse.json({
 
@@ -134,6 +109,12 @@ export async function GET(
         readOnly:
           true,
 
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
       },
 
     });
@@ -150,6 +131,66 @@ export async function GET(
         'Unable to load Admin Plans'
       );
 
+
+    // ========================================================
+    // 4. UNAUTHENTICATED
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. INTERNAL FAILURE
+    // ========================================================
 
     console.error(
       'ADMIN_PLANS_ERROR',

@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   auditWarehouse,
@@ -24,18 +24,21 @@ export const runtime =
 //
 // GET /api/admin/warehouse/audit
 //
+// PLATFORM ADMIN ONLY.
+// READ ONLY.
+//
 // PURPOSE:
 //
 // Inspect the configured Growth OS BigQuery warehouse:
 //
-// datasets
-// tables
-// row counts
-// storage size
-// partitioning
-// clustering
-// version chains
-// possible temporary / legacy objects
+// - datasets
+// - tables
+// - row counts
+// - storage size
+// - partitioning
+// - clustering
+// - version chains
+// - possible temporary / legacy objects
 //
 // IMPORTANT:
 //
@@ -43,9 +46,9 @@ export const runtime =
 //
 // It is NOT:
 //
-// workspace-specific
-// brand-specific
-// provider-specific
+// - workspace-specific
+// - brand-specific
+// - provider-specific
 //
 // auditWarehouse() reads:
 //
@@ -57,55 +60,50 @@ export const runtime =
 //
 // resolveRequestTenantContext()
 //
-// The authenticated user is verified only to ensure this
-// system endpoint is not anonymously accessible.
+// Authorization:
+//
+// authenticated Growth OS session
+//        ↓
+// growthos_control.platform_admins
+//        ↓
+// active platform admin
+//        ↓
+// global warehouse audit allowed
 // ============================================================
 
 export async function GET(
-  request: NextRequest
+  request:
+    NextRequest
 ) {
+
+  const startedAt =
+    Date.now();
+
 
   try {
 
     // ========================================================
-    // 1. REQUIRE AUTHENTICATION
+    // 1. PLATFORM ADMIN AUTHORIZATION
     //
-    // The warehouse audit is global, but it is still an
-    // internal Growth OS system operation.
+    // requirePlatformAdmin already rejects:
+    //
+    // - unauthenticated requests
+    // - Shopify embedded identities
+    // - authenticated client-only users
+    // - inactive / missing platform admins
     // ========================================================
 
-    const identity =
-      await authenticateRequest(
+    const admin =
+      await requirePlatformAdmin(
         request
       );
-
-
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
 
 
     // ========================================================
     // 2. RUN GLOBAL READ-ONLY WAREHOUSE AUDIT
     //
     // No workspace / brand is passed because the auditor
-    // intentionally audits configured infrastructure.
+    // intentionally audits configured platform infrastructure.
     // ========================================================
 
     const audit =
@@ -116,40 +114,47 @@ export async function GET(
     // 3. RESPONSE
     // ========================================================
 
-    return NextResponse.json(
-      {
+    return NextResponse.json({
 
-        ok:
-          true,
+      ok:
+        true,
 
-        data: {
+      data: {
 
-          audit,
+        audit,
 
-        },
+      },
 
-        meta: {
+      meta: {
 
-          scope:
-            'global_warehouse',
+        scope:
+          'global_warehouse',
 
-          mode:
-            'read_only',
+        mode:
+          'read_only',
 
-          destructive:
-            false,
+        destructive:
+          false,
 
-          authenticated:
-            true,
+        authorization:
+          'platform_admin',
 
-        },
+        platformRole:
+          admin.platformRole,
 
-      }
-    );
+        durationMs:
+          Date.now()
+          -
+          startedAt,
+
+      },
+
+    });
 
 
   } catch (
-    error: any
+    error:
+      any
   ) {
 
     const message =
@@ -160,16 +165,8 @@ export async function GET(
       );
 
 
-    console.error(
-      'WAREHOUSE_AUDIT_ERROR',
-      {
-        message,
-      }
-    );
-
-
     // ========================================================
-    // AUTH FAILURE
+    // 4. UNAUTHENTICATED
     // ========================================================
 
     if (
@@ -197,7 +194,35 @@ export async function GET(
 
 
     // ========================================================
-    // CONFIGURATION FAILURE
+    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. CONFIGURATION FAILURE
     // ========================================================
 
     if (
@@ -223,6 +248,15 @@ export async function GET(
           error:
             'WAREHOUSE_AUDIT_NOT_CONFIGURED',
 
+          meta: {
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          },
+
         },
         {
           status:
@@ -234,8 +268,23 @@ export async function GET(
 
 
     // ========================================================
-    // INTERNAL FAILURE
+    // 7. INTERNAL FAILURE
     // ========================================================
+
+    console.error(
+      'WAREHOUSE_AUDIT_ERROR',
+      {
+
+        message,
+
+        durationMs:
+          Date.now()
+          -
+          startedAt,
+
+      }
+    );
+
 
     return NextResponse.json(
       {
@@ -245,6 +294,15 @@ export async function GET(
 
         error:
           'Warehouse audit failed',
+
+        meta: {
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        },
 
       },
       {

@@ -4,8 +4,8 @@ import {
 } from 'next/server';
 
 import {
-  authenticateRequest,
-} from '@/lib/auth/request-auth';
+  requirePlatformAdmin,
+} from '@/lib/auth/platform-admin';
 
 import {
   getAdminSyncHistory,
@@ -22,9 +22,10 @@ export const runtime =
 // ============================================================
 // ADMIN SYNC HISTORY
 //
-// Global cross-client execution history.
+// GLOBAL CROSS-CLIENT EXECUTION HISTORY.
 //
-// Read only.
+// PLATFORM ADMIN ONLY.
+// READ ONLY.
 // ============================================================
 
 export async function GET(
@@ -38,60 +39,27 @@ export async function GET(
 
   try {
 
-    const identity =
-      await authenticateRequest(
+    // ========================================================
+    // 1. PLATFORM ADMIN AUTHORIZATION
+    // ========================================================
+
+    const admin =
+      await requirePlatformAdmin(
         request
       );
 
 
-    if (!identity) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'UNAUTHENTICATED',
-
-        },
-        {
-          status:
-            401,
-        }
-      );
-
-    }
-
-
-    if (
-      identity.authMethod ===
-        'shopify'
-    ) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'ADMIN_ACCESS_REQUIRED',
-
-        },
-        {
-          status:
-            403,
-        }
-      );
-
-    }
-
+    // ========================================================
+    // 2. LOAD SYNC HISTORY
+    // ========================================================
 
     const snapshot =
       await getAdminSyncHistory();
 
+
+    // ========================================================
+    // 3. RESPONSE
+    // ========================================================
 
     return NextResponse.json({
 
@@ -123,6 +91,12 @@ export async function GET(
         readOnly:
           true,
 
+        authorization:
+          'platform_admin',
+
+        platformRole:
+          admin.platformRole,
+
       },
 
     });
@@ -140,15 +114,77 @@ export async function GET(
       );
 
 
+    // ========================================================
+    // 4. UNAUTHENTICATED
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 5. AUTHENTICATED BUT NOT PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // 6. INTERNAL FAILURE
+    // ========================================================
+
     console.error(
       'ADMIN_SYNC_HISTORY_ERROR',
       {
+
         message,
 
         durationMs:
           Date.now()
           -
           startedAt,
+
       }
     );
 
@@ -161,6 +197,15 @@ export async function GET(
 
         error:
           'Unable to load Sync History',
+
+        meta: {
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        },
 
       },
       {

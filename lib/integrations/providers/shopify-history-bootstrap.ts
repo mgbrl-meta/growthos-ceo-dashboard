@@ -10,11 +10,14 @@ import {
 } from '@/lib/integrations/store';
 
 import {
+  queryEarliestCustomerWithStoredShopifyCredential,
   queryEarliestOrderWithStoredShopifyCredential,
 } from '@/lib/integrations/providers/shopify-credentials';
 
 import {
+  createShopifyCustomersBackfill,
   createShopifyOrdersBackfill,
+  planShopifyCustomersBackfillWindows,
   planShopifyOrdersBackfillWindows,
 } from '@/lib/integrations/providers/shopify-backfill';
 
@@ -253,6 +256,7 @@ async function getExistingOrderCoverage(
           \`${PROJECT_ID}.${DATA_DATASET}.shopify_orders_current\`
 
         WHERE
+
           workspace_id =
             @workspace_id
 
@@ -302,17 +306,14 @@ async function getExistingOrderCoverage(
     {};
 
 
-  const orderCount =
-    Number(
-      row.order_count
-      ??
-      0
-    );
-
-
   return {
 
-    orderCount,
+    orderCount:
+      Number(
+        row.order_count
+        ??
+        0
+      ),
 
     earliestOrder:
       timestampToIso(
@@ -340,6 +341,136 @@ async function getExistingOrderCoverage(
 
 
 // ============================================================
+// EXISTING LOCAL CUSTOMER COVERAGE
+// ============================================================
+
+async function getExistingCustomerCoverage(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    integrationAccountId:
+      string;
+
+  }
+) {
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT
+
+          COUNT(*) AS customer_count,
+
+          MIN(created_at)
+            AS earliest_customer,
+
+          MAX(created_at)
+            AS latest_customer,
+
+          MAX(updated_at)
+            AS latest_customer_update,
+
+          MAX(loaded_at)
+            AS latest_load
+
+        FROM
+          \`${PROJECT_ID}.${DATA_DATASET}.shopify_customers_current\`
+
+        WHERE
+
+          workspace_id =
+            @workspace_id
+
+          AND brand_id =
+            @brand_id
+
+          AND integration_account_id =
+            @integration_account_id
+
+      `,
+
+      location:
+        DATA_LOCATION,
+
+      params: {
+
+        workspace_id:
+          input.workspaceId,
+
+        brand_id:
+          input.brandId,
+
+        integration_account_id:
+          input.integrationAccountId,
+
+      },
+
+      types: {
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+        integration_account_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  const row =
+    rows?.[0]
+    ??
+    {};
+
+
+  return {
+
+    customerCount:
+      Number(
+        row.customer_count
+        ??
+        0
+      ),
+
+    earliestCustomer:
+      timestampToIso(
+        row.earliest_customer
+      ),
+
+    latestCustomer:
+      timestampToIso(
+        row.latest_customer
+      ),
+
+    latestCustomerUpdate:
+      timestampToIso(
+        row.latest_customer_update
+      ),
+
+    latestLoad:
+      timestampToIso(
+        row.latest_load
+      ),
+
+  };
+
+}
+
+
+// ============================================================
 // EXISTING EQUIVALENT BACKFILL
 //
 // Prevent repeated setup / reinstall from creating a backfill
@@ -349,6 +480,9 @@ async function getExistingOrderCoverage(
 //
 // existing.from <= missing.from
 // existing.to   >= missing.to
+//
+// Entity is mandatory so Orders and Customers can never cover
+// one another accidentally.
 // ============================================================
 
 async function findCoveringBackfill(
@@ -362,6 +496,9 @@ async function findCoveringBackfill(
 
     integrationAccountId:
       string;
+
+    entity:
+      'orders' | 'customers';
 
     from:
       string;
@@ -382,6 +519,7 @@ async function findCoveringBackfill(
         SELECT
 
           backfill_run_id,
+          entity,
           status,
           requested_from,
           requested_to,
@@ -392,6 +530,7 @@ async function findCoveringBackfill(
           \`${PROJECT_ID}.${OPS_DATASET}.shopify_backfill_runs\`
 
         WHERE
+
           workspace_id =
             @workspace_id
 
@@ -405,7 +544,7 @@ async function findCoveringBackfill(
             'shopify'
 
           AND entity =
-            'orders'
+            @entity
 
           AND requested_from <=
             TIMESTAMP(
@@ -417,11 +556,12 @@ async function findCoveringBackfill(
               @requested_to
             )
 
-          AND status IN (
-            'queued',
-            'running',
-            'completed'
-          )
+          AND status IN
+            (
+              'queued',
+              'running',
+              'completed'
+            )
 
         ORDER BY
           updated_at DESC
@@ -444,6 +584,9 @@ async function findCoveringBackfill(
         integration_account_id:
           input.integrationAccountId,
 
+        entity:
+          input.entity,
+
         requested_from:
           input.from,
 
@@ -461,6 +604,9 @@ async function findCoveringBackfill(
           'STRING',
 
         integration_account_id:
+          'STRING',
+
+        entity:
           'STRING',
 
         requested_from:
@@ -490,11 +636,11 @@ async function findCoveringBackfill(
 //
 // Determines:
 //
-// Shopify earliest accessible order
-// Growth OS current earliest order
+// Shopify earliest accessible Order
+// Growth OS current earliest Order
 // definite historical prefix gap
 // planned quarterly windows
-// already-covering backfill
+// already-covering Orders backfill
 //
 // DOES NOT CREATE A BACKFILL.
 // ============================================================
@@ -606,8 +752,6 @@ export async function inspectShopifyInitialOrdersHistory(
 
   // ==========================================================
   // EXACT SHOPIFY ACCOUNT
-  //
-  // Resolve using canonical Shopify Shop GID.
   // ==========================================================
 
   const account =
@@ -820,16 +964,6 @@ export async function inspectShopifyInitialOrdersHistory(
       earliestShopifyOrder;
 
 
-    // ========================================================
-    // STABLE BOOTSTRAP CUTOFF
-    //
-    // Concurrent/retried setup requests must calculate the
-    // same initial-history range.
-    //
-    // Prefer setup_required_at.
-    // Fall back to installed_at.
-    // ========================================================
-
     const bootstrapCutoffRaw =
       String(
         metadata.setup_required_at
@@ -873,9 +1007,9 @@ export async function inspectShopifyInitialOrdersHistory(
     // ========================================================
     // EXISTING GROWTH OS DATA
     //
-    // Fill the definite prefix only.
+    // Fill definite historical prefix only.
     //
-    // Internal-gap reconciliation is separate.
+    // Internal-gap reconciliation remains separate.
     // ========================================================
 
     const sourceStart =
@@ -1040,7 +1174,7 @@ export async function inspectShopifyInitialOrdersHistory(
 
 
   // ==========================================================
-  // DUPLICATE / COVERING RUN CHECK
+  // DUPLICATE / COVERING ORDERS RUN CHECK
   // ==========================================================
 
   const existingBackfill =
@@ -1051,6 +1185,9 @@ export async function inspectShopifyInitialOrdersHistory(
       brandId,
 
       integrationAccountId,
+
+      entity:
+        'orders',
 
       from:
         missingFrom,
@@ -1153,6 +1290,729 @@ export async function inspectShopifyInitialOrdersHistory(
                   .backfill_run_id
               ),
 
+            entity:
+              String(
+                existingBackfill
+                  .entity
+              ),
+
+            status:
+              String(
+                existingBackfill
+                  .status
+              ),
+
+            requestedFrom:
+              timestampToIso(
+                existingBackfill
+                  .requested_from
+              ),
+
+            requestedTo:
+              timestampToIso(
+                existingBackfill
+                  .requested_to
+              ),
+
+          }
+        :
+          null,
+
+  };
+
+}
+
+
+// ============================================================
+// INSPECT INITIAL CUSTOMERS HISTORY
+//
+// READ ONLY.
+//
+// Determines:
+//
+// Shopify earliest accessible Customer
+// Growth OS current earliest Customer
+// definite historical prefix gap
+// planned quarterly windows
+// already-covering Customers backfill
+//
+// DOES NOT CREATE A BACKFILL.
+// DOES NOT PUBLISH PUB/SUB.
+// DOES NOT MUTATE WAREHOUSE STATE.
+// ============================================================
+
+export async function inspectShopifyInitialCustomersHistory(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+  }
+) {
+
+  if (!PROJECT_ID) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_PROJECT_MISSING'
+    );
+
+  }
+
+
+  const workspaceId =
+    requireValue(
+      input.workspaceId,
+      'SHOPIFY_CUSTOMER_HISTORY_WORKSPACE_MISSING'
+    );
+
+
+  const brandId =
+    requireValue(
+      input.brandId,
+      'SHOPIFY_CUSTOMER_HISTORY_BRAND_MISSING'
+    );
+
+
+  const connectionId =
+    requireValue(
+      input.connectionId,
+      'SHOPIFY_CUSTOMER_HISTORY_CONNECTION_MISSING'
+    );
+
+
+  // ==========================================================
+  // CONNECTION
+  // ==========================================================
+
+  const connection =
+    await getIntegrationConnectionById(
+      connectionId
+    );
+
+
+  if (!connection) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_CONNECTION_NOT_FOUND'
+    );
+
+  }
+
+
+  if (
+    connection.workspace_id !==
+      workspaceId
+    ||
+    connection.brand_id !==
+      brandId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_CONNECTION_TENANT_MISMATCH'
+    );
+
+  }
+
+
+  if (
+    connection.provider !==
+      'shopify'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_PROVIDER_INVALID'
+    );
+
+  }
+
+
+  const providerAccountId =
+    requireValue(
+      connection.provider_account_id,
+      'SHOPIFY_CUSTOMER_HISTORY_PROVIDER_ACCOUNT_MISSING'
+    );
+
+
+  const secretName =
+    requireValue(
+      connection.secret_name,
+      'SHOPIFY_CUSTOMER_HISTORY_SECRET_MISSING'
+    );
+
+
+  // ==========================================================
+  // EXACT SHOPIFY ACCOUNT
+  // ==========================================================
+
+  const account =
+    await getIntegrationAccountByProviderAccountId(
+
+      'shopify',
+
+      providerAccountId
+
+    );
+
+
+  if (!account) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_ACCOUNT_NOT_FOUND'
+    );
+
+  }
+
+
+  if (
+    account.workspace_id !==
+      workspaceId
+    ||
+    account.brand_id !==
+      brandId
+    ||
+    account.connection_id !==
+      connectionId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_ACCOUNT_IDENTITY_MISMATCH'
+    );
+
+  }
+
+
+  const integrationAccountId =
+    requireValue(
+      account.integration_account_id,
+      'SHOPIFY_CUSTOMER_HISTORY_INTEGRATION_ACCOUNT_MISSING'
+    );
+
+
+  const metadata =
+    normalizeMetadata(
+      account.metadata
+    );
+
+
+  const shopDomain =
+    requireValue(
+      metadata.shop_domain,
+      'SHOPIFY_CUSTOMER_HISTORY_SHOP_DOMAIN_MISSING'
+    );
+
+
+  // ==========================================================
+  // SHOPIFY SOURCE BOUNDARY
+  // ==========================================================
+
+  const source =
+    await queryEarliestCustomerWithStoredShopifyCredential({
+
+      workspaceId,
+
+      brandId,
+
+      secretName,
+
+      expectedShopId:
+        providerAccountId,
+
+      expectedShopDomain:
+        shopDomain,
+
+    });
+
+
+  const earliestShopifyCustomer =
+    source.customer?.createdAt
+    ??
+    null;
+
+
+  // ==========================================================
+  // EMPTY CUSTOMER BASE
+  // ==========================================================
+
+  if (!earliestShopifyCustomer) {
+
+    return {
+
+      ok:
+        true,
+
+      decision:
+        'no_customers',
+
+      backfillRequired:
+        false,
+
+      workspaceId,
+
+      brandId,
+
+      connectionId,
+
+      integrationAccountId,
+
+      providerAccountId,
+
+      shopDomain,
+
+      source: {
+
+        hasCustomers:
+          false,
+
+        earliestCustomer:
+          null,
+
+        tokenRefreshed:
+          source.tokenRefreshed,
+
+      },
+
+      warehouse: {
+
+        customerCount:
+          0,
+
+        earliestCustomer:
+          null,
+
+        latestCustomer:
+          null,
+
+        latestCustomerUpdate:
+          null,
+
+        latestLoad:
+          null,
+
+      },
+
+      missingRange:
+        null,
+
+      plannedBackfill:
+        null,
+
+      existingBackfill:
+        null,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // LOCAL WAREHOUSE COVERAGE
+  // ==========================================================
+
+  const warehouse =
+    await getExistingCustomerCoverage({
+
+      workspaceId,
+
+      brandId,
+
+      integrationAccountId,
+
+    });
+
+
+  let missingFrom:
+    string | null =
+      null;
+
+
+  let missingTo:
+    string | null =
+      null;
+
+
+  let decision:
+    string =
+      'history_complete';
+
+
+  // ==========================================================
+  // BRAND NEW GROWTH OS CUSTOMER WAREHOUSE
+  //
+  // Shopify earliest Customer
+  //        ↓
+  // stable installation/setup cutoff
+  // ==========================================================
+
+  if (
+    warehouse.customerCount ===
+      0
+    ||
+    !warehouse.earliestCustomer
+  ) {
+
+    missingFrom =
+      earliestShopifyCustomer;
+
+
+    // ========================================================
+    // STABLE BOOTSTRAP CUTOFF
+    //
+    // Use the same stable installation metadata as Orders.
+    //
+    // Concurrent/retried installation calls therefore produce
+    // the same logical initial-history range.
+    // ========================================================
+
+    const bootstrapCutoffRaw =
+      String(
+        metadata.setup_required_at
+        ??
+        metadata.installed_at
+        ??
+        ''
+      ).trim();
+
+
+    const bootstrapCutoffTimestamp =
+      Date.parse(
+        bootstrapCutoffRaw
+      );
+
+
+    if (
+      !Number.isFinite(
+        bootstrapCutoffTimestamp
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_CUSTOMER_HISTORY_BOOTSTRAP_CUTOFF_MISSING'
+      );
+
+    }
+
+
+    missingTo =
+      new Date(
+        bootstrapCutoffTimestamp
+      ).toISOString();
+
+
+    decision =
+      'full_history_required';
+
+  } else {
+
+    // ========================================================
+    // EXISTING CUSTOMER DATA
+    //
+    // Fill only the definite historical prefix.
+    //
+    // Example:
+    //
+    // Shopify:
+    // 2020-11-06
+    //
+    // Local:
+    // 2022-10-01
+    //
+    // Missing:
+    //
+    // [2020-11-06, 2022-10-01)
+    //
+    // Internal-gap reconciliation is a separate concern.
+    // ========================================================
+
+    const sourceStart =
+      Date.parse(
+        earliestShopifyCustomer
+      );
+
+
+    const localStart =
+      Date.parse(
+        warehouse.earliestCustomer
+      );
+
+
+    if (
+      !Number.isFinite(
+        sourceStart
+      )
+      ||
+      !Number.isFinite(
+        localStart
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_CUSTOMER_HISTORY_BOUNDARY_INVALID'
+      );
+
+    }
+
+
+    if (
+      sourceStart <
+        localStart
+    ) {
+
+      missingFrom =
+        earliestShopifyCustomer;
+
+      missingTo =
+        warehouse.earliestCustomer;
+
+      decision =
+        'historical_prefix_required';
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // NOTHING MISSING AT PREFIX LEVEL
+  // ==========================================================
+
+  if (
+    !missingFrom
+    ||
+    !missingTo
+  ) {
+
+    return {
+
+      ok:
+        true,
+
+      decision,
+
+      backfillRequired:
+        false,
+
+      workspaceId,
+
+      brandId,
+
+      connectionId,
+
+      integrationAccountId,
+
+      providerAccountId,
+
+      shopDomain,
+
+      source: {
+
+        hasCustomers:
+          true,
+
+        earliestCustomer:
+          earliestShopifyCustomer,
+
+        tokenRefreshed:
+          source.tokenRefreshed,
+
+      },
+
+      warehouse,
+
+      missingRange:
+        null,
+
+      plannedBackfill:
+        null,
+
+      existingBackfill:
+        null,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // VALIDATE MISSING RANGE
+  // ==========================================================
+
+  const missingStart =
+    Date.parse(
+      missingFrom
+    );
+
+
+  const missingEnd =
+    Date.parse(
+      missingTo
+    );
+
+
+  if (
+    !Number.isFinite(
+      missingStart
+    )
+    ||
+    !Number.isFinite(
+      missingEnd
+    )
+    ||
+    missingStart >=
+      missingEnd
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_HISTORY_MISSING_RANGE_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // READ-ONLY MULTI-WINDOW PREVIEW
+  // ==========================================================
+
+  const plannedBackfill =
+    planShopifyCustomersBackfillWindows({
+
+      from:
+        missingFrom,
+
+      to:
+        missingTo,
+
+    });
+
+
+  // ==========================================================
+  // DUPLICATE / COVERING CUSTOMER RUN CHECK
+  // ==========================================================
+
+  const existingBackfill =
+    await findCoveringBackfill({
+
+      workspaceId,
+
+      brandId,
+
+      integrationAccountId,
+
+      entity:
+        'customers',
+
+      from:
+        missingFrom,
+
+      to:
+        missingTo,
+
+    });
+
+
+  const lastPlannedWindow =
+    plannedBackfill.windows[
+      plannedBackfill.windows.length - 1
+    ]
+    ??
+    null;
+
+
+  return {
+
+    ok:
+      true,
+
+    decision:
+      existingBackfill
+        ?
+          'already_planned'
+        :
+          decision,
+
+    backfillRequired:
+      !existingBackfill,
+
+    workspaceId,
+
+    brandId,
+
+    connectionId,
+
+    integrationAccountId,
+
+    providerAccountId,
+
+    shopDomain,
+
+    source: {
+
+      hasCustomers:
+        true,
+
+      earliestCustomer:
+        earliestShopifyCustomer,
+
+      tokenRefreshed:
+        source.tokenRefreshed,
+
+    },
+
+    warehouse,
+
+    missingRange: {
+
+      from:
+        missingFrom,
+
+      to:
+        missingTo,
+
+    },
+
+    plannedBackfill: {
+
+      strategy:
+        plannedBackfill.strategy,
+
+      totalWindows:
+        plannedBackfill.totalWindows,
+
+      firstWindow:
+        plannedBackfill.windows[0]
+        ??
+        null,
+
+      lastWindow:
+        lastPlannedWindow,
+
+      windows:
+        plannedBackfill.windows,
+
+    },
+
+    existingBackfill:
+      existingBackfill
+        ?
+          {
+
+            backfillRunId:
+              String(
+                existingBackfill
+                  .backfill_run_id
+              ),
+
+            entity:
+              String(
+                existingBackfill
+                  .entity
+              ),
+
             status:
               String(
                 existingBackfill
@@ -1185,22 +2045,22 @@ export async function inspectShopifyInitialOrdersHistory(
 //
 // WRITE PATH.
 //
-// Same inspection first.
+// Inspection first.
 //
 // If:
-// - no Shopify orders
+// - no Shopify Orders
 // - history already complete
-// - covering run already exists
+// - covering Orders run already exists
 //
 // then this is a NO-OP.
 //
 // Otherwise:
-// - construct deterministic idempotency key
-// - create/ensure parent run
-// - create/ensure quarterly windows
 //
-// createShopifyOrdersBackfill() uses deterministic IDs +
-// BigQuery MERGE when idempotencyKey is supplied.
+// deterministic idempotency key
+//        ↓
+// create/ensure Orders parent run
+//        ↓
+// create/ensure quarterly Orders windows
 //
 // Scheduler + Supervisor remain execution authority.
 // ============================================================
@@ -1222,10 +2082,6 @@ export async function ensureShopifyInitialOrdersHistory(
 
   }
 ) {
-
-  // ==========================================================
-  // INSPECT
-  // ==========================================================
 
   const inspection =
     await inspectShopifyInitialOrdersHistory({
@@ -1271,18 +2127,9 @@ export async function ensureShopifyInitialOrdersHistory(
 
 
   // ==========================================================
-  // IDEMPOTENCY KEY
+  // DETERMINISTIC IDEMPOTENCY KEY
   //
-  // Same logical initial-history request:
-  //
-  // same workspace
-  // same brand
-  // same Shopify integration account
-  // same missing range
-  //
-  //       ↓
-  //
-  // same deterministic run/window IDs
+  // Existing Orders contract remains unchanged.
   // ==========================================================
 
   const idempotencyKey =
@@ -1306,13 +2153,189 @@ export async function ensureShopifyInitialOrdersHistory(
 
 
   // ==========================================================
-  // CREATE / ENSURE BACKFILL
+  // CREATE / ENSURE ORDERS BACKFILL
   //
-  // No dispatch here.
+  // No direct dispatch.
   // ==========================================================
 
   const backfill =
     await createShopifyOrdersBackfill({
+
+      workspaceId:
+        inspection.workspaceId,
+
+      brandId:
+        inspection.brandId,
+
+      connectionId:
+        inspection.connectionId,
+
+      integrationAccountId:
+        inspection.integrationAccountId,
+
+      providerAccountId:
+        inspection.providerAccountId,
+
+      from:
+        inspection.missingRange.from,
+
+      to:
+        inspection.missingRange.to,
+
+      requestedBy:
+        input.requestedBy
+        ??
+        null,
+
+      idempotencyKey,
+
+    });
+
+
+  return {
+
+    ...inspection,
+
+    created:
+      true,
+
+    idempotencyKey,
+
+    backfill,
+
+  };
+
+}
+
+
+// ============================================================
+// ENSURE INITIAL CUSTOMERS HISTORY
+//
+// WRITE PATH.
+//
+// Inspection first.
+//
+// If:
+// - Shopify has no Customers
+// - Customer history already starts at Shopify source boundary
+// - covering Customer backfill already exists
+//
+// then this is a NO-OP.
+//
+// Otherwise:
+//
+// deterministic Customer idempotency key
+//        ↓
+// create/ensure Customer parent run
+//        ↓
+// create/ensure quarterly Customer windows
+//
+// No Pub/Sub publish happens here.
+//
+// Shared Scheduler/Supervisor remains execution authority.
+// ============================================================
+
+export async function ensureShopifyInitialCustomersHistory(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+    requestedBy?:
+      string | null;
+
+  }
+) {
+
+  // ==========================================================
+  // INSPECT
+  // ==========================================================
+
+  const inspection =
+    await inspectShopifyInitialCustomersHistory({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      connectionId:
+        input.connectionId,
+
+    });
+
+
+  // ==========================================================
+  // NO ACTION
+  // ==========================================================
+
+  if (
+    !inspection.backfillRequired
+    ||
+    !inspection.missingRange
+  ) {
+
+    return {
+
+      ...inspection,
+
+      created:
+        false,
+
+      idempotencyKey:
+        null,
+
+      backfill:
+        null,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // DETERMINISTIC CUSTOMER IDEMPOTENCY KEY
+  //
+  // createShopifyCustomersBackfill() additionally namespaces
+  // Customer deterministic identity inside the shared generic
+  // backfill creator.
+  // ==========================================================
+
+  const idempotencyKey =
+    [
+
+      'shopify_initial_customers_history_v1',
+
+      inspection.workspaceId,
+
+      inspection.brandId,
+
+      inspection.integrationAccountId,
+
+      inspection.missingRange.from,
+
+      inspection.missingRange.to,
+
+    ].join(
+      ':'
+    );
+
+
+  // ==========================================================
+  // CREATE / ENSURE CUSTOMER BACKFILL
+  //
+  // No direct dispatch here.
+  // ==========================================================
+
+  const backfill =
+    await createShopifyCustomersBackfill({
 
       workspaceId:
         inspection.workspaceId,

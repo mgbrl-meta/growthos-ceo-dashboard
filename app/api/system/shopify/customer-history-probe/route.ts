@@ -8,13 +8,12 @@ import {
 } from '@/lib/tenancy/request-context';
 
 import {
-  getIntegrationAccountByProviderAccountId,
   getIntegrationConnection,
 } from '@/lib/integrations/store';
 
 import {
-  queryEarliestCustomerWithStoredShopifyCredential,
-} from '@/lib/integrations/providers/shopify-credentials';
+  inspectShopifyInitialCustomersHistory,
+} from '@/lib/integrations/providers/shopify-history-bootstrap';
 
 
 export const dynamic =
@@ -25,126 +24,33 @@ export const runtime =
 
 
 // ============================================================
-// METADATA
-// ============================================================
-
-function normalizeMetadata(
-  value: unknown
-):
-  Record<string, any> {
-
-  if (
-    value
-    &&
-    typeof value ===
-      'object'
-    &&
-    !Array.isArray(
-      value
-    )
-  ) {
-
-    return value as Record<
-      string,
-      any
-    >;
-
-  }
-
-
-  if (
-    typeof value ===
-      'string'
-  ) {
-
-    try {
-
-      const parsed =
-        JSON.parse(
-          value
-        );
-
-
-      if (
-        parsed
-        &&
-        typeof parsed ===
-          'object'
-        &&
-        !Array.isArray(
-          parsed
-        )
-      ) {
-
-        return parsed;
-
-      }
-
-    } catch {
-
-      return {};
-
-    }
-
-  }
-
-
-  return {};
-
-}
-
-
-// ============================================================
-// REQUIRED STRING
-// ============================================================
-
-function requireValue(
-  value: unknown,
-  errorCode: string
-) {
-
-  const normalized =
-    String(
-      value
-      ??
-      ''
-    ).trim();
-
-
-  if (!normalized) {
-
-    throw new Error(
-      errorCode
-    );
-
-  }
-
-
-  return normalized;
-
-}
-
-
-// ============================================================
-// CUSTOMER HISTORY SOURCE PROBE
+// SHOPIFY CUSTOMER HISTORY PROBE
 //
 // READ ONLY.
 //
-// Growth OS authenticated tenant
+// Authenticated Growth OS tenant
 //        ↓
-// canonical Shopify connection
+// Shopify connection
 //        ↓
-// exact integration account
+// Customer source boundary
 //        ↓
-// Secret Manager credential
+// Customer warehouse coverage
 //        ↓
-// earliest accessible Shopify Customer
+// covering Customer backfill
+//        ↓
+// bootstrap decision
 //
-// NO:
+// IMPORTANT:
 //
-// backfill creation
-// Pub/Sub
-// warehouse writes
+// This endpoint DOES NOT:
+//
+// - create a Customer backfill
+// - publish Pub/Sub
+// - mutate backfill state
+// - write Customer warehouse data
+//
+// It is only the verification gate before automatic
+// installation bootstrap is enabled.
 // ============================================================
 
 export async function POST(
@@ -154,7 +60,7 @@ export async function POST(
   try {
 
     // ========================================================
-    // TENANT
+    // 1. AUTHENTICATED TENANT
     // ========================================================
 
     const {
@@ -166,7 +72,7 @@ export async function POST(
 
 
     // ========================================================
-    // SHOPIFY CONNECTION
+    // 2. SHOPIFY CONNECTION
     // ========================================================
 
     const connection =
@@ -229,120 +135,12 @@ export async function POST(
     }
 
 
-    const providerAccountId =
-      requireValue(
-        connection.provider_account_id,
-        'SHOPIFY_CUSTOMER_HISTORY_PROVIDER_ACCOUNT_MISSING'
-      );
-
-
-    const secretName =
-      requireValue(
-        connection.secret_name,
-        'SHOPIFY_CUSTOMER_HISTORY_SECRET_MISSING'
-      );
-
-
     // ========================================================
-    // EXACT SHOPIFY ACCOUNT
+    // 3. READ-ONLY CUSTOMER HISTORY INSPECTION
     // ========================================================
 
-    const account =
-      await getIntegrationAccountByProviderAccountId(
-
-        'shopify',
-
-        providerAccountId
-
-      );
-
-
-    if (!account) {
-
-      throw new Error(
-        'SHOPIFY_CUSTOMER_HISTORY_ACCOUNT_NOT_FOUND'
-      );
-
-    }
-
-
-    if (
-      account.workspace_id !==
-        tenant.workspaceId
-      ||
-      account.brand_id !==
-        tenant.brandId
-      ||
-      account.connection_id !==
-        connection.connection_id
-    ) {
-
-      throw new Error(
-        'SHOPIFY_CUSTOMER_HISTORY_ACCOUNT_IDENTITY_MISMATCH'
-      );
-
-    }
-
-
-    const integrationAccountId =
-      requireValue(
-        account.integration_account_id,
-        'SHOPIFY_CUSTOMER_HISTORY_INTEGRATION_ACCOUNT_MISSING'
-      );
-
-
-    const metadata =
-      normalizeMetadata(
-        account.metadata
-      );
-
-
-    const shopDomain =
-      requireValue(
-        metadata.shop_domain,
-        'SHOPIFY_CUSTOMER_HISTORY_SHOP_DOMAIN_MISSING'
-      );
-
-
-    // ========================================================
-    // READ SHOPIFY SOURCE BOUNDARY
-    // ========================================================
-
-    const source =
-      await queryEarliestCustomerWithStoredShopifyCredential({
-
-        workspaceId:
-          tenant.workspaceId,
-
-        brandId:
-          tenant.brandId,
-
-        secretName,
-
-        expectedShopId:
-          providerAccountId,
-
-        expectedShopDomain:
-          shopDomain,
-
-      });
-
-
-    // ========================================================
-    // SAFE RESPONSE
-    //
-    // No credential material.
-    // ========================================================
-
-    return NextResponse.json({
-
-      ok:
-        true,
-
-      step:
-        'SHOPIFY_EARLIEST_CUSTOMER_PROBED',
-
-      data: {
+    const result =
+      await inspectShopifyInitialCustomersHistory({
 
         workspaceId:
           tenant.workspaceId,
@@ -353,42 +151,23 @@ export async function POST(
         connectionId:
           connection.connection_id,
 
-        integrationAccountId,
+      });
 
-        providerAccountId,
 
-        shopDomain,
+    // ========================================================
+    // 4. SAFE RESPONSE
+    // ========================================================
 
-        hasCustomers:
-          Boolean(
-            source.customer
-          ),
+    return NextResponse.json({
 
-        earliestCustomer:
-          source.customer
-            ?
-              {
+      ok:
+        true,
 
-                id:
-                  source.customer.id,
+      step:
+        'SHOPIFY_INITIAL_CUSTOMERS_HISTORY_INSPECTED',
 
-                legacyResourceId:
-                  source.customer.legacyResourceId,
-
-                createdAt:
-                  source.customer.createdAt,
-
-                updatedAt:
-                  source.customer.updatedAt,
-
-              }
-            :
-              null,
-
-        tokenRefreshed:
-          source.tokenRefreshed,
-
-      },
+      data:
+        result,
 
     });
 
@@ -401,7 +180,7 @@ export async function POST(
       String(
         error?.message
         ||
-        'Shopify Customer history probe failed'
+        'Shopify Customer history inspection failed'
       );
 
 

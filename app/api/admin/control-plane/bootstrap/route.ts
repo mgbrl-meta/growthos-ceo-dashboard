@@ -4,6 +4,10 @@ import {
 } from 'next/server';
 
 import {
+  requirePlatformSuperAdmin,
+} from '@/lib/auth/platform-admin';
+
+import {
   ensureGrowthOSAdminControlPlane,
   listGrowthOSModules,
   listGrowthOSPlans,
@@ -20,13 +24,13 @@ export const runtime =
 // ============================================================
 // ADMIN CONTROL-PLANE BOOTSTRAP
 //
-// Development:
-//   Can be called directly.
+// SUPER ADMIN ONLY.
 //
-// Production:
-//   Requires GROWTHOS_ADMIN_BOOTSTRAP_SECRET.
+// Production additionally requires:
 //
-// This endpoint only:
+// GROWTHOS_ADMIN_BOOTSTRAP_SECRET
+//
+// This endpoint:
 //
 // - ensures schema
 // - seeds canonical plans
@@ -34,6 +38,7 @@ export const runtime =
 // - seeds plan-module mappings
 //
 // It DOES NOT:
+//
 // - create clients
 // - change subscriptions
 // - change users
@@ -41,13 +46,26 @@ export const runtime =
 // ============================================================
 
 export async function POST(
-  request: NextRequest
+  request:
+    NextRequest
 ) {
 
   try {
 
     // ========================================================
-    // PRODUCTION PROTECTION
+    // 1. SUPER ADMIN AUTHORIZATION
+    // ========================================================
+
+    const admin =
+      await requirePlatformSuperAdmin(
+        request
+      );
+
+
+    // ========================================================
+    // 2. PRODUCTION BOOTSTRAP SECRET
+    //
+    // Existing additional protection is preserved.
     // ========================================================
 
     if (
@@ -67,11 +85,13 @@ export async function POST(
 
         return NextResponse.json(
           {
+
             ok:
               false,
 
             error:
               'ADMIN_BOOTSTRAP_DISABLED',
+
           },
           {
             status:
@@ -82,36 +102,45 @@ export async function POST(
       }
 
 
-      const authorization =
+      // ------------------------------------------------------
+      // IMPORTANT
+      //
+      // Platform auth already uses the normal Growth OS
+      // session cookie.
+      //
+      // Therefore the bootstrap secret uses a separate header
+      // instead of Authorization, avoiding conflict with
+      // Shopify / bearer authentication semantics.
+      // ------------------------------------------------------
+
+      const providedSecret =
         String(
           request.headers.get(
-            'authorization'
+            'x-growthos-bootstrap-secret'
           )
           ||
           ''
         ).trim();
 
 
-      const expectedAuthorization =
-        `Bearer ${expectedSecret}`;
-
-
       if (
-        authorization !==
-        expectedAuthorization
+        providedSecret !==
+        expectedSecret
       ) {
 
         return NextResponse.json(
           {
+
             ok:
               false,
 
             error:
-              'UNAUTHORIZED',
+              'ADMIN_BOOTSTRAP_SECRET_REQUIRED',
+
           },
           {
             status:
-              401,
+              403,
           }
         );
 
@@ -121,14 +150,14 @@ export async function POST(
 
 
     // ========================================================
-    // ENSURE CONTROL PLANE
+    // 3. ENSURE CONTROL PLANE
     // ========================================================
 
     await ensureGrowthOSAdminControlPlane();
 
 
     // ========================================================
-    // VERIFY SEEDED CATALOG
+    // 4. VERIFY SEEDED CATALOG
     // ========================================================
 
     const [
@@ -145,7 +174,7 @@ export async function POST(
 
 
     // ========================================================
-    // RESPONSE
+    // 5. RESPONSE
     // ========================================================
 
     return NextResponse.json({
@@ -165,6 +194,7 @@ export async function POST(
           modules.length,
 
       },
+
 
       seeded: {
 
@@ -190,6 +220,7 @@ export async function POST(
             })
           ),
 
+
         modules:
           modules.map(
             module => ({
@@ -214,11 +245,23 @@ export async function POST(
 
       },
 
+
+      meta: {
+
+        authorization:
+          'platform_super_admin',
+
+        platformRole:
+          admin.platformRole,
+
+      },
+
     });
 
 
   } catch (
-    error: any
+    error:
+      any
   ) {
 
     const message =
@@ -227,6 +270,90 @@ export async function POST(
         ||
         'Unable to bootstrap Growth OS admin control plane'
       );
+
+
+    // ========================================================
+    // AUTHENTICATION
+    // ========================================================
+
+    if (
+      message ===
+      'UNAUTHENTICATED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'UNAUTHENTICATED',
+
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // PLATFORM ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
+
+
+    // ========================================================
+    // SUPER ADMIN
+    // ========================================================
+
+    if (
+      message ===
+      'SUPER_ADMIN_ACCESS_REQUIRED'
+    ) {
+
+      return NextResponse.json(
+        {
+
+          ok:
+            false,
+
+          error:
+            'SUPER_ADMIN_ACCESS_REQUIRED',
+
+        },
+        {
+          status:
+            403,
+        }
+      );
+
+    }
 
 
     console.error(
@@ -244,7 +371,7 @@ export async function POST(
           false,
 
         error:
-          message,
+          'Unable to bootstrap Growth OS admin control plane',
 
       },
       {
