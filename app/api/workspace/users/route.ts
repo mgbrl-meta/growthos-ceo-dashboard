@@ -8,8 +8,8 @@ import {
 } from '@/lib/auth/request-auth';
 
 import {
-  getGrowthOSWorkspaceSubscriptionSnapshot,
-} from '@/lib/admin/control-plane';
+  listGrowthOSWorkspaceUsersFast,
+} from '@/lib/auth/user-store';
 
 
 export const dynamic =
@@ -20,21 +20,16 @@ export const runtime =
 
 
 // ============================================================
-// CURRENT WORKSPACE SUBSCRIPTION
+// CURRENT WORKSPACE USERS
 //
-// FAST RUNTIME READ.
+// READ ONLY.
 //
-// IMPORTANT:
+// Tenant identity comes only from the authenticated session.
 //
-// This endpoint does NOT:
+// Browser does NOT provide workspaceId / brandId.
 //
-// - ensure schema
-// - create tables
-// - seed plans
-// - seed modules
-// - run migrations
-//
-// Tenant comes exclusively from authenticated session.
+// This endpoint intentionally uses the fast runtime read and
+// does not perform schema/bootstrap work.
 // ============================================================
 
 export async function GET(
@@ -124,18 +119,55 @@ export async function GET(
 
 
     // ========================================================
-    // 3. ONE CONTROL-PLANE QUERY
+    // 3. FAST RUNTIME READ
     // ========================================================
 
-    const snapshot =
-      await getGrowthOSWorkspaceSubscriptionSnapshot(
+    const users =
+      await listGrowthOSWorkspaceUsersFast(
         workspaceId,
         brandId
       );
 
 
     // ========================================================
-    // 4. RESPONSE
+    // 4. SUMMARY
+    // ========================================================
+
+    const activeUsers =
+      users.filter(
+        user =>
+          user.user_status ===
+            'active'
+          &&
+          user.membership_status ===
+            'active'
+      ).length;
+
+
+    const owners =
+      users.filter(
+        user =>
+          user.role ===
+            'owner'
+      ).length;
+
+
+    const admins =
+      users.filter(
+        user =>
+          user.role ===
+            'admin'
+      ).length;
+
+
+    // ========================================================
+    // 5. SAFE RESPONSE
+    //
+    // NEVER return:
+    //
+    // password_hash
+    // session secrets
+    // auth tokens
     // ========================================================
 
     return NextResponse.json({
@@ -143,7 +175,70 @@ export async function GET(
       ok:
         true,
 
-      ...snapshot,
+
+      workspace: {
+
+        workspaceId,
+
+        brandId,
+
+      },
+
+
+      summary: {
+
+        totalUsers:
+          users.length,
+
+        activeUsers,
+
+        owners,
+
+        admins,
+
+      },
+
+
+      users:
+        users.map(
+          user => ({
+
+            membershipId:
+              user.membership_id,
+
+            userId:
+              user.user_id,
+
+            email:
+              user.email,
+
+            fullName:
+              user.full_name,
+
+            role:
+              user.role,
+
+            userStatus:
+              user.user_status,
+
+            membershipStatus:
+              user.membership_status,
+
+            isDefault:
+              user.is_default,
+
+            membershipCreatedAt:
+              user.membership_created_at,
+
+            membershipUpdatedAt:
+              user.membership_updated_at,
+
+            lastLoginAt:
+              user.last_login_at,
+
+          })
+        ),
+
 
       meta: {
 
@@ -164,12 +259,12 @@ export async function GET(
       String(
         error?.message
         ||
-        'Unable to load workspace subscription'
+        'Unable to load workspace users'
       );
 
 
     console.error(
-      'WORKSPACE_SUBSCRIPTION_ERROR',
+      'WORKSPACE_USERS_ERROR',
       {
         message,
 
@@ -188,7 +283,7 @@ export async function GET(
           false,
 
         error:
-          'Unable to load subscription',
+          'Unable to load workspace users',
 
         meta: {
 

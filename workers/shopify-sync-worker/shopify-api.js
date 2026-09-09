@@ -178,6 +178,7 @@ const ORDERS_QUERY = `
 
 `;
 
+
 // ============================================================
 // ONE ORDER QUERY
 //
@@ -322,6 +323,141 @@ const ORDER_BY_ID_QUERY = `
 
 
 // ============================================================
+// CUSTOMERS QUERY
+//
+// Canonical Customer representation.
+//
+// Initially:
+// manual Customer sync.
+//
+// Later the SAME representation is reused by:
+//
+// - incremental reconciliation
+// - Bulk historical backfill
+// - realtime webhook GraphQL re-fetch
+//
+// Incremental contract:
+//
+// [from, to)
+//
+// updated_at >= from
+// updated_at <  to
+//
+// Exactly the same recovery-window philosophy as Orders.
+// ============================================================
+
+const CUSTOMERS_QUERY = `
+
+  query GrowthOsCustomersPage(
+    $first: Int!
+    $after: String
+    $searchQuery: String
+    $reverse: Boolean!
+  ) {
+
+    customers(
+      first: $first
+      after: $after
+      query: $searchQuery
+      sortKey: UPDATED_AT
+      reverse: $reverse
+    ) {
+
+      pageInfo {
+
+        hasNextPage
+        endCursor
+
+      }
+
+
+      nodes {
+
+        id
+
+        legacyResourceId
+
+        firstName
+        lastName
+        displayName
+
+        createdAt
+        updatedAt
+
+        state
+
+        tags
+
+        locale
+
+        note
+
+        verifiedEmail
+
+        taxExempt
+
+        numberOfOrders
+
+
+        amountSpent {
+
+          amount
+          currencyCode
+
+        }
+
+
+        defaultEmailAddress {
+
+          emailAddress
+          marketingState
+
+        }
+
+
+        defaultPhoneNumber {
+
+          phoneNumber
+          marketingState
+
+        }
+
+
+        defaultAddress {
+
+          id
+
+          firstName
+          lastName
+
+          company
+
+          address1
+          address2
+
+          city
+
+          province
+          provinceCode
+
+          country
+          countryCodeV2
+
+          zip
+          phone
+
+        }
+
+      }
+
+    }
+
+  }
+
+`;
+
+
+// ============================================================
 // EARLIEST ORDER QUERY
 //
 // Read-only coverage probe.
@@ -410,7 +546,7 @@ function normalizeTimestamp(
 
 
 // ============================================================
-// UPDATED_AT SEARCH QUERY
+// ORDERS UPDATED_AT SEARCH QUERY
 //
 // Shopify Admin search syntax:
 //
@@ -420,9 +556,6 @@ function normalizeTimestamp(
 // Canonical range:
 //
 // [from, to)
-//
-// This deliberately overlaps safely across future recovery
-// runs. Warehouse hashing/state logic handles duplicates.
 // ============================================================
 
 function buildUpdatedAtSearchQuery(
@@ -486,8 +619,97 @@ function buildUpdatedAtSearchQuery(
 
 
   return [
+
     `updated_at:>='${normalizedFrom}'`,
+
     `updated_at:<'${normalizedTo}'`,
+
+  ].join(
+    ' '
+  );
+
+}
+
+
+// ============================================================
+// CUSTOMERS UPDATED_AT SEARCH QUERY
+//
+// Same contract as Orders:
+//
+// [from, to)
+//
+// This prepares Customers for the same:
+// - incremental reconciliation
+// - overlap recovery
+// - watermark architecture
+// ============================================================
+
+function buildCustomersUpdatedSearch(
+  from,
+  to
+) {
+
+  if (
+    !from
+    &&
+    !to
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    !from
+    ||
+    !to
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_UPDATED_WINDOW_INCOMPLETE'
+    );
+
+  }
+
+
+  const normalizedFrom =
+    normalizeTimestamp(
+      from,
+      'SHOPIFY_CUSTOMERS_UPDATED_FROM_INVALID'
+    );
+
+
+  const normalizedTo =
+    normalizeTimestamp(
+      to,
+      'SHOPIFY_CUSTOMERS_UPDATED_TO_INVALID'
+    );
+
+
+  if (
+    Date.parse(
+      normalizedFrom
+    )
+    >=
+    Date.parse(
+      normalizedTo
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_UPDATED_WINDOW_INVALID'
+    );
+
+  }
+
+
+  return [
+
+    `updated_at:>='${normalizedFrom}'`,
+
+    `updated_at:<'${normalizedTo}'`,
+
   ].join(
     ' '
   );
@@ -665,10 +887,11 @@ export async function fetchOrdersPage(
   // ==========================================================
   // DIRECTION
   //
-  // Windowed incremental reads should always move oldest →
-  // newest.
+  // Windowed incremental:
+  // oldest → newest
   //
-  // Non-windowed manual reads preserve latest-first behavior.
+  // Manual:
+  // latest → oldest
   // ==========================================================
 
   const reverse =
@@ -732,16 +955,22 @@ export async function fetchOrdersPage(
   if (
     result
       .response
-      .status === 401
+      .status ===
+        401
   ) {
 
     token =
       await getValidShopifyAccessToken(
+
         runtime,
+
         {
+
           forceRefresh:
             true,
+
         }
+
       );
 
 
@@ -810,7 +1039,8 @@ export async function fetchOrdersPage(
     result
       .json
       .errors
-      .length > 0
+      .length >
+        0
   ) {
 
     console.error(
@@ -859,7 +1089,7 @@ export async function fetchOrdersPage(
   }
 
 
-    const sourceOrders =
+  const sourceOrders =
     Array.isArray(
       connection.nodes
     )
@@ -872,16 +1102,13 @@ export async function fetchOrdersPage(
   // ==========================================================
   // STRICT LOCAL WINDOW GUARD
   //
-  // Shopify search is the source-side optimisation.
+  // Shopify search performs source-side filtering.
   //
-  // Growth OS still independently enforces the canonical:
+  // Growth OS independently enforces:
   //
   // [from, to)
   //
-  // contract before anything reaches the warehouse.
-  //
-  // This protects adjacent incremental windows from boundary
-  // ambiguity or provider-side search behaviour.
+  // before anything reaches the warehouse.
   // ==========================================================
 
   let orders =
@@ -951,6 +1178,7 @@ export async function fetchOrdersPage(
 
     orders,
 
+
     pageInfo: {
 
       hasNextPage:
@@ -968,6 +1196,7 @@ export async function fetchOrdersPage(
         null,
 
     },
+
 
     query: {
 
@@ -996,12 +1225,467 @@ export async function fetchOrdersPage(
       recordsFilteredOut:
         sourceOrders.length
         -
-        orders.length,  
+        orders.length,
 
     },
 
+
     tokenRefreshed:
-      token.refreshed,
+      Boolean(
+        token
+          ?.refreshed
+      ),
+
+  };
+
+}
+
+
+// ============================================================
+// FETCH CUSTOMERS PAGE
+//
+// Same pagination/recovery contract as Orders.
+//
+// Manual:
+//
+// latest Customers
+// first = 25
+//
+// Future incremental:
+//
+// first = 250
+// after = cursor
+// [from, to)
+// sortKey = UPDATED_AT
+// reverse = false
+//
+// Growth OS again applies a strict local [from,to) guard.
+// ============================================================
+
+export async function fetchCustomersPage(
+  runtime,
+  options = {}
+) {
+
+  // ==========================================================
+  // PAGE SIZE
+  // ==========================================================
+
+  const first =
+    Math.min(
+      Math.max(
+        Number(
+          options.first
+          ??
+          25
+        ),
+        1
+      ),
+      250
+    );
+
+
+  // ==========================================================
+  // CURSOR
+  // ==========================================================
+
+  const after =
+    String(
+      options.after
+      ??
+      ''
+    ).trim()
+    ||
+    null;
+
+
+  // ==========================================================
+  // UPDATED_AT WINDOW
+  // ==========================================================
+
+  const searchQuery =
+    buildCustomersUpdatedSearch(
+
+      options.from
+      ??
+      null,
+
+      options.to
+      ??
+      null
+
+    );
+
+
+  // ==========================================================
+  // DIRECTION
+  //
+  // Same as Orders:
+  //
+  // windowed:
+  // oldest → newest
+  //
+  // manual:
+  // latest → oldest
+  // ==========================================================
+
+  const reverse =
+    searchQuery
+      ?
+        false
+      :
+        Boolean(
+          options.reverse
+          ??
+          true
+        );
+
+
+  // ==========================================================
+  // VALID / REFRESHED CREDENTIAL
+  // ==========================================================
+
+  let token =
+    await getValidShopifyAccessToken(
+      runtime
+    );
+
+
+  const variables = {
+
+    first,
+
+    after,
+
+    searchQuery,
+
+    reverse,
+
+  };
+
+
+  // ==========================================================
+  // FIRST REQUEST
+  // ==========================================================
+
+  let result =
+    await executeGraphQL({
+
+      shopDomain:
+        runtime
+          .credential
+          .shopDomain,
+
+      accessToken:
+        token.accessToken,
+
+      query:
+        CUSTOMERS_QUERY,
+
+      variables,
+
+    });
+
+
+  // ==========================================================
+  // 401 RECOVERY
+  //
+  // Identical token lifecycle to Orders.
+  // ==========================================================
+
+  if (
+    result
+      .response
+      .status ===
+        401
+  ) {
+
+    token =
+      await getValidShopifyAccessToken(
+
+        runtime,
+
+        {
+
+          forceRefresh:
+            true,
+
+        }
+
+      );
+
+
+    result =
+      await executeGraphQL({
+
+        shopDomain:
+          runtime
+            .credential
+            .shopDomain,
+
+        accessToken:
+          token.accessToken,
+
+        query:
+          CUSTOMERS_QUERY,
+
+        variables,
+
+      });
+
+  }
+
+
+  // ==========================================================
+  // HTTP ERROR
+  // ==========================================================
+
+  if (
+    !result
+      .response
+      .ok
+  ) {
+
+    console.error(
+      'SHOPIFY_CUSTOMERS_HTTP_ERROR',
+      {
+
+        status:
+          result
+            .response
+            .status,
+
+      }
+    );
+
+
+    throw new Error(
+      `SHOPIFY_CUSTOMERS_HTTP_${result.response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL ERROR
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      result
+        .json
+        ?.errors
+    )
+    &&
+    result
+      .json
+      .errors
+      .length >
+        0
+  ) {
+
+    console.error(
+      'SHOPIFY_CUSTOMERS_GRAPHQL_ERROR',
+      {
+
+        errors:
+          result
+            .json
+            .errors
+            .map(
+              error => ({
+
+                message:
+                  String(
+                    error?.message
+                    ??
+                    'Unknown GraphQL error'
+                  ),
+
+              })
+            ),
+
+      }
+    );
+
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_GRAPHQL_ERROR'
+    );
+
+  }
+
+
+  // ==========================================================
+  // CONNECTION
+  // ==========================================================
+
+  const connection =
+    result
+      .json
+      ?.data
+      ?.customers;
+
+
+  if (!connection) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_RESPONSE_MISSING'
+    );
+
+  }
+
+
+  const sourceCustomers =
+    Array.isArray(
+      connection.nodes
+    )
+      ?
+        connection.nodes
+      :
+        [];
+
+
+  // ==========================================================
+  // STRICT LOCAL WINDOW GUARD
+  //
+  // Same correctness guarantee as Orders.
+  //
+  // Shopify query:
+  // source-side optimisation.
+  //
+  // Growth OS:
+  // authoritative [from,to) enforcement.
+  // ==========================================================
+
+  let customers =
+    sourceCustomers;
+
+
+  if (
+    options.from
+    &&
+    options.to
+  ) {
+
+    const fromTime =
+      Date.parse(
+        options.from
+      );
+
+
+    const toTime =
+      Date.parse(
+        options.to
+      );
+
+
+    customers =
+      sourceCustomers.filter(
+        customer => {
+
+          const updatedTime =
+            Date.parse(
+              String(
+                customer?.updatedAt
+                ??
+                ''
+              )
+            );
+
+
+          if (
+            Number.isNaN(
+              updatedTime
+            )
+          ) {
+
+            throw new Error(
+              'SHOPIFY_CUSTOMER_UPDATED_AT_INVALID'
+            );
+
+          }
+
+
+          return (
+            updatedTime >=
+              fromTime
+            &&
+            updatedTime <
+              toTime
+          );
+
+        }
+      );
+
+  }
+
+
+  // ==========================================================
+  // RESULT
+  // ==========================================================
+
+  return {
+
+    customers,
+
+
+    pageInfo: {
+
+      hasNextPage:
+        Boolean(
+          connection
+            .pageInfo
+            ?.hasNextPage
+        ),
+
+      endCursor:
+        connection
+          .pageInfo
+          ?.endCursor
+        ??
+        null,
+
+    },
+
+
+    query: {
+
+      from:
+        options.from
+        ??
+        null,
+
+      to:
+        options.to
+        ??
+        null,
+
+      searchQuery,
+
+      reverse,
+
+      cursorPresent:
+        Boolean(
+          after
+        ),
+
+      sourceRecordsFetched:
+        sourceCustomers.length,
+
+      recordsFilteredOut:
+        sourceCustomers.length
+        -
+        customers.length,
+
+    },
+
+
+    tokenRefreshed:
+      Boolean(
+        token
+          ?.refreshed
+      ),
 
   };
 
@@ -1255,16 +1939,22 @@ export async function fetchEarliestShopifyOrder(
   if (
     result
       .response
-      .status === 401
+      .status ===
+        401
   ) {
 
     token =
       await getValidShopifyAccessToken(
+
         runtime,
+
         {
+
           forceRefresh:
             true,
+
         }
+
       );
 
 
@@ -1334,7 +2024,8 @@ export async function fetchEarliestShopifyOrder(
     result
       .json
       .errors
-      .length > 0
+      .length >
+        0
   ) {
 
     console.error(
@@ -1404,7 +2095,10 @@ export async function fetchEarliestShopifyOrder(
     order,
 
     tokenRefreshed:
-      token.refreshed,
+      Boolean(
+        token
+          ?.refreshed
+      ),
 
   };
 

@@ -8,8 +8,8 @@ import {
 } from '@/lib/auth/request-auth';
 
 import {
-  getGrowthOSWorkspaceSubscriptionSnapshot,
-} from '@/lib/admin/control-plane';
+  getAdminIntegrationsSnapshot,
+} from '@/lib/admin/integrations';
 
 
 export const dynamic =
@@ -20,25 +20,27 @@ export const runtime =
 
 
 // ============================================================
-// CURRENT WORKSPACE SUBSCRIPTION
+// ADMIN INTEGRATIONS
 //
-// FAST RUNTIME READ.
+// Cross-client integration registry.
 //
-// IMPORTANT:
+// READ ONLY.
 //
-// This endpoint does NOT:
+// This endpoint does not:
 //
-// - ensure schema
-// - create tables
-// - seed plans
-// - seed modules
-// - run migrations
+// - create connections
+// - reconnect providers
+// - disconnect providers
+// - modify selected accounts
+// - bootstrap integration tables
 //
-// Tenant comes exclusively from authenticated session.
+// Customer connection actions continue to use the existing
+// /api/integrations/* provider routes.
 // ============================================================
 
 export async function GET(
-  request: NextRequest
+  request:
+    NextRequest
 ) {
 
   const startedAt =
@@ -48,7 +50,7 @@ export async function GET(
   try {
 
     // ========================================================
-    // 1. AUTHENTICATE
+    // AUTHENTICATION
     // ========================================================
 
     const identity =
@@ -79,29 +81,12 @@ export async function GET(
 
 
     // ========================================================
-    // 2. ACTIVE TENANT
+    // SHOPIFY EMBEDDED SESSION CANNOT ACCESS GLOBAL ADMIN DATA
     // ========================================================
 
-    const workspaceId =
-      String(
-        identity.workspaceId
-        ||
-        ''
-      ).trim();
-
-
-    const brandId =
-      String(
-        identity.brandId
-        ||
-        ''
-      ).trim();
-
-
     if (
-      !workspaceId
-      ||
-      !brandId
+      identity.authMethod ===
+        'shopify'
     ) {
 
       return NextResponse.json(
@@ -111,12 +96,12 @@ export async function GET(
             false,
 
           error:
-            'ACTIVE_BRAND_REQUIRED',
+            'ADMIN_ACCESS_REQUIRED',
 
         },
         {
           status:
-            400,
+            403,
         }
       );
 
@@ -124,26 +109,26 @@ export async function GET(
 
 
     // ========================================================
-    // 3. ONE CONTROL-PLANE QUERY
+    // READ GLOBAL CONNECTION STATE
     // ========================================================
 
     const snapshot =
-      await getGrowthOSWorkspaceSubscriptionSnapshot(
-        workspaceId,
-        brandId
-      );
+      await getAdminIntegrationsSnapshot();
 
-
-    // ========================================================
-    // 4. RESPONSE
-    // ========================================================
 
     return NextResponse.json({
 
       ok:
         true,
 
-      ...snapshot,
+      scope:
+        'global',
+
+      summary:
+        snapshot.summary,
+
+      integrations:
+        snapshot.integrations,
 
       meta: {
 
@@ -152,31 +137,40 @@ export async function GET(
           -
           startedAt,
 
+        source:
+          'growthos_control.integration_connections + integration_accounts',
+
+        readOnly:
+          true,
+
       },
 
     });
 
   } catch (
-    error: any
+    error:
+      any
   ) {
 
     const message =
       String(
         error?.message
         ||
-        'Unable to load workspace subscription'
+        'Unable to load Admin Integrations'
       );
 
 
     console.error(
-      'WORKSPACE_SUBSCRIPTION_ERROR',
+      'ADMIN_INTEGRATIONS_ERROR',
       {
+
         message,
 
         durationMs:
           Date.now()
           -
           startedAt,
+
       }
     );
 
@@ -188,16 +182,7 @@ export async function GET(
           false,
 
         error:
-          'Unable to load subscription',
-
-        meta: {
-
-          durationMs:
-            Date.now()
-            -
-            startedAt,
-
-        },
+          'Unable to load Admin Integrations',
 
       },
       {

@@ -9,7 +9,7 @@ import {
 
 import {
   auditWarehouse,
-} from '@/lib/warehouse/auditor';
+} from '@/lib/admin/warehouse/auditor';
 
 
 export const dynamic =
@@ -22,7 +22,7 @@ export const runtime =
 // ============================================================
 // GLOBAL WAREHOUSE INFRASTRUCTURE AUDIT
 //
-// GET /api/system/warehouse-audit
+// GET /api/admin/warehouse/audit
 //
 // PURPOSE:
 //

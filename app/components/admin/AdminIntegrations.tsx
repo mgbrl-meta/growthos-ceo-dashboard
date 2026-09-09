@@ -2,26 +2,167 @@
 
 import {
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
 
 import {
-  Activity,
+  AlertTriangle,
   ArrowLeft,
   ChevronRight,
   Plug,
-  Plus,
+  RefreshCw,
   Search,
-  X,
+  XCircle,
 } from 'lucide-react';
 
-import {
-  type AdminClientIntegration,
-  type IntegrationConnectionStatus,
-  type IntegrationDataStatus,
-  useAdminStore,
-} from './AdminStore';
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type AdminIntegration = {
+
+  connectionId:
+    string;
+
+  workspaceId:
+    string;
+
+  workspaceName:
+    string | null;
+
+  brandId:
+    string;
+
+  brandName:
+    string | null;
+
+  provider:
+    string;
+
+  connectionMode:
+    string | null;
+
+  ingestionAdapter:
+    string | null;
+
+  status:
+    string;
+
+  providerUserId:
+    string | null;
+
+  providerUserName:
+    string | null;
+
+  providerAccountId:
+    string | null;
+
+  providerAccountName:
+    string | null;
+
+  integrationAccountId:
+    string | null;
+
+  selectedAccountId:
+    string | null;
+
+  selectedAccountName:
+    string | null;
+
+  accountType:
+    string | null;
+
+  currency:
+    string | null;
+
+  timezone:
+    string | null;
+
+  connectedAt:
+    string | null;
+
+  updatedAt:
+    string | null;
+
+  lastVerifiedAt:
+    string | null;
+
+  lastSyncAt:
+    string | null;
+
+  accountSelectedAt:
+    string | null;
+
+  error:
+    string | null;
+
+};
+
+
+type IntegrationsResponse = {
+
+  ok:
+    boolean;
+
+  scope?:
+    string;
+
+  summary?: {
+
+    total:
+      number;
+
+    connected:
+      number;
+
+    attention:
+      number;
+
+    disconnected:
+      number;
+
+    clients:
+      number;
+
+    providers:
+      number;
+
+  };
+
+  integrations?:
+    AdminIntegration[];
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+    source?:
+      string;
+
+    readOnly?:
+      boolean;
+
+  };
+
+  error?:
+    string;
+
+};
+
+
+type ConnectionGroup =
+  | 'connected'
+  | 'attention'
+  | 'disconnected';
+
+
+type StatusFilter =
+  | 'all'
+  | ConnectionGroup;
 
 
 // ============================================================
@@ -31,19 +172,42 @@ import {
 export default function AdminIntegrations() {
 
 
-  const {
-    integrations,
-    setIntegrations,
-    integrationProviders,
-    clients,
-    getClient,
-    getIntegrationProvider,
-  } =
-    useAdminStore();
+  // ==========================================================
+  // SERVER DATA
+  // ==========================================================
+
+  const [
+    data,
+    setData,
+  ] =
+    useState<IntegrationsResponse | null>(
+      null
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
 
 
   // ==========================================================
-  // UI STATE
+  // FILTERS
   // ==========================================================
 
   const [
@@ -74,8 +238,17 @@ export default function AdminIntegrations() {
 
 
   const [
-    selectedIntegrationId,
-    setSelectedIntegrationId,
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>(
+      'all'
+    );
+
+
+  const [
+    selectedConnectionId,
+    setSelectedConnectionId,
   ] =
     useState<
       string |
@@ -85,59 +258,223 @@ export default function AdminIntegrations() {
     );
 
 
-  const [
-    addOpen,
-    setAddOpen,
-  ] =
-    useState(
-      false
+  // ==========================================================
+  // LOAD REAL ADMIN INTEGRATIONS
+  // ==========================================================
+
+  async function loadIntegrations() {
+
+    setLoading(
+      true
+    );
+
+
+    setError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/integrations',
+          {
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+          }
+        );
+
+
+      const json:
+        IntegrationsResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load Admin Integrations'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+    } catch (
+      error: any
+    ) {
+
+      console.error(
+        'ADMIN_INTEGRATIONS_UI_ERROR',
+        error
+      );
+
+
+      setData(
+        null
+      );
+
+
+      setError(
+        String(
+          error?.message
+          ||
+          'Unable to load Admin Integrations'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadIntegrations();
+
+    },
+    []
+  );
+
+
+  // ==========================================================
+  // ROWS
+  // ==========================================================
+
+  const integrations =
+    data?.integrations
+    ||
+    [];
+
+
+  // ==========================================================
+  // CLIENT FILTER OPTIONS
+  // ==========================================================
+
+  const clients =
+    useMemo(
+      () => {
+
+        const map =
+          new Map<
+            string,
+            string
+          >();
+
+
+        integrations.forEach(
+          integration => {
+
+            const value =
+              getClientKey(
+                integration
+              );
+
+
+            const label =
+              getClientName(
+                integration
+              );
+
+
+            map.set(
+              value,
+              label
+            );
+
+          }
+        );
+
+
+        return Array
+          .from(
+            map.entries()
+          )
+          .map(
+            (
+              [
+                value,
+                label,
+              ]
+            ) => ({
+
+              value,
+
+              label,
+
+            })
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              a.label.localeCompare(
+                b.label
+              )
+          );
+
+      },
+      [
+        integrations,
+      ]
     );
 
 
   // ==========================================================
-  // ADD FORM
+  // PROVIDER FILTER OPTIONS
   // ==========================================================
 
-  const [
-    newClientId,
-    setNewClientId,
-  ] =
-    useState(
-      clients[0]?.id ||
-      ''
-    );
+  const providers =
+    useMemo(
+      () => {
 
+        return Array
+          .from(
+            new Set(
+              integrations
+                .map(
+                  integration =>
+                    integration.provider
+                )
+                .filter(
+                  Boolean
+                )
+            )
+          )
+          .sort();
 
-  const [
-    newProviderId,
-    setNewProviderId,
-  ] =
-    useState(
-      integrationProviders[0]?.id ||
-      ''
-    );
-
-
-  const [
-    newAccountName,
-    setNewAccountName,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newExternalAccountId,
-    setNewExternalAccountId,
-  ] =
-    useState(
-      ''
+      },
+      [
+        integrations,
+      ]
     );
 
 
   // ==========================================================
-  // FILTER
+  // FILTERED ROWS
   // ==========================================================
 
   const filteredIntegrations =
@@ -153,11 +490,18 @@ export default function AdminIntegrations() {
         return integrations.filter(
           integration => {
 
+
+            // --------------------------------------------------
+            // CLIENT
+            // --------------------------------------------------
+
             if (
               clientFilter !==
                 'all'
               &&
-              integration.clientId !==
+              getClientKey(
+                integration
+              ) !==
                 clientFilter
             ) {
 
@@ -166,11 +510,15 @@ export default function AdminIntegrations() {
             }
 
 
+            // --------------------------------------------------
+            // PROVIDER
+            // --------------------------------------------------
+
             if (
               providerFilter !==
                 'all'
               &&
-              integration.providerId !==
+              integration.provider !==
                 providerFilter
             ) {
 
@@ -179,6 +527,29 @@ export default function AdminIntegrations() {
             }
 
 
+            // --------------------------------------------------
+            // CONNECTION GROUP
+            // --------------------------------------------------
+
+            if (
+              statusFilter !==
+                'all'
+              &&
+              getConnectionGroup(
+                integration
+              ) !==
+                statusFilter
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SEARCH
+            // --------------------------------------------------
+
             if (!query) {
 
               return true;
@@ -186,56 +557,42 @@ export default function AdminIntegrations() {
             }
 
 
-            const client =
-              getClient(
-                integration.clientId
-              );
+            const haystack =
+              [
 
+                integration.connectionId,
+                integration.workspaceId,
+                integration.workspaceName,
+                integration.brandId,
+                integration.brandName,
+                integration.provider,
+                integration.status,
+                integration.connectionMode,
+                integration.ingestionAdapter,
+                integration.providerUserId,
+                integration.providerUserName,
+                integration.providerAccountId,
+                integration.providerAccountName,
+                integration.integrationAccountId,
+                integration.selectedAccountId,
+                integration.selectedAccountName,
+                integration.accountType,
+                integration.currency,
+                integration.timezone,
+                integration.error,
 
-            const provider =
-              getIntegrationProvider(
-                integration.providerId
-              );
-
-
-            return (
-
-              integration.accountName
-                .toLowerCase()
-                .includes(
-                  query
+              ]
+                .filter(
+                  Boolean
                 )
-
-              ||
-
-              integration.externalAccountId
-                .toLowerCase()
-                .includes(
-                  query
+                .join(
+                  ' '
                 )
+                .toLowerCase();
 
-              ||
 
-              (
-                client?.name ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
-                )
-
-              ||
-
-              (
-                provider?.name ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
-                )
-
+            return haystack.includes(
+              query
             );
 
           }
@@ -247,175 +604,221 @@ export default function AdminIntegrations() {
         search,
         clientFilter,
         providerFilter,
-        clients,
+        statusFilter,
       ]
     );
 
 
   // ==========================================================
-  // SELECTED INTEGRATION
+  // SUMMARY
+  // ==========================================================
+
+  const summary =
+    data?.summary
+    ||
+    {
+
+      total:
+        integrations.length,
+
+      connected:
+        integrations.filter(
+          integration =>
+            getConnectionGroup(
+              integration
+            ) ===
+            'connected'
+        ).length,
+
+      attention:
+        integrations.filter(
+          integration =>
+            getConnectionGroup(
+              integration
+            ) ===
+            'attention'
+        ).length,
+
+      disconnected:
+        integrations.filter(
+          integration =>
+            getConnectionGroup(
+              integration
+            ) ===
+            'disconnected'
+        ).length,
+
+      clients:
+        clients.length,
+
+      providers:
+        providers.length,
+
+    };
+
+
+  // ==========================================================
+  // SELECTED
   // ==========================================================
 
   const selectedIntegration =
     integrations.find(
       integration =>
-        integration.id ===
-        selectedIntegrationId
+        integration.connectionId ===
+        selectedConnectionId
     )
     ||
     null;
 
 
   // ==========================================================
-  // CREATE
+  // LOADING
   // ==========================================================
 
-  function createIntegration() {
-
-    if (
-      !newClientId
-      ||
-      !newProviderId
-    ) {
-
-      return;
-
-    }
-
-
-    const provider =
-      getIntegrationProvider(
-        newProviderId
-      );
-
-
-    const integration:
-      AdminClientIntegration = {
-
-      id:
-        `${newClientId}-${newProviderId}-${Date.now()}`,
-
-      clientId:
-        newClientId,
-
-      providerId:
-        newProviderId,
-
-      accountName:
-        newAccountName.trim()
-        ||
-        provider?.name
-        ||
-        'Integration',
-
-      externalAccountId:
-        newExternalAccountId.trim(),
-
-      connectionStatus:
-        'setup_required',
-
-      dataStatus:
-        'not_ready',
-
-      syncEnabled:
-        false,
-
-      lastSuccessfulSyncAt:
-        null,
-
-      createdAt:
-        new Date()
-          .toLocaleDateString(
-            'en-IN',
-            {
-              day:
-                '2-digit',
-
-              month:
-                'short',
-
-              year:
-                'numeric',
-            }
-          ),
-
-    };
-
-
-    setIntegrations(
-      previous => [
-        integration,
-        ...previous,
-      ]
-    );
-
-
-    resetForm();
-
-
-    setAddOpen(
-      false
-    );
-
-
-    setSelectedIntegrationId(
-      integration.id
-    );
-
-  }
-
-
-  // ==========================================================
-  // UPDATE
-  // ==========================================================
-
-  function updateIntegration(
-    updated:
-      AdminClientIntegration
+  if (
+    loading
+    &&
+    !data
   ) {
 
-    setIntegrations(
-      previous =>
-        previous.map(
-          integration =>
+    return (
 
-            integration.id ===
-              updated.id
+      <section className="gos-panel !p-4">
 
-              ? updated
+        <p
+          className="
+            text-[10px]
 
-              : integration
-        )
+            text-slate-500
+          "
+        >
+          Loading Integrations...
+        </p>
+
+      </section>
+
     );
 
   }
 
 
   // ==========================================================
-  // RESET
+  // ERROR
   // ==========================================================
 
-  function resetForm() {
+  if (
+    error
+    &&
+    !data
+  ) {
 
-    setNewClientId(
-      clients[0]?.id ||
-      ''
-    );
+    return (
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-red-200
+
+          bg-red-50
+
+          p-4
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-start
+            justify-between
+            gap-3
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              gap-2
+            "
+          >
+
+            <XCircle
+              size={15}
+              className="
+                mt-0.5
+                shrink-0
+
+                text-red-600
+              "
+            />
 
 
-    setNewProviderId(
-      integrationProviders[0]?.id ||
-      ''
-    );
+            <div>
+
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
+
+                  text-red-800
+                "
+              >
+                Unable to load Integrations
+              </p>
 
 
-    setNewAccountName(
-      ''
-    );
+              <p
+                className="
+                  mt-1
+
+                  text-[9px]
+
+                  text-red-700
+                "
+              >
+                {error}
+              </p>
+
+            </div>
+
+          </div>
 
 
-    setNewExternalAccountId(
-      ''
+          <button
+
+            type="button"
+
+            onClick={
+              loadIntegrations
+            }
+
+            className="
+              h-7
+
+              rounded-[7px]
+
+              border
+              border-red-200
+
+              bg-white
+
+              px-2.5
+
+              text-[9px]
+              font-semibold
+
+              text-red-700
+            "
+          >
+            Retry
+          </button>
+
+        </div>
+
+      </section>
+
     );
 
   }
@@ -438,13 +841,9 @@ export default function AdminIntegrations() {
         }
 
         onBack={() =>
-          setSelectedIntegrationId(
+          setSelectedConnectionId(
             null
           )
-        }
-
-        onChange={
-          updateIntegration
         }
 
       />
@@ -464,7 +863,7 @@ export default function AdminIntegrations() {
 
 
       {/* =====================================================
-          TOOLBAR
+          HEADER
       ===================================================== */}
 
       <section
@@ -507,207 +906,63 @@ export default function AdminIntegrations() {
               text-slate-500
             "
           >
-            Manage client source connections, setup status and data readiness.
+            Cross-client registry of connected platforms, provider accounts and ingestion configuration.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
+        <button
 
-            sm:flex-row
-            sm:flex-wrap
+          type="button"
+
+          onClick={
+            loadIntegrations
+          }
+
+          disabled={
+            loading
+          }
+
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-1.5
+
+            rounded-[8px]
+
+            border
+            border-slate-200
+
+            bg-white
+
+            px-3
+
+            text-[9px]
+            font-semibold
+
+            text-slate-700
+
+            hover:bg-slate-50
+
+            disabled:opacity-60
           "
         >
 
-          <div
-            className="
-              relative
+          <RefreshCw
+            size={12}
 
-              w-full
-
-              sm:w-[220px]
-            "
-          >
-
-            <Search
-              size={14}
-              className="
-                absolute
-                left-2.5
-                top-1/2
-
-                -translate-y-1/2
-
-                text-slate-400
-              "
-            />
-
-
-            <input
-
-              value={
-                search
-              }
-
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
-
-              placeholder="Search integrations"
-
-              className="
-                h-8
-                w-full
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                pl-8
-                pr-3
-
-                text-[11px]
-
-                outline-none
-              "
-
-            />
-
-          </div>
-
-
-          <select
-
-            value={
-              clientFilter
+            className={
+              loading
+                ? 'animate-spin'
+                : ''
             }
+          />
 
-            onChange={
-              event =>
-                setClientFilter(
-                  event.target.value
-                )
-            }
+          Refresh
 
-            className="gos-input"
-          >
-
-            <option value="all">
-              All Clients
-            </option>
-
-
-            {clients.map(
-              client => (
-
-                <option
-                  key={
-                    client.id
-                  }
-                  value={
-                    client.id
-                  }
-                >
-                  {client.name}
-                </option>
-
-              )
-            )}
-
-          </select>
-
-
-          <select
-
-            value={
-              providerFilter
-            }
-
-            onChange={
-              event =>
-                setProviderFilter(
-                  event.target.value
-                )
-            }
-
-            className="gos-input"
-          >
-
-            <option value="all">
-              All Providers
-            </option>
-
-
-            {integrationProviders.map(
-              provider => (
-
-                <option
-                  key={
-                    provider.id
-                  }
-                  value={
-                    provider.id
-                  }
-                >
-                  {provider.name}
-                </option>
-
-              )
-            )}
-
-          </select>
-
-
-          <button
-
-            type="button"
-
-            onClick={() =>
-              setAddOpen(
-                true
-              )
-            }
-
-            className="
-              inline-flex
-              h-8
-              items-center
-              justify-center
-              gap-1.5
-
-              rounded-[8px]
-
-              bg-slate-950
-
-              px-3
-
-              text-[10px]
-              font-semibold
-
-              text-white
-            "
-          >
-
-            <Plus
-              size={14}
-            />
-
-            Add Integration
-
-          </button>
-
-        </div>
+        </button>
 
       </section>
 
@@ -722,14 +977,15 @@ export default function AdminIntegrations() {
           grid-cols-2
           gap-2
 
-          md:grid-cols-4
+          md:grid-cols-3
+          xl:grid-cols-6
         "
       >
 
         <SummaryCard
           label="Connections"
           value={
-            integrations.length
+            summary.total
           }
         />
 
@@ -737,37 +993,356 @@ export default function AdminIntegrations() {
         <SummaryCard
           label="Connected"
           value={
-            integrations.filter(
-              integration =>
-                integration.connectionStatus ===
-                'connected'
-            ).length
+            summary.connected
           }
+          tone="green"
         />
 
 
         <SummaryCard
-          label="Setup Required"
+          label="Attention"
           value={
-            integrations.filter(
-              integration =>
-                integration.connectionStatus ===
-                'setup_required'
-            ).length
+            summary.attention
           }
+          tone="amber"
         />
 
 
         <SummaryCard
-          label="Data Ready"
+          label="Disconnected"
           value={
-            integrations.filter(
-              integration =>
-                integration.dataStatus ===
-                'ready'
-            ).length
+            summary.disconnected
+          }
+          tone="red"
+        />
+
+
+        <SummaryCard
+          label="Clients"
+          value={
+            summary.clients
+          }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="Providers"
+          value={
+            summary.providers
           }
         />
+
+      </section>
+
+
+      {/* =====================================================
+          QUICK STATUS
+      ===================================================== */}
+
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-2
+
+          md:grid-cols-3
+        "
+      >
+
+        <StatusCard
+
+          label="Connected"
+
+          count={
+            summary.connected
+          }
+
+          description="Connections currently configured and active."
+
+          tone="green"
+
+          onClick={() =>
+            setStatusFilter(
+              'connected'
+            )
+          }
+
+        />
+
+
+        <StatusCard
+
+          label="Needs Attention"
+
+          count={
+            summary.attention
+          }
+
+          description="Connection errors or non-standard states requiring review."
+
+          tone="amber"
+
+          onClick={() =>
+            setStatusFilter(
+              'attention'
+            )
+          }
+
+        />
+
+
+        <StatusCard
+
+          label="Disconnected"
+
+          count={
+            summary.disconnected
+          }
+
+          description="Connections currently disabled, removed or suspended."
+
+          tone="red"
+
+          onClick={() =>
+            setStatusFilter(
+              'disconnected'
+            )
+          }
+
+        />
+
+      </section>
+
+
+      {/* =====================================================
+          FILTERS
+      ===================================================== */}
+
+      <section
+        className="
+          gos-panel
+
+          flex
+          flex-col
+          gap-2
+
+          !p-3
+
+          xl:flex-row
+          xl:items-center
+        "
+      >
+
+        <div
+          className="
+            relative
+
+            w-full
+
+            xl:max-w-[340px]
+          "
+        >
+
+          <Search
+            size={14}
+
+            className="
+              absolute
+              left-2.5
+              top-1/2
+
+              -translate-y-1/2
+
+              text-slate-400
+            "
+          />
+
+
+          <input
+
+            value={
+              search
+            }
+
+            onChange={
+              event =>
+                setSearch(
+                  event.target.value
+                )
+            }
+
+            placeholder="Search client, provider, account..."
+
+            className="
+              h-8
+              w-full
+
+              rounded-[8px]
+
+              border
+              border-slate-300
+
+              bg-white
+
+              pl-8
+              pr-3
+
+              text-[10px]
+
+              outline-none
+
+              focus:border-violet-400
+              focus:ring-2
+              focus:ring-violet-100
+            "
+
+          />
+
+        </div>
+
+
+        <select
+
+          value={
+            clientFilter
+          }
+
+          onChange={
+            event =>
+              setClientFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Clients
+          </option>
+
+
+          {clients.map(
+            client => (
+
+              <option
+
+                key={
+                  client.value
+                }
+
+                value={
+                  client.value
+                }
+
+              >
+                {client.label}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            providerFilter
+          }
+
+          onChange={
+            event =>
+              setProviderFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Providers
+          </option>
+
+
+          {providers.map(
+            provider => (
+
+              <option
+
+                key={
+                  provider
+                }
+
+                value={
+                  provider
+                }
+
+              >
+                {formatProvider(
+                  provider
+                )}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            statusFilter
+          }
+
+          onChange={
+            event =>
+              setStatusFilter(
+                event.target.value as StatusFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Connection States
+          </option>
+
+          <option value="connected">
+            Connected
+          </option>
+
+          <option value="attention">
+            Needs Attention
+          </option>
+
+          <option value="disconnected">
+            Disconnected
+          </option>
+
+        </select>
+
+
+        <div
+          className="
+            ml-auto
+
+            whitespace-nowrap
+
+            text-[9px]
+
+            text-slate-500
+          "
+        >
+          {filteredIntegrations.length}
+          {' / '}
+          {integrations.length}
+          {' connections'}
+        </div>
 
       </section>
 
@@ -778,12 +1353,100 @@ export default function AdminIntegrations() {
 
       <section className="gos-panel !p-0">
 
+        <div
+          className="
+            flex
+            items-center
+            justify-between
+
+            border-b
+            border-slate-200
+
+            px-3
+            py-2.5
+          "
+        >
+
+          <div>
+
+            <h3 className="gos-section-title">
+              Integration Connections
+            </h3>
+
+
+            <p
+              className="
+                mt-0.5
+
+                text-[9px]
+
+                text-slate-500
+              "
+            >
+              Real connection configuration from the Growth OS integration control plane.
+            </p>
+
+          </div>
+
+
+          {(
+            search
+            ||
+            clientFilter !==
+              'all'
+            ||
+            providerFilter !==
+              'all'
+            ||
+            statusFilter !==
+              'all'
+          ) && (
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setSearch(
+                  ''
+                );
+
+                setClientFilter(
+                  'all'
+                );
+
+                setProviderFilter(
+                  'all'
+                );
+
+                setStatusFilter(
+                  'all'
+                );
+
+              }}
+
+              className="
+                text-[9px]
+                font-semibold
+
+                text-violet-600
+              "
+            >
+              Clear filters
+            </button>
+
+          )}
+
+        </div>
+
+
         <div className="overflow-x-auto">
 
           <table
             className="
-              min-w-[1100px]
               w-full
+              min-w-[1500px]
 
               border-collapse
             "
@@ -801,10 +1464,6 @@ export default function AdminIntegrations() {
               >
 
                 <TableHeader>
-                  Integration
-                </TableHeader>
-
-                <TableHeader>
                   Client
                 </TableHeader>
 
@@ -813,19 +1472,35 @@ export default function AdminIntegrations() {
                 </TableHeader>
 
                 <TableHeader>
+                  Account
+                </TableHeader>
+
+                <TableHeader>
                   Connection
                 </TableHeader>
 
                 <TableHeader>
-                  Data
+                  Mode
                 </TableHeader>
 
                 <TableHeader>
-                  Sync
+                  Adapter
                 </TableHeader>
 
                 <TableHeader>
-                  Last Success
+                  Connected
+                </TableHeader>
+
+                <TableHeader>
+                  Last Verified
+                </TableHeader>
+
+                <TableHeader>
+                  Last Sync
+                </TableHeader>
+
+                <TableHeader>
+                  Error
                 </TableHeader>
 
                 <TableHeader align="right">
@@ -840,242 +1515,388 @@ export default function AdminIntegrations() {
             <tbody>
 
               {filteredIntegrations.map(
-                integration => {
+                integration => (
 
-                  const client =
-                    getClient(
-                      integration.clientId
-                    );
+                  <tr
 
+                    key={
+                      integration.connectionId
+                    }
 
-                  const provider =
-                    getIntegrationProvider(
-                      integration.providerId
-                    );
+                    className="
+                      border-b
+                      border-slate-100
 
+                      last:border-0
 
-                  return (
-
-                    <tr
-                      key={
-                        integration.id
-                      }
-
-                      className="
-                        border-b
-                        border-slate-100
-
-                        last:border-0
-
-                        hover:bg-slate-50/70
-                      "
-                    >
-
-                      <td className="px-3 py-2">
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            gap-2.5
-                          "
-                        >
-
-                          <div
-                            className="
-                              flex
-                              h-8
-                              w-8
-                              items-center
-                              justify-center
-
-                              rounded-[8px]
-
-                              bg-violet-50
-
-                              text-violet-600
-                            "
-                          >
-                            <Plug
-                              size={15}
-                            />
-                          </div>
+                      hover:bg-slate-50/70
+                    "
+                  >
 
 
-                          <div>
+                    {/* CLIENT */}
 
-                            <div
-                              className="
-                                text-[11px]
-                                font-semibold
+                    <td className="px-3 py-2.5">
 
-                                text-slate-900
-                              "
-                            >
-                              {integration.accountName}
-                            </div>
-
-
-                            <div
-                              className="
-                                mt-0.5
-
-                                max-w-[260px]
-
-                                truncate
-
-                                text-[9px]
-
-                                text-slate-500
-                              "
-                            >
-                              {integration.externalAccountId ||
-                                'No external account ID'}
-                            </div>
-
-                          </div>
-
-                        </div>
-
-                      </td>
-
-
-                      <td
+                      <div
                         className="
-                          px-3
-                          py-2
-
                           text-[10px]
-                          font-medium
+                          font-semibold
 
-                          text-slate-700
+                          text-slate-900
                         "
                       >
-                        {client?.name ||
-                          'Unknown'}
-                      </td>
+                        {getClientName(
+                          integration
+                        )}
+                      </div>
 
 
-                      <td
+                      <div
                         className="
-                          px-3
-                          py-2
+                          mt-0.5
 
-                          text-[10px]
-                          font-medium
-
-                          text-slate-700
-                        "
-                      >
-                        {provider?.name ||
-                          integration.providerId}
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <ConnectionBadge
-                          status={
-                            integration.connectionStatus
-                          }
-                        />
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <DataBadge
-                          status={
-                            integration.dataStatus
-                          }
-                        />
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <SimpleBadge
-
-                          label={
-                            integration.syncEnabled
-                              ? 'Enabled'
-                              : 'Off'
-                          }
-
-                          active={
-                            integration.syncEnabled
-                          }
-
-                        />
-
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[9px]
+                          text-[8px]
 
                           text-slate-500
                         "
                       >
-                        {integration.lastSuccessfulSyncAt ||
-                          'Never'}
-                      </td>
+                        {integration.workspaceId}
+                        {' · '}
+                        {integration.brandId}
+                      </div>
+
+                    </td>
 
 
-                      <td className="px-3 py-2 text-right">
+                    {/* PROVIDER */}
 
-                        <button
+                    <td className="px-3 py-2.5">
 
-                          type="button"
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                        "
+                      >
 
-                          onClick={() =>
-                            setSelectedIntegrationId(
-                              integration.id
-                            )
-                          }
-
+                        <div
                           className="
-                            inline-flex
+                            flex
                             h-7
+                            w-7
+                            shrink-0
                             items-center
-                            gap-1
+                            justify-center
 
                             rounded-[7px]
 
-                            border
-                            border-slate-200
+                            bg-violet-50
 
-                            bg-white
-
-                            px-2.5
-
-                            text-[9px]
-                            font-semibold
-
-                            text-slate-700
+                            text-violet-600
                           "
                         >
-                          Manage
-
-                          <ChevronRight
-                            size={12}
+                          <Plug
+                            size={13}
                           />
+                        </div>
 
-                        </button>
 
-                      </td>
+                        <span
+                          className="
+                            text-[10px]
+                            font-semibold
 
-                    </tr>
+                            text-slate-800
+                          "
+                        >
+                          {formatProvider(
+                            integration.provider
+                          )}
+                        </span>
 
-                  );
+                      </div>
 
-                }
+                    </td>
+
+
+                    {/* ACCOUNT */}
+
+                    <td className="px-3 py-2.5">
+
+                      <div
+                        className="
+                          max-w-[220px]
+
+                          truncate
+
+                          text-[10px]
+                          font-semibold
+
+                          text-slate-800
+                        "
+                        title={
+                          getAccountName(
+                            integration
+                          )
+                        }
+                      >
+                        {getAccountName(
+                          integration
+                        )}
+                      </div>
+
+
+                      <div
+                        className="
+                          mt-0.5
+                          max-w-[220px]
+
+                          truncate
+
+                          font-mono
+                          text-[8px]
+
+                          text-slate-500
+                        "
+                        title={
+                          getAccountId(
+                            integration
+                          )
+                        }
+                      >
+                        {getAccountId(
+                          integration
+                        )}
+                      </div>
+
+                    </td>
+
+
+                    {/* STATUS */}
+
+                    <td className="px-3 py-2.5">
+
+                      <ConnectionBadge
+                        integration={
+                          integration
+                        }
+                      />
+
+                    </td>
+
+
+                    {/* MODE */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-600
+                      "
+                    >
+                      {formatLabelOrDash(
+                        integration.connectionMode
+                      )}
+                    </td>
+
+
+                    {/* ADAPTER */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-600
+                      "
+                    >
+                      {formatLabelOrDash(
+                        integration.ingestionAdapter
+                      )}
+                    </td>
+
+
+                    {/* CONNECTED AT */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        integration.connectedAt
+                      )
+                      ||
+                      '—'}
+                    </td>
+
+
+                    {/* LAST VERIFIED */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        integration.lastVerifiedAt
+                      )
+                      ||
+                      '—'}
+                    </td>
+
+
+                    {/* LAST SYNC */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        integration.lastSyncAt
+                      )
+                      ||
+                      '—'}
+                    </td>
+
+
+                    {/* ERROR */}
+
+                    <td className="px-3 py-2.5">
+
+                      <div
+                        className={`
+                          max-w-[230px]
+
+                          truncate
+
+                          text-[9px]
+
+                          ${
+                            integration.error
+
+                              ? 'text-red-600'
+
+                              : 'text-slate-400'
+                          }
+                        `}
+                        title={
+                          integration.error
+                          ||
+                          ''
+                        }
+                      >
+                        {integration.error
+                          ||
+                          '—'}
+                      </div>
+
+                    </td>
+
+
+                    {/* ACTION */}
+
+                    <td className="px-3 py-2.5 text-right">
+
+                      <button
+
+                        type="button"
+
+                        onClick={() =>
+                          setSelectedConnectionId(
+                            integration.connectionId
+                          )
+                        }
+
+                        className="
+                          inline-flex
+                          h-7
+                          items-center
+                          gap-1
+
+                          rounded-[7px]
+
+                          border
+                          border-slate-200
+
+                          bg-white
+
+                          px-2.5
+
+                          text-[9px]
+                          font-semibold
+
+                          text-slate-700
+
+                          hover:bg-slate-50
+                        "
+                      >
+                        Inspect
+
+                        <ChevronRight
+                          size={12}
+                        />
+
+                      </button>
+
+                    </td>
+
+                  </tr>
+
+                )
+              )}
+
+
+              {filteredIntegrations.length ===
+                0 && (
+
+                <tr>
+
+                  <td
+
+                    colSpan={
+                      11
+                    }
+
+                    className="
+                      px-4
+                      py-14
+
+                      text-center
+
+                      text-[10px]
+
+                      text-slate-500
+                    "
+                  >
+                    No integrations match the selected filters.
+                  </td>
+
+                </tr>
+
               )}
 
             </tbody>
@@ -1088,336 +1909,55 @@ export default function AdminIntegrations() {
 
 
       {/* =====================================================
-          ADD INTEGRATION
+          SOURCE
       ===================================================== */}
 
-      {addOpen && (
+      <section
+        className="
+          rounded-[9px]
 
-        <div
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          px-3
+          py-2.5
+        "
+      >
+
+        <p
           className="
-            fixed
-            inset-0
-            z-[100]
+            text-[8px]
+            leading-4
 
-            flex
-            items-center
-            justify-center
-
-            bg-slate-950/40
-
-            p-4
+            text-violet-700
           "
         >
+          Source of truth: growthos_control.integration_connections and integration_accounts. Admin Integrations is read-only; provider connection actions remain in each client's Settings → Integrations.
+        </p>
 
-          <div
+
+        {data?.meta?.durationMs !==
+          undefined && (
+
+          <p
             className="
-              w-full
-              max-w-[560px]
+              mt-1
 
-              rounded-[14px]
+              text-[8px]
 
-              border
-              border-slate-200
-
-              bg-white
-
-              shadow-xl
+              text-violet-500
             "
           >
+            API runtime: {formatNumber(
+              data.meta.durationMs
+            )} ms
+          </p>
 
-            <div
-              className="
-                flex
-                items-center
-                justify-between
+        )}
 
-                border-b
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <div>
-
-                <h3
-                  className="
-                    text-[14px]
-                    font-semibold
-
-                    text-slate-950
-                  "
-                >
-                  Add Integration
-                </h3>
-
-
-                <p
-                  className="
-                    mt-0.5
-
-                    text-[9px]
-
-                    text-slate-500
-                  "
-                >
-                  Assign a source integration to a client.
-                </p>
-
-              </div>
-
-
-              <button
-
-                type="button"
-
-                onClick={() => {
-
-                  setAddOpen(
-                    false
-                  );
-
-
-                  resetForm();
-
-                }}
-
-              >
-                <X
-                  size={15}
-                />
-              </button>
-
-            </div>
-
-
-            <div className="space-y-3 p-4">
-
-
-              <FormField
-                label="Client"
-              >
-
-                <select
-
-                  value={
-                    newClientId
-                  }
-
-                  onChange={
-                    event =>
-                      setNewClientId(
-                        event.target.value
-                      )
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  {clients.map(
-                    client => (
-
-                      <option
-                        key={
-                          client.id
-                        }
-                        value={
-                          client.id
-                        }
-                      >
-                        {client.name}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </FormField>
-
-
-              <FormField
-                label="Provider"
-              >
-
-                <select
-
-                  value={
-                    newProviderId
-                  }
-
-                  onChange={
-                    event =>
-                      setNewProviderId(
-                        event.target.value
-                      )
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  {integrationProviders.map(
-                    provider => (
-
-                      <option
-                        key={
-                          provider.id
-                        }
-                        value={
-                          provider.id
-                        }
-                      >
-                        {provider.name}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </FormField>
-
-
-              <FormField
-                label="Account Name"
-              >
-
-                <input
-
-                  value={
-                    newAccountName
-                  }
-
-                  onChange={
-                    event =>
-                      setNewAccountName(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Example: Brillare Meta Ads"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <FormField
-                label="External Account ID"
-              >
-
-                <input
-
-                  value={
-                    newExternalAccountId
-                  }
-
-                  onChange={
-                    event =>
-                      setNewExternalAccountId(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Store domain / Ad account ID"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-            </div>
-
-
-            <div
-              className="
-                flex
-                justify-end
-                gap-2
-
-                border-t
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-                  setAddOpen(
-                    false
-                  )
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  border
-                  border-slate-200
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-                "
-              >
-                Cancel
-              </button>
-
-
-              <button
-
-                type="button"
-
-                onClick={
-                  createIntegration
-                }
-
-                disabled={
-                  !newClientId
-                  ||
-                  !newProviderId
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-
-                  disabled:opacity-40
-                "
-              >
-                Add Integration
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      </section>
 
     </div>
 
@@ -1436,118 +1976,15 @@ function IntegrationDetail({
 
   onBack,
 
-  onChange,
-
 }: {
 
   integration:
-    AdminClientIntegration;
+    AdminIntegration;
 
   onBack:
     () => void;
 
-  onChange:
-    (
-      integration:
-        AdminClientIntegration
-    ) => void;
-
 }) {
-
-
-  const {
-    getClient,
-    getIntegrationProvider,
-  } =
-    useAdminStore();
-
-
-  const client =
-    getClient(
-      integration.clientId
-    );
-
-
-  const provider =
-    getIntegrationProvider(
-      integration.providerId
-    );
-
-
-  // ==========================================================
-  // CONNECTION LIFECYCLE
-  // ==========================================================
-
-  function advanceSetup() {
-
-    if (
-      integration.connectionStatus ===
-        'configuring'
-    ) {
-
-      onChange({
-
-        ...integration,
-
-        connectionStatus:
-          'connected',
-
-      });
-
-
-      return;
-
-    }
-
-
-    onChange({
-
-      ...integration,
-
-      connectionStatus:
-        'configuring',
-
-    });
-
-  }
-
-
-  // ==========================================================
-  // MARK DATA READY
-  // ==========================================================
-
-  function markDataReady() {
-
-    if (
-      integration.connectionStatus !==
-        'connected'
-    ) {
-
-      return;
-
-    }
-
-
-    onChange({
-
-      ...integration,
-
-      dataStatus:
-        'ready',
-
-      syncEnabled:
-        true,
-
-      lastSuccessfulSyncAt:
-        new Date()
-          .toLocaleString(
-            'en-IN'
-          ),
-
-    });
-
-  }
-
 
   return (
 
@@ -1599,6 +2036,10 @@ function IntegrationDetail({
 
                 border
                 border-slate-200
+
+                bg-white
+
+                hover:bg-slate-50
               "
             >
               <ArrowLeft
@@ -1628,18 +2069,38 @@ function IntegrationDetail({
             </div>
 
 
-            <div>
+            <div className="min-w-0">
 
-              <h2
+              <div
                 className="
-                  text-[15px]
-                  font-semibold
-
-                  text-slate-950
+                  flex
+                  flex-wrap
+                  items-center
+                  gap-2
                 "
               >
-                {integration.accountName}
-              </h2>
+
+                <h2
+                  className="
+                    text-[15px]
+                    font-semibold
+
+                    text-slate-950
+                  "
+                >
+                  {formatProvider(
+                    integration.provider
+                  )}
+                </h2>
+
+
+                <ConnectionBadge
+                  integration={
+                    integration
+                  }
+                />
+
+              </div>
 
 
               <p
@@ -1651,9 +2112,13 @@ function IntegrationDetail({
                   text-slate-500
                 "
               >
-                {client?.name || 'Unknown Client'}
+                {getClientName(
+                  integration
+                )}
                 {' · '}
-                {provider?.name || integration.providerId}
+                {getAccountName(
+                  integration
+                )}
               </p>
 
             </div>
@@ -1661,96 +2126,26 @@ function IntegrationDetail({
           </div>
 
 
-          <div
+          <span
             className="
-              flex
-              flex-wrap
-              gap-2
+              rounded-full
+
+              border
+              border-slate-200
+
+              bg-slate-50
+
+              px-2.5
+              py-1
+
+              text-[8px]
+              font-semibold
+
+              text-slate-500
             "
           >
-
-            {integration.connectionStatus !==
-              'connected' && (
-
-              <button
-
-                type="button"
-
-                onClick={
-                  advanceSetup
-                }
-
-                className="
-                  inline-flex
-                  h-8
-                  items-center
-                  gap-1.5
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-                "
-              >
-
-                <Activity
-                  size={13}
-                />
-
-                {integration.connectionStatus ===
-                  'configuring'
-
-                  ? 'Mark Connected'
-
-                  : 'Initiate Setup'
-                }
-
-              </button>
-
-            )}
-
-
-            {integration.connectionStatus ===
-              'connected'
-              &&
-              integration.dataStatus !==
-                'ready' && (
-
-              <button
-
-                type="button"
-
-                onClick={
-                  markDataReady
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-violet-600
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-                "
-              >
-                Mark Data Ready
-              </button>
-
-            )}
-
-          </div>
+            Read Only
+          </span>
 
         </div>
 
@@ -1774,29 +2169,9 @@ function IntegrationDetail({
         <SummaryCard
           label="Connection"
           value={
-            formatConnectionStatus(
-              integration.connectionStatus
+            formatLabel(
+              integration.status
             )
-          }
-        />
-
-
-        <SummaryCard
-          label="Data"
-          value={
-            formatDataStatus(
-              integration.dataStatus
-            )
-          }
-        />
-
-
-        <SummaryCard
-          label="Sync"
-          value={
-            integration.syncEnabled
-              ? 'Enabled'
-              : 'Off'
           }
         />
 
@@ -1804,8 +2179,29 @@ function IntegrationDetail({
         <SummaryCard
           label="Provider"
           value={
-            provider?.name ||
-            integration.providerId
+            formatProvider(
+              integration.provider
+            )
+          }
+        />
+
+
+        <SummaryCard
+          label="Mode"
+          value={
+            formatLabelOrDash(
+              integration.connectionMode
+            )
+          }
+        />
+
+
+        <SummaryCard
+          label="Adapter"
+          value={
+            formatLabelOrDash(
+              integration.ingestionAdapter
+            )
           }
         />
 
@@ -1813,298 +2209,411 @@ function IntegrationDetail({
 
 
       {/* =====================================================
-          CONFIG
+          DETAILS
       ===================================================== */}
 
-      <section className="gos-panel !p-3.5">
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
 
-        <h3 className="gos-section-title">
-          Connection Configuration
-        </h3>
+          lg:grid-cols-2
+        "
+      >
 
 
-        <div
-          className="
-            mt-3
+        {/* ===================================================
+            CLIENT
+        =================================================== */}
 
-            grid
-            grid-cols-1
-            gap-3
+        <section className="gos-panel !p-3.5">
 
-            md:grid-cols-2
-          "
-        >
+          <h3 className="gos-section-title">
+            Client
+          </h3>
 
-          <FormField
-            label="Account Name"
-          >
 
-            <input
+          <div className="mt-3 space-y-2">
 
+            <ValueRow
+              label="Client"
               value={
-                integration.accountName
+                getClientName(
+                  integration
+                )
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...integration,
-
-                    accountName:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
             />
 
-          </FormField>
 
-
-          <FormField
-            label="External Account ID"
-          >
-
-            <input
-
+            <ValueRow
+              label="Workspace ID"
               value={
-                integration.externalAccountId
+                integration.workspaceId
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...integration,
-
-                    externalAccountId:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
+              mono
             />
 
-          </FormField>
 
-
-          <FormField
-            label="Connection Status"
-          >
-
-            <select
-
+            <ValueRow
+              label="Brand ID"
               value={
-                integration.connectionStatus
+                integration.brandId
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...integration,
-
-                    connectionStatus:
-                      event.target.value as IntegrationConnectionStatus,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
-            >
-
-              <option value="connected">
-                Connected
-              </option>
-
-              <option value="setup_required">
-                Setup Required
-              </option>
-
-              <option value="configuring">
-                Configuring
-              </option>
-
-              <option value="error">
-                Error
-              </option>
-
-              <option value="disconnected">
-                Disconnected
-              </option>
-
-              <option value="suspended">
-                Suspended
-              </option>
-
-            </select>
-
-          </FormField>
+              mono
+            />
 
 
-          <FormField
-            label="Data Status"
-          >
-
-            <select
-
+            <ValueRow
+              label="Connection ID"
               value={
-                integration.dataStatus
+                integration.connectionId
               }
+              mono
+            />
 
-              onChange={
-                event =>
-                  onChange({
+          </div>
 
-                    ...integration,
+        </section>
 
-                    dataStatus:
-                      event.target.value as IntegrationDataStatus,
 
-                  })
+        {/* ===================================================
+            PROVIDER ACCOUNT
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Provider Account
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Account Name"
+              value={
+                getAccountName(
+                  integration
+                )
               }
+            />
 
-              className="gos-input w-full"
 
-            >
+            <ValueRow
+              label="Account ID"
+              value={
+                getAccountId(
+                  integration
+                )
+              }
+              mono
+            />
 
-              <option value="ready">
-                Ready
-              </option>
 
-              <option value="syncing">
-                Syncing
-              </option>
+            <ValueRow
+              label="Integration Account ID"
+              value={
+                integration.integrationAccountId
+                ||
+                '—'
+              }
+              mono
+            />
 
-              <option value="stale">
-                Stale
-              </option>
 
-              <option value="error">
-                Error
-              </option>
+            <ValueRow
+              label="Account Type"
+              value={
+                formatLabelOrDash(
+                  integration.accountType
+                )
+              }
+            />
 
-              <option value="not_ready">
-                Not Ready
-              </option>
 
-            </select>
+            <ValueRow
+              label="Currency"
+              value={
+                integration.currency
+                ||
+                '—'
+              }
+            />
 
-          </FormField>
 
-        </div>
+            <ValueRow
+              label="Timezone"
+              value={
+                integration.timezone
+                ||
+                '—'
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* ===================================================
+            CONNECTION
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Connection
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Status"
+              value={
+                formatLabel(
+                  integration.status
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Connection Mode"
+              value={
+                formatLabelOrDash(
+                  integration.connectionMode
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Ingestion Adapter"
+              value={
+                formatLabelOrDash(
+                  integration.ingestionAdapter
+                )
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Provider User"
+              value={
+                integration.providerUserName
+                ||
+                integration.providerUserId
+                ||
+                '—'
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* ===================================================
+            TIMING
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Lifecycle
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Connected"
+              value={
+                formatTimestamp(
+                  integration.connectedAt
+                )
+                ||
+                '—'
+              }
+            />
+
+
+            <ValueRow
+              label="Last Updated"
+              value={
+                formatTimestamp(
+                  integration.updatedAt
+                )
+                ||
+                '—'
+              }
+            />
+
+
+            <ValueRow
+              label="Last Verified"
+              value={
+                formatTimestamp(
+                  integration.lastVerifiedAt
+                )
+                ||
+                '—'
+              }
+            />
+
+
+            <ValueRow
+              label="Last Sync"
+              value={
+                formatTimestamp(
+                  integration.lastSyncAt
+                )
+                ||
+                '—'
+              }
+            />
+
+
+            <ValueRow
+              label="Account Selected"
+              value={
+                formatTimestamp(
+                  integration.accountSelectedAt
+                )
+                ||
+                '—'
+              }
+            />
+
+          </div>
+
+        </section>
 
       </section>
 
 
       {/* =====================================================
-          SYNC
+          ERROR
       ===================================================== */}
 
-      <section className="gos-panel !p-3.5">
+      {integration.error && (
 
-        <div
+        <section
           className="
-            flex
-            items-center
-            justify-between
-            gap-4
-          "
-        >
-
-          <div>
-
-            <h3 className="gos-section-title">
-              Synchronization
-            </h3>
-
-
-            <p
-              className="
-                mt-0.5
-
-                text-[9px]
-
-                text-slate-500
-              "
-            >
-              Controls whether Growth OS should process this integration.
-            </p>
-
-          </div>
-
-
-          <Toggle
-
-            checked={
-              integration.syncEnabled
-            }
-
-            onChange={
-              checked =>
-                onChange({
-
-                  ...integration,
-
-                  syncEnabled:
-                    checked,
-
-                })
-            }
-
-          />
-
-        </div>
-
-
-        <div
-          className="
-            mt-3
-
-            rounded-[8px]
+            rounded-[10px]
 
             border
-            border-slate-200
+            border-red-200
 
-            bg-slate-50
+            bg-red-50
 
-            px-3
-            py-2.5
+            p-3
           "
         >
-
-          <span
-            className="
-              text-[9px]
-
-              text-slate-500
-            "
-          >
-            Last successful sync
-          </span>
-
 
           <div
             className="
-              mt-0.5
-
-              text-[10px]
-              font-semibold
-
-              text-slate-800
+              flex
+              items-start
+              gap-2.5
             "
           >
-            {integration.lastSuccessfulSyncAt ||
-              'No successful sync yet'}
+
+            <AlertTriangle
+              size={15}
+
+              className="
+                mt-0.5
+                shrink-0
+
+                text-red-600
+              "
+            />
+
+
+            <div>
+
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
+
+                  text-red-800
+                "
+              >
+                Connection Error
+              </p>
+
+
+              <p
+                className="
+                  mt-1
+
+                  break-words
+
+                  font-mono
+                  text-[9px]
+                  leading-4
+
+                  text-red-700
+                "
+              >
+                {integration.error}
+              </p>
+
+            </div>
+
           </div>
 
-        </div>
+        </section>
+
+      )}
+
+
+      {/* =====================================================
+          OWNERSHIP
+      ===================================================== */}
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          p-3
+        "
+      >
+
+        <p
+          className="
+            text-[9px]
+            font-semibold
+
+            text-violet-800
+          "
+        >
+          Connection ownership
+        </p>
+
+
+        <p
+          className="
+            mt-1
+
+            text-[8px]
+            leading-4
+
+            text-violet-600
+          "
+        >
+          Admin Integrations provides cross-client visibility only. Connect, reconnect, authorize or change provider accounts from the relevant client's Settings → Integrations flow.
+        </p>
 
       </section>
 
@@ -2116,7 +2625,7 @@ function IntegrationDetail({
 
 
 // ============================================================
-// SUMMARY
+// SUMMARY CARD
 // ============================================================
 
 function SummaryCard({
@@ -2124,6 +2633,9 @@ function SummaryCard({
   label,
 
   value,
+
+  tone =
+    'default',
 
 }: {
 
@@ -2134,7 +2646,39 @@ function SummaryCard({
     string |
     number;
 
+  tone?:
+    | 'default'
+    | 'green'
+    | 'amber'
+    | 'red'
+    | 'violet';
+
 }) {
+
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'text-emerald-700'
+
+      : tone ===
+          'amber'
+
+        ? 'text-amber-700'
+
+        : tone ===
+            'red'
+
+          ? 'text-red-700'
+
+          : tone ===
+              'violet'
+
+            ? 'text-violet-700'
+
+            : 'text-slate-950';
+
 
   return (
 
@@ -2155,15 +2699,17 @@ function SummaryCard({
 
 
       <p
-        className="
+        className={`
           mt-1.5
+
+          truncate
 
           text-[18px]
           font-semibold
           tracking-[-0.03em]
 
-          text-slate-950
-        "
+          ${cls}
+        `}
       >
         {value}
       </p>
@@ -2176,202 +2722,56 @@ function SummaryCard({
 
 
 // ============================================================
-// CONNECTION BADGE
+// STATUS CARD
 // ============================================================
 
-function ConnectionBadge({
-
-  status,
-
-}: {
-
-  status:
-    IntegrationConnectionStatus;
-
-}) {
-
-  const active =
-    status ===
-      'connected';
-
-
-  const warning =
-    status ===
-      'setup_required'
-    ||
-    status ===
-      'configuring';
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-        rounded-full
-        border
-        px-2
-        py-0.5
-        text-[8px]
-        font-semibold
-
-        ${
-          active
-
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-
-            : warning
-
-              ? 'border-amber-200 bg-amber-50 text-amber-700'
-
-              : 'border-red-200 bg-red-50 text-red-700'
-        }
-      `}
-    >
-      {formatConnectionStatus(
-        status
-      )}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// DATA BADGE
-// ============================================================
-
-function DataBadge({
-
-  status,
-
-}: {
-
-  status:
-    IntegrationDataStatus;
-
-}) {
-
-  const active =
-    status ===
-      'ready';
-
-
-  const warning =
-    status ===
-      'syncing'
-    ||
-    status ===
-      'stale';
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-        rounded-full
-        border
-        px-2
-        py-0.5
-        text-[8px]
-        font-semibold
-
-        ${
-          active
-
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-
-            : warning
-
-              ? 'border-amber-200 bg-amber-50 text-amber-700'
-
-              : 'border-slate-200 bg-slate-100 text-slate-600'
-        }
-      `}
-    >
-      {formatDataStatus(
-        status
-      )}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// SIMPLE BADGE
-// ============================================================
-
-function SimpleBadge({
+function StatusCard({
 
   label,
 
-  active,
+  count,
+
+  description,
+
+  tone,
+
+  onClick,
 
 }: {
 
   label:
     string;
 
-  active:
-    boolean;
+  count:
+    number;
+
+  description:
+    string;
+
+  tone:
+    | 'green'
+    | 'amber'
+    | 'red';
+
+  onClick:
+    () => void;
 
 }) {
 
-  return (
 
-    <span
-      className={`
-        inline-flex
-        rounded-full
-        border
-        px-2
-        py-0.5
-        text-[8px]
-        font-semibold
+  const cls =
+    tone ===
+      'green'
 
-        ${
-          active
+      ? 'border-emerald-200 bg-emerald-50'
 
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : tone ===
+          'amber'
 
-            : 'border-slate-200 bg-slate-100 text-slate-500'
-        }
-      `}
-    >
-      {label}
-    </span>
+        ? 'border-amber-200 bg-amber-50'
 
-  );
+        : 'border-red-200 bg-red-50';
 
-}
-
-
-// ============================================================
-// TOGGLE
-// ============================================================
-
-function Toggle({
-
-  checked,
-
-  onChange,
-
-}: {
-
-  checked:
-    boolean;
-
-  onChange:
-    (
-      checked:
-        boolean
-    ) => void;
-
-}) {
 
   return (
 
@@ -2379,56 +2779,75 @@ function Toggle({
 
       type="button"
 
-      role="switch"
-
-      aria-checked={
-        checked
-      }
-
-      onClick={() =>
-        onChange(
-          !checked
-        )
+      onClick={
+        onClick
       }
 
       className={`
-        relative
+        rounded-[10px]
 
-        h-5
-        w-9
+        border
 
-        rounded-full
+        p-3
 
-        p-[2px]
+        text-left
 
-        ${
-          checked
-            ? 'bg-violet-500'
-            : 'bg-slate-300'
-        }
+        transition
+
+        hover:-translate-y-[1px]
+
+        ${cls}
       `}
     >
 
-      <span
-        className={`
-          block
+      <div
+        className="
+          flex
+          items-center
+          justify-between
+        "
+      >
 
-          h-4
-          w-4
+        <span
+          className="
+            text-[10px]
+            font-semibold
 
-          rounded-full
+            text-slate-700
+          "
+        >
+          {label}
+        </span>
 
-          bg-white
 
-          transition-transform
+        <span
+          className="
+            text-[18px]
+            font-semibold
 
-          ${
-            checked
-              ? 'translate-x-4'
-              : 'translate-x-0'
-          }
-        `}
-      />
+            text-slate-950
+          "
+        >
+          {formatNumber(
+            count
+          )}
+        </span>
+
+      </div>
+
+
+      <p
+        className="
+          mt-1
+
+          text-[8px]
+          leading-4
+
+          text-slate-500
+        "
+      >
+        {description}
+      </p>
 
     </button>
 
@@ -2438,38 +2857,187 @@ function Toggle({
 
 
 // ============================================================
-// FORM FIELD
+// CONNECTION BADGE
 // ============================================================
 
-function FormField({
+function ConnectionBadge({
+
+  integration,
+
+}: {
+
+  integration:
+    AdminIntegration;
+
+}) {
+
+
+  const group =
+    getConnectionGroup(
+      integration
+    );
+
+
+  if (
+    group ===
+      'connected'
+  ) {
+
+    return (
+
+      <span
+        className="
+          inline-flex
+
+          rounded-full
+
+          border
+          border-emerald-200
+
+          bg-emerald-50
+
+          px-2
+          py-0.5
+
+          text-[8px]
+          font-semibold
+
+          text-emerald-700
+        "
+      >
+        {formatLabel(
+          integration.status
+        )}
+      </span>
+
+    );
+
+  }
+
+
+  if (
+    group ===
+      'disconnected'
+  ) {
+
+    return (
+
+      <span
+        className="
+          inline-flex
+
+          rounded-full
+
+          border
+          border-slate-200
+
+          bg-slate-100
+
+          px-2
+          py-0.5
+
+          text-[8px]
+          font-semibold
+
+          text-slate-600
+        "
+      >
+        {formatLabel(
+          integration.status
+        )}
+      </span>
+
+    );
+
+  }
+
+
+  return (
+
+    <span
+      className="
+        inline-flex
+
+        rounded-full
+
+        border
+        border-amber-200
+
+        bg-amber-50
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        text-amber-700
+      "
+    >
+      {integration.error
+        ? 'Attention'
+        : formatLabel(
+            integration.status
+          )}
+    </span>
+
+  );
+
+}
+
+
+// ============================================================
+// VALUE ROW
+// ============================================================
+
+function ValueRow({
 
   label,
 
-  children,
+  value,
+
+  mono =
+    false,
 
 }: {
 
   label:
     string;
 
-  children:
-    ReactNode;
+  value:
+    string;
+
+  mono?:
+    boolean;
 
 }) {
 
   return (
 
-    <label className="block">
+    <div
+      className="
+        flex
+        min-h-[38px]
+        items-center
+        justify-between
+        gap-3
+
+        rounded-[8px]
+
+        border
+        border-slate-200
+
+        bg-slate-50
+
+        px-3
+      "
+    >
 
       <span
         className="
-          mb-1.5
-          block
+          shrink-0
 
           text-[9px]
-          font-semibold
-          uppercase
-          tracking-[0.05em]
 
           text-slate-500
         "
@@ -2478,9 +3046,34 @@ function FormField({
       </span>
 
 
-      {children}
+      <span
+        title={
+          value
+        }
+        className={`
+          max-w-[68%]
 
-    </label>
+          truncate
+
+          text-right
+          text-[10px]
+          font-semibold
+
+          text-slate-800
+
+          ${
+            mono
+
+              ? 'font-mono text-[8px]'
+
+              : ''
+          }
+        `}
+      >
+        {value}
+      </span>
+
+    </div>
 
   );
 
@@ -2515,9 +3108,10 @@ function TableHeader({
     <th
       className={`
         h-8
+
         px-3
 
-        text-[9px]
+        text-[8px]
         font-semibold
         uppercase
         tracking-[0.05em]
@@ -2527,7 +3121,9 @@ function TableHeader({
         ${
           align ===
             'right'
+
             ? 'text-right'
+
             : 'text-left'
         }
       `}
@@ -2544,76 +3140,296 @@ function TableHeader({
 // HELPERS
 // ============================================================
 
-function formatConnectionStatus(
-  value:
-    IntegrationConnectionStatus
+function getClientKey(
+  integration:
+    AdminIntegration
 ) {
 
-  const labels:
-    Record<
-      IntegrationConnectionStatus,
-      string
-    > = {
-
-    connected:
-      'Connected',
-
-    setup_required:
-      'Setup Required',
-
-    configuring:
-      'Configuring',
-
-    error:
-      'Error',
-
-    disconnected:
-      'Disconnected',
-
-    suspended:
-      'Suspended',
-
-  };
-
-
-  return labels[
-    value
-  ];
+  return [
+    integration.workspaceId,
+    integration.brandId,
+  ].join(
+    ':'
+  );
 
 }
 
 
-function formatDataStatus(
+function getClientName(
+  integration:
+    AdminIntegration
+) {
+
+  return (
+    integration.brandName
+    ||
+    integration.workspaceName
+    ||
+    integration.brandId
+    ||
+    integration.workspaceId
+  );
+
+}
+
+
+function getAccountName(
+  integration:
+    AdminIntegration
+) {
+
+  return (
+    integration.selectedAccountName
+    ||
+    integration.providerAccountName
+    ||
+    integration.providerUserName
+    ||
+    'No selected account'
+  );
+
+}
+
+
+function getAccountId(
+  integration:
+    AdminIntegration
+) {
+
+  return (
+    integration.selectedAccountId
+    ||
+    integration.providerAccountId
+    ||
+    integration.providerUserId
+    ||
+    '—'
+  );
+
+}
+
+
+function getConnectionGroup(
+  integration:
+    AdminIntegration
+):
+  ConnectionGroup {
+
+  const status =
+    String(
+      integration.status
+      ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    integration.error
+  ) {
+
+    return 'attention';
+
+  }
+
+
+  if (
+    [
+      'connected',
+      'active',
+      'ready',
+    ].includes(
+      status
+    )
+  ) {
+
+    return 'connected';
+
+  }
+
+
+  if (
+    [
+      'disconnected',
+      'uninstalled',
+      'disabled',
+      'suspended',
+    ].includes(
+      status
+    )
+  ) {
+
+    return 'disconnected';
+
+  }
+
+
+  return 'attention';
+
+}
+
+
+function formatProvider(
   value:
-    IntegrationDataStatus
+    string
 ) {
 
   const labels:
     Record<
-      IntegrationDataStatus,
+      string,
       string
     > = {
 
-    ready:
-      'Ready',
+    shopify:
+      'Shopify',
 
-    syncing:
-      'Syncing',
+    meta_ads:
+      'Meta Ads',
 
-    stale:
-      'Stale',
+    google_ads:
+      'Google Ads',
 
-    error:
-      'Error',
-
-    not_ready:
-      'Not Ready',
+    bigquery:
+      'BigQuery',
 
   };
 
 
-  return labels[
+  return (
+    labels[
+      value
+    ]
+    ||
+    formatLabel(
+      value
+    )
+  );
+
+}
+
+
+function formatLabelOrDash(
+  value:
+    string |
+    null
+) {
+
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return formatLabel(
     value
-  ];
+  );
+
+}
+
+
+function formatLabel(
+  value:
+    string
+) {
+
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return value
+    .replace(
+      /[_-]+/g,
+      ' '
+    )
+    .split(
+      ' '
+    )
+    .filter(
+      Boolean
+    )
+    .map(
+      word =>
+        word
+          .charAt(
+            0
+          )
+          .toUpperCase()
+        +
+        word.slice(
+          1
+        )
+    )
+    .join(
+      ' '
+    );
+
+}
+
+
+function formatTimestamp(
+  value:
+    string |
+    null
+) {
+
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return value;
+
+  }
+
+
+  return date.toLocaleString(
+    'en-IN',
+    {
+
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+
+    }
+  );
+
+}
+
+
+function formatNumber(
+  value:
+    number
+) {
+
+  return new Intl.NumberFormat(
+    'en-IN',
+    {
+      maximumFractionDigits:
+        0,
+    }
+  ).format(
+    value
+  );
 
 }

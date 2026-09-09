@@ -420,10 +420,6 @@ const DEFAULT_MODULES = [
 
 // ============================================================
 // DEFAULT PLANS
-//
-// Commercial model:
-//
-// monthly business order volume
 // ============================================================
 
 const DEFAULT_PLANS = [
@@ -615,34 +611,6 @@ function deterministicId(
 
 
 // ============================================================
-// SQL STRING
-//
-// Used ONLY for internal hard-coded catalog seed values.
-// ============================================================
-
-function sqlString(
-  value:
-    string
-) {
-
-  return (
-    "'"
-    +
-    String(
-      value
-    )
-      .replace(
-        /'/g,
-        "''"
-      )
-    +
-    "'"
-  );
-
-}
-
-
-// ============================================================
 // ENSURE PLANS TABLE
 // ============================================================
 
@@ -748,7 +716,7 @@ async function ensureModulesTable() {
 
 
 // ============================================================
-// ENSURE PLAN MODULES
+// ENSURE PLAN MODULES TABLE
 // ============================================================
 
 async function ensurePlanModulesTable() {
@@ -793,23 +761,7 @@ async function ensurePlanModulesTable() {
 
 
 // ============================================================
-// ENSURE BRAND SUBSCRIPTIONS
-//
-// One current commercial entitlement row per brand.
-//
-// order_limit_override_mode:
-//
-// inherit
-//   → use plan limit
-//
-// custom
-//   → use monthly_order_limit_override
-//
-// unlimited
-//   → no monthly order limit
-//
-// We intentionally DO NOT use NULL alone to represent both
-// "inherit" and "unlimited" because those are different states.
+// ENSURE BRAND SUBSCRIPTIONS TABLE
 // ============================================================
 
 async function ensureBrandSubscriptionsTable() {
@@ -863,7 +815,7 @@ async function ensureBrandSubscriptionsTable() {
 
 
 // ============================================================
-// ENSURE BRAND MODULE OVERRIDES
+// ENSURE BRAND MODULE OVERRIDES TABLE
 // ============================================================
 
 async function ensureBrandModuleOverridesTable() {
@@ -912,17 +864,7 @@ async function ensureBrandModuleOverridesTable() {
 
 
 // ============================================================
-// ENSURE USER MODULE PERMISSIONS
-//
-// Permission is keyed by MEMBERSHIP rather than user.
-//
-// This is intentional:
-//
-// same user
-//   Brillare  → Attribution allowed
-//   Root Deep → Attribution denied
-//
-// can coexist cleanly.
+// ENSURE USER MODULE PERMISSIONS TABLE
 // ============================================================
 
 async function ensureUserModulePermissionsTable() {
@@ -969,10 +911,6 @@ async function ensureUserModulePermissionsTable() {
 
 // ============================================================
 // SEED MODULE CATALOG
-//
-// Idempotent.
-//
-// Existing records are updated with canonical metadata.
 // ============================================================
 
 async function seedModules() {
@@ -1507,21 +1445,6 @@ async function seedPlanModules() {
 
 // ============================================================
 // ENSURE ADMIN CONTROL PLANE
-//
-// Idempotent.
-//
-// Safe to call repeatedly.
-//
-// First call per Node process:
-//
-// ensure base tenant store
-// ensure auth store
-// ensure admin tables
-// seed canonical module catalog
-// seed canonical plans
-// seed plan module mapping
-//
-// Subsequent calls use in-process cache.
 // ============================================================
 
 export async function ensureGrowthOSAdminControlPlane() {
@@ -1796,6 +1719,7 @@ export async function listGrowthOSModules():
 
 }
 
+
 // ============================================================
 // LIST PLAN MODULES
 // ============================================================
@@ -2061,10 +1985,20 @@ export async function getGrowthOSBrandSubscription(
           AND brand_id =
             @brand_id
 
-        ORDER BY
-          updated_at DESC
+        QUALIFY
 
-        LIMIT 1
+          ROW_NUMBER() OVER (
+
+            PARTITION BY
+              workspace_id,
+              brand_id
+
+            ORDER BY
+              updated_at DESC,
+              created_at DESC,
+              subscription_id DESC
+
+          ) = 1
 
       `,
 
@@ -2108,6 +2042,20 @@ export async function getGrowthOSBrandSubscription(
 
 // ============================================================
 // UPSERT BRAND SUBSCRIPTION
+//
+// One logical subscription row per:
+//
+// workspace_id + brand_id
+//
+// BigQuery does not enforce UNIQUE constraints.
+//
+// We use:
+//
+// transaction
+// DELETE existing logical row
+// INSERT canonical row
+//
+// Conflicting concurrent writes are retried.
 // ============================================================
 
 export async function upsertGrowthOSBrandSubscription(
@@ -2250,6 +2198,10 @@ export async function upsertGrowthOSBrandSubscription(
   }
 
 
+  // ==========================================================
+  // NORMALIZE COMMERCIAL SETTINGS
+  // ==========================================================
+
   const status =
     input.status
     ||
@@ -2303,6 +2255,10 @@ export async function upsertGrowthOSBrandSubscription(
   }
 
 
+  // ==========================================================
+  // DETERMINISTIC SUBSCRIPTION ID
+  // ==========================================================
+
   const subscriptionId =
     deterministicId(
       'sub',
@@ -2313,178 +2269,197 @@ export async function upsertGrowthOSBrandSubscription(
     );
 
 
-  await bigquery.query({
+  // ==========================================================
+  // CANONICAL WRITE
+  // ==========================================================
 
-    query: `
-
-      MERGE
-        \`${projectId}.${DATASET_ID}.brand_subscriptions\`
-        AS target
-
-      USING
-      (
-        SELECT
-
-          @subscription_id
-            AS subscription_id,
-
-          @workspace_id
-            AS workspace_id,
-
-          @brand_id
-            AS brand_id,
-
-          @plan_id
-            AS plan_id,
-
-          @status
-            AS status,
-
-          @order_limit_override_mode
-            AS order_limit_override_mode,
-
-          @monthly_order_limit_override
-            AS monthly_order_limit_override
-
-      )
-      AS source
+  const maxAttempts =
+    3;
 
 
-      ON
-
-        target.workspace_id =
-          source.workspace_id
-
-        AND target.brand_id =
-          source.brand_id
+  let lastError:
+    unknown =
+      null;
 
 
-      WHEN MATCHED THEN
+  for (
+    let attempt = 1;
+    attempt <= maxAttempts;
+    attempt += 1
+  ) {
 
-        UPDATE SET
+    try {
 
-          subscription_id =
-            source.subscription_id,
+      await bigquery.query({
 
-          plan_id =
-            source.plan_id,
+        query: `
 
-          status =
-            source.status,
+          BEGIN TRANSACTION;
 
-          order_limit_override_mode =
-            source.order_limit_override_mode,
 
-          monthly_order_limit_override =
-            source.monthly_order_limit_override,
+          DELETE FROM
+            \`${projectId}.${DATASET_ID}.brand_subscriptions\`
 
-          updated_at =
+          WHERE
+
+            workspace_id =
+              @workspace_id
+
+            AND brand_id =
+              @brand_id;
+
+
+          INSERT INTO
+            \`${projectId}.${DATASET_ID}.brand_subscriptions\`
+          (
+
+            subscription_id,
+
+            workspace_id,
+
+            brand_id,
+
+            plan_id,
+
+            status,
+
+            order_limit_override_mode,
+
+            monthly_order_limit_override,
+
+            created_at,
+
+            updated_at
+
+          )
+
+          VALUES
+          (
+
+            @subscription_id,
+
+            @workspace_id,
+
+            @brand_id,
+
+            @plan_id,
+
+            @status,
+
+            @order_limit_override_mode,
+
+            @monthly_order_limit_override,
+
+            CURRENT_TIMESTAMP(),
+
             CURRENT_TIMESTAMP()
 
+          );
 
-      WHEN NOT MATCHED THEN
 
-        INSERT
-        (
+          COMMIT TRANSACTION;
 
-          subscription_id,
+        `,
 
-          workspace_id,
+        location:
+          LOCATION,
 
-          brand_id,
+        params: {
 
-          plan_id,
+          subscription_id:
+            subscriptionId,
+
+          workspace_id:
+            workspaceId,
+
+          brand_id:
+            brandId,
+
+          plan_id:
+            planId,
 
           status,
 
-          order_limit_override_mode,
+          order_limit_override_mode:
+            overrideMode,
 
-          monthly_order_limit_override,
+          monthly_order_limit_override:
+            monthlyOrderLimitOverride,
 
-          created_at,
+        },
 
-          updated_at
+        types: {
 
-        )
+          subscription_id:
+            'STRING',
 
-        VALUES
-        (
+          workspace_id:
+            'STRING',
 
-          source.subscription_id,
+          brand_id:
+            'STRING',
 
-          source.workspace_id,
+          plan_id:
+            'STRING',
 
-          source.brand_id,
+          status:
+            'STRING',
 
-          source.plan_id,
+          order_limit_override_mode:
+            'STRING',
 
-          source.status,
+          monthly_order_limit_override:
+            'INT64',
 
-          source.order_limit_override_mode,
+        },
 
-          source.monthly_order_limit_override,
+      });
 
-          CURRENT_TIMESTAMP(),
 
-          CURRENT_TIMESTAMP()
+      lastError =
+        null;
 
-        )
 
-    `,
+      break;
 
-    location:
-      LOCATION,
+    } catch (
+      error
+    ) {
 
-    params: {
+      lastError =
+        error;
 
-      subscription_id:
-        subscriptionId,
 
-      workspace_id:
-        workspaceId,
+      if (
+        attempt >=
+        maxAttempts
+      ) {
 
-      brand_id:
-        brandId,
+        break;
 
-      plan_id:
-        planId,
+      }
 
-      status,
 
-      order_limit_override_mode:
-        overrideMode,
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            attempt * 250
+          )
+      );
 
-      monthly_order_limit_override:
-        monthlyOrderLimitOverride,
+    }
 
-    },
+  }
 
-    types: {
 
-      subscription_id:
-        'STRING',
+  if (
+    lastError
+  ) {
 
-      workspace_id:
-        'STRING',
+    throw lastError;
 
-      brand_id:
-        'STRING',
-
-      plan_id:
-        'STRING',
-
-      status:
-        'STRING',
-
-      order_limit_override_mode:
-        'STRING',
-
-      monthly_order_limit_override:
-        'INT64',
-
-    },
-
-  });
+  }
 
 
   return {
@@ -2757,8 +2732,6 @@ export async function upsertGrowthOSBrandModuleOverride(
 
 // ============================================================
 // UPSERT USER MODULE PERMISSION
-//
-// membershipId is used intentionally instead of userId.
 // ============================================================
 
 export async function upsertGrowthOSUserModulePermission(
@@ -2813,7 +2786,7 @@ export async function upsertGrowthOSUserModulePermission(
 
 
   // ==========================================================
-  // VERIFY MEMBERSHIP EXISTS
+  // VERIFY MEMBERSHIP
   // ==========================================================
 
   const [
@@ -3019,6 +2992,625 @@ export async function upsertGrowthOSUserModulePermission(
 
     permission:
       input.permission,
+
+  };
+
+}
+
+
+// ============================================================
+// RUNTIME WORKSPACE SUBSCRIPTION SNAPSHOT
+//
+// IMPORTANT:
+//
+// Runtime request.
+//
+// NO:
+//
+// - schema creation
+// - seeding
+// - migrations
+// - bootstrap
+//
+// One BigQuery query returns:
+//
+// subscription
+// plan
+// module catalog
+// plan entitlement
+// brand override
+// effective access
+// ============================================================
+
+export async function getGrowthOSWorkspaceSubscriptionSnapshot(
+
+  workspaceId:
+    string,
+
+  brandId:
+    string
+
+) {
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedWorkspaceId =
+    String(
+      workspaceId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedBrandId =
+    String(
+      brandId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !normalizedWorkspaceId
+    ||
+    !normalizedBrandId
+  ) {
+
+    throw new Error(
+      'workspaceId and brandId are required'
+    );
+
+  }
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        WITH latest_subscription AS
+        (
+
+          SELECT
+            *
+
+          FROM
+            \`${projectId}.${DATASET_ID}.brand_subscriptions\`
+
+          WHERE
+
+            workspace_id =
+              @workspace_id
+
+            AND brand_id =
+              @brand_id
+
+          QUALIFY
+
+            ROW_NUMBER() OVER
+            (
+
+              PARTITION BY
+                workspace_id,
+                brand_id
+
+              ORDER BY
+                updated_at DESC,
+                created_at DESC,
+                subscription_id DESC
+
+            ) = 1
+
+        ),
+
+
+        latest_brand_overrides AS
+        (
+
+          SELECT
+            *
+
+          FROM
+            \`${projectId}.${DATASET_ID}.brand_module_overrides\`
+
+          WHERE
+
+            workspace_id =
+              @workspace_id
+
+            AND brand_id =
+              @brand_id
+
+          QUALIFY
+
+            ROW_NUMBER() OVER
+            (
+
+              PARTITION BY
+                workspace_id,
+                brand_id,
+                module_id
+
+              ORDER BY
+                updated_at DESC,
+                created_at DESC,
+                override_id DESC
+
+            ) = 1
+
+        )
+
+
+        SELECT
+
+          -- ==================================================
+          -- SUBSCRIPTION
+          -- ==================================================
+
+          s.subscription_id,
+
+          s.workspace_id,
+
+          s.brand_id,
+
+          s.plan_id,
+
+          s.status
+            AS subscription_status,
+
+          s.order_limit_override_mode,
+
+          s.monthly_order_limit_override,
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            s.created_at
+          )
+            AS subscription_created_at,
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            s.updated_at
+          )
+            AS subscription_updated_at,
+
+
+          -- ==================================================
+          -- PLAN
+          -- ==================================================
+
+          p.plan_name,
+
+          p.description
+            AS plan_description,
+
+          p.status
+            AS plan_status,
+
+          p.monthly_order_limit
+            AS plan_monthly_order_limit,
+
+          p.max_users,
+
+
+          -- ==================================================
+          -- EFFECTIVE ORDER LIMIT
+          -- ==================================================
+
+          CASE
+
+            WHEN
+              s.order_limit_override_mode =
+                'unlimited'
+
+            THEN
+              NULL
+
+
+            WHEN
+              s.order_limit_override_mode =
+                'custom'
+
+            THEN
+              s.monthly_order_limit_override
+
+
+            ELSE
+              p.monthly_order_limit
+
+          END
+            AS effective_monthly_order_limit,
+
+
+          -- ==================================================
+          -- MODULE
+          -- ==================================================
+
+          m.module_id,
+
+          m.module_name,
+
+          m.description
+            AS module_description,
+
+          m.module_type,
+
+          m.category,
+
+          m.route_key,
+
+          m.status
+            AS module_status,
+
+          m.setup_required,
+
+
+          -- ==================================================
+          -- PLAN ENTITLEMENT
+          -- ==================================================
+
+          COALESCE(
+            pm.enabled,
+            FALSE
+          )
+            AS plan_enabled,
+
+
+          -- ==================================================
+          -- BRAND OVERRIDE
+          -- ==================================================
+
+          COALESCE(
+            bmo.module_override,
+            'default'
+          )
+            AS brand_module_override,
+
+
+          -- ==================================================
+          -- EFFECTIVE MODULE ACCESS
+          -- ==================================================
+
+          CASE
+
+            WHEN
+              bmo.module_override =
+                'enabled'
+
+            THEN
+              TRUE
+
+
+            WHEN
+              bmo.module_override =
+                'disabled'
+
+            THEN
+              FALSE
+
+
+            ELSE
+              COALESCE(
+                pm.enabled,
+                FALSE
+              )
+
+          END
+            AS effective_enabled
+
+
+        FROM
+          latest_subscription
+          AS s
+
+
+        INNER JOIN
+          \`${projectId}.${DATASET_ID}.plans\`
+          AS p
+
+        ON
+          p.plan_id =
+            s.plan_id
+
+
+        CROSS JOIN
+          \`${projectId}.${DATASET_ID}.modules\`
+          AS m
+
+
+        LEFT JOIN
+          \`${projectId}.${DATASET_ID}.plan_modules\`
+          AS pm
+
+        ON
+          pm.plan_id =
+            s.plan_id
+
+          AND pm.module_id =
+            m.module_id
+
+
+        LEFT JOIN
+          latest_brand_overrides
+          AS bmo
+
+        ON
+          bmo.workspace_id =
+            s.workspace_id
+
+          AND bmo.brand_id =
+            s.brand_id
+
+          AND bmo.module_id =
+            m.module_id
+
+
+        ORDER BY
+
+          CASE m.category
+
+            WHEN 'workspace'
+              THEN 1
+
+            WHEN 'growth'
+              THEN 2
+
+            WHEN 'customers'
+              THEN 3
+
+            WHEN 'commerce'
+              THEN 4
+
+            WHEN 'data'
+              THEN 5
+
+            WHEN 'system'
+              THEN 6
+
+            ELSE 99
+
+          END,
+
+          m.module_name
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        workspace_id:
+          normalizedWorkspaceId,
+
+        brand_id:
+          normalizedBrandId,
+
+      },
+
+      types: {
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  const resultRows =
+    (
+      rows
+      ||
+      []
+    ) as any[];
+
+
+  // ==========================================================
+  // NO SUBSCRIPTION
+  // ==========================================================
+
+  if (
+    resultRows.length ===
+    0
+  ) {
+
+    return {
+
+      configured:
+        false,
+
+      subscription:
+        null,
+
+      plan:
+        null,
+
+      modules:
+        [],
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // ROOT
+  // ==========================================================
+
+  const root =
+    resultRows[0];
+
+
+  // ==========================================================
+  // RESPONSE
+  // ==========================================================
+
+  return {
+
+    configured:
+      true,
+
+
+    subscription: {
+
+      subscriptionId:
+        String(
+          root.subscription_id
+        ),
+
+      workspaceId:
+        String(
+          root.workspace_id
+        ),
+
+      brandId:
+        String(
+          root.brand_id
+        ),
+
+      status:
+        String(
+          root.subscription_status
+        ),
+
+      planId:
+        String(
+          root.plan_id
+        ),
+
+      orderLimitOverrideMode:
+        String(
+          root.order_limit_override_mode
+        ),
+
+      monthlyOrderLimitOverride:
+        root.monthly_order_limit_override
+        ??
+        null,
+
+      createdAt:
+        root.subscription_created_at
+        ??
+        null,
+
+      updatedAt:
+        root.subscription_updated_at
+        ??
+        null,
+
+    },
+
+
+    plan: {
+
+      planId:
+        String(
+          root.plan_id
+        ),
+
+      name:
+        String(
+          root.plan_name
+        ),
+
+      description:
+        root.plan_description
+        ??
+        null,
+
+      status:
+        String(
+          root.plan_status
+        ),
+
+      monthlyOrderLimit:
+        root.plan_monthly_order_limit
+        ??
+        null,
+
+      effectiveMonthlyOrderLimit:
+        root.effective_monthly_order_limit
+        ??
+        null,
+
+      maxUsers:
+        root.max_users
+        ??
+        null,
+
+    },
+
+
+    modules:
+      resultRows.map(
+        row => ({
+
+          moduleId:
+            String(
+              row.module_id
+            ),
+
+          name:
+            row.module_name
+            ??
+            null,
+
+          description:
+            row.module_description
+            ??
+            null,
+
+          moduleType:
+            row.module_type
+            ??
+            null,
+
+          category:
+            row.category
+            ??
+            null,
+
+          routeKey:
+            row.route_key
+            ??
+            null,
+
+          status:
+            row.module_status
+            ??
+            null,
+
+          setupRequired:
+            Boolean(
+              row.setup_required
+            ),
+
+          planEnabled:
+            Boolean(
+              row.plan_enabled
+            ),
+
+          brandOverride:
+            String(
+              row.brand_module_override
+              ||
+              'default'
+            ),
+
+          enabled:
+            Boolean(
+              row.effective_enabled
+            ),
+
+        })),
 
   };
 

@@ -33,14 +33,8 @@ import AppSidebar
 import AppHeader
   from './AppHeader';
 
-import AppIntegrations
-  from './integrations/AppIntegrations';
-
 import GrowthSettings
   from './settings/GrowthSettings';
-
-import WarehouseAudit
-  from './warehouse/WarehouseAudit';  
 
 import {
   Activity,
@@ -1369,83 +1363,7 @@ export default function GrowthOSDashboard() {
 
               )}
 
-
-              {/* ==============================================
-                  APP INTEGRATIONS
-              ============================================== */}
-
-              {activeTab ===
-                'App Integrations' && (
-
-                <AppIntegrations />
-
-              )}
-
-              {/* ==========================================================
-    WAREHOUSE AUDIT
-========================================================== */}
-
-
-              {activeTab ===
-  'Warehouse Audit' && (
-
-  <WarehouseAudit />
-
-)}
-
-
-              {/* ==============================================
-                  DATA HEALTH
-              ============================================== */}
-
-              {activeTab ===
-                'Data Health' && (
-
-                <PlatformPlaceholder
-
-                  icon={
-                    Activity
-                  }
-
-                  eyebrow="Data Sources"
-
-                  title="Data Health"
-
-                  description="Monitor the health of Shopify, BigQuery, marketing integrations, attribution collection and scheduled pipelines."
-
-                  status="Infrastructure screen ready to connect"
-
-                />
-
-              )}
-
-
-              {/* ==============================================
-                  SYNC HISTORY
-              ============================================== */}
-
-              {activeTab ===
-                'Sync History' && (
-
-                <PlatformPlaceholder
-
-                  icon={
-                    History
-                  }
-
-                  eyebrow="Data Sources"
-
-                  title="Sync History"
-
-                  description="Review ingestion runs, scheduled refreshes, failures, retries and the latest successful sync for every Growth OS data source."
-
-                  status="Sync history screen ready to connect"
-
-                />
-
-              )}
-
-
+              
               {/* ==============================================
                   GLOBAL SETTINGS
               ============================================== */}

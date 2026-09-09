@@ -8,8 +8,8 @@ import {
 } from '@/lib/auth/request-auth';
 
 import {
-  getGrowthOSWorkspaceSubscriptionSnapshot,
-} from '@/lib/admin/control-plane';
+  getAdminDataHealthSnapshot,
+} from '@/lib/admin/data-health';
 
 
 export const dynamic =
@@ -20,21 +20,25 @@ export const runtime =
 
 
 // ============================================================
-// CURRENT WORKSPACE SUBSCRIPTION
+// ADMIN DATA HEALTH
 //
-// FAST RUNTIME READ.
+// GLOBAL CROSS-CLIENT READ.
+//
+// Source of truth:
+//
+// growthos_control.integration_connections
+// growthos_control.integration_accounts
+// growthos_control.integration_sync_state
 //
 // IMPORTANT:
 //
-// This endpoint does NOT:
+// This route:
+// - does not bootstrap infrastructure
+// - does not mutate sync state
+// - does not run retries
+// - does not change connections
 //
-// - ensure schema
-// - create tables
-// - seed plans
-// - seed modules
-// - run migrations
-//
-// Tenant comes exclusively from authenticated session.
+// It is an operational read only.
 // ============================================================
 
 export async function GET(
@@ -48,7 +52,7 @@ export async function GET(
   try {
 
     // ========================================================
-    // 1. AUTHENTICATE
+    // 1. REQUIRE AUTHENTICATION
     // ========================================================
 
     const identity =
@@ -79,29 +83,19 @@ export async function GET(
 
 
     // ========================================================
-    // 2. ACTIVE TENANT
+    // 2. DO NOT ALLOW SHOPIFY EMBEDDED SESSION
+    //
+    // Data Health is platform-wide Admin functionality.
+    //
+    // NOTE:
+    // Dedicated platform-admin authorization should eventually
+    // replace this interim boundary across all /api/admin/*
+    // routes.
     // ========================================================
 
-    const workspaceId =
-      String(
-        identity.workspaceId
-        ||
-        ''
-      ).trim();
-
-
-    const brandId =
-      String(
-        identity.brandId
-        ||
-        ''
-      ).trim();
-
-
     if (
-      !workspaceId
-      ||
-      !brandId
+      identity.authMethod ===
+        'shopify'
     ) {
 
       return NextResponse.json(
@@ -111,12 +105,12 @@ export async function GET(
             false,
 
           error:
-            'ACTIVE_BRAND_REQUIRED',
+            'ADMIN_ACCESS_REQUIRED',
 
         },
         {
           status:
-            400,
+            403,
         }
       );
 
@@ -124,14 +118,11 @@ export async function GET(
 
 
     // ========================================================
-    // 3. ONE CONTROL-PLANE QUERY
+    // 3. LOAD GLOBAL HEALTH
     // ========================================================
 
     const snapshot =
-      await getGrowthOSWorkspaceSubscriptionSnapshot(
-        workspaceId,
-        brandId
-      );
+      await getAdminDataHealthSnapshot();
 
 
     // ========================================================
@@ -143,7 +134,14 @@ export async function GET(
       ok:
         true,
 
-      ...snapshot,
+      scope:
+        'global',
+
+      summary:
+        snapshot.summary,
+
+      rows:
+        snapshot.rows,
 
       meta: {
 
@@ -151,6 +149,12 @@ export async function GET(
           Date.now()
           -
           startedAt,
+
+        source:
+          'growthos_control.integration_sync_state',
+
+        readOnly:
+          true,
 
       },
 
@@ -164,12 +168,12 @@ export async function GET(
       String(
         error?.message
         ||
-        'Unable to load workspace subscription'
+        'Unable to load Admin Data Health'
       );
 
 
     console.error(
-      'WORKSPACE_SUBSCRIPTION_ERROR',
+      'ADMIN_DATA_HEALTH_ERROR',
       {
         message,
 
@@ -188,7 +192,7 @@ export async function GET(
           false,
 
         error:
-          'Unable to load subscription',
+          'Unable to load Data Health',
 
         meta: {
 

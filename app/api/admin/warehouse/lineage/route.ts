@@ -3,8 +3,8 @@ import {
 } from 'next/server';
 
 import {
-  scanRuntimeLineage,
-} from '@/lib/warehouse/runtime-lineage';
+  scanWarehouseLineage,
+} from '@/lib/admin/warehouse/lineage';
 
 
 export const dynamic =
@@ -15,8 +15,8 @@ export async function GET() {
 
   try {
 
-    const runtime =
-      await scanRuntimeLineage();
+    const lineage =
+        await scanWarehouseLineage();
 
 
     return NextResponse.json(
@@ -26,9 +26,7 @@ export async function GET() {
           true,
 
         data: {
-
-          runtime,
-
+          lineage,
         },
 
         meta: {
@@ -37,7 +35,7 @@ export async function GET() {
             'read_only',
 
           source:
-            'bigquery_information_schema',
+            'growth_os_repository',
 
         },
 
@@ -50,7 +48,7 @@ export async function GET() {
   ) {
 
     console.error(
-      'WAREHOUSE_RUNTIME_LINEAGE_ERROR',
+      'WAREHOUSE_LINEAGE_ERROR',
       error
     );
 
@@ -64,7 +62,7 @@ export async function GET() {
         error:
           error?.message
           ||
-          'Runtime lineage scan failed',
+          'Warehouse lineage scan failed',
 
       },
       {

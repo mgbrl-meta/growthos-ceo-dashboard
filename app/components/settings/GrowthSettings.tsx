@@ -26,6 +26,9 @@ import {
   WalletCards,
 } from 'lucide-react';
 
+import AppIntegrations
+  from './integrations/AppIntegrations';
+
 
 // ============================================================
 // SETTINGS TYPES
@@ -81,7 +84,7 @@ type UserPreferences = {
 
 
 // ============================================================
-// AUTH / WORKSPACE RESPONSE
+// AUTH RESPONSE
 // ============================================================
 
 type AuthMeResponse = {
@@ -163,22 +166,193 @@ type AuthMeResponse = {
 
 
 // ============================================================
+// SUBSCRIPTION RESPONSE
+// ============================================================
+
+type WorkspaceSubscriptionResponse = {
+
+  ok:
+    boolean;
+
+  configured:
+    boolean;
+
+  subscription:
+    {
+
+      subscriptionId:
+        string;
+
+      status:
+        string;
+
+      planId:
+        string;
+
+      orderLimitOverrideMode:
+        string;
+
+      monthlyOrderLimitOverride:
+        number | null;
+
+      createdAt:
+        string | null;
+
+      updatedAt:
+        string | null;
+
+    }
+    |
+    null;
+
+  plan:
+    {
+
+      planId:
+        string;
+
+      name:
+        string;
+
+      description:
+        string | null;
+
+      status:
+        string;
+
+      monthlyOrderLimit:
+        number | null;
+
+      effectiveMonthlyOrderLimit:
+        number | null;
+
+      maxUsers:
+        number | null;
+
+    }
+    |
+    null;
+
+  modules:
+    Array<{
+
+      moduleId:
+        string;
+
+      name:
+        string | null;
+
+      description:
+        string | null;
+
+      category:
+        string | null;
+
+      routeKey:
+        string | null;
+
+      enabled:
+        boolean;
+
+      status:
+        string | null;
+
+      setupRequired:
+        boolean;
+
+    }>;
+
+};
+
+
+// ============================================================
+// WORKSPACE USERS RESPONSE
+// ============================================================
+
+type WorkspaceUsersResponse = {
+
+  ok:
+    boolean;
+
+  workspace?: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+  };
+
+  summary?: {
+
+    totalUsers:
+      number;
+
+    activeUsers:
+      number;
+
+    owners:
+      number;
+
+    admins:
+      number;
+
+  };
+
+  users?: Array<{
+
+    membershipId:
+      string;
+
+    userId:
+      string;
+
+    email:
+      string | null;
+
+    fullName:
+      string | null;
+
+    role:
+      string;
+
+    userStatus:
+      string | null;
+
+    membershipStatus:
+      string;
+
+    isDefault:
+      boolean;
+
+    membershipCreatedAt:
+      string | null;
+
+    membershipUpdatedAt:
+      string | null;
+
+    lastLoginAt:
+      string | null;
+
+  }>;
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+  };
+
+};
+
+
+// ============================================================
 // STORAGE
 //
 // PERSONAL UI PREFERENCES ONLY.
 //
-// NO:
-//
-// brand
-// plan
-// billing
-// modules
-// integrations
-// users
-// permissions
-// entitlement
-//
-// are stored here.
+// NO BUSINESS DATA IS STORED HERE.
 // ============================================================
 
 const USER_PREFERENCES_KEY =
@@ -364,10 +538,6 @@ const LANDING_PAGE_OPTIONS:
 export default function GrowthSettings() {
 
 
-  // ==========================================================
-  // SETTINGS NAVIGATION
-  // ==========================================================
-
   const [
     activeTab,
     setActiveTab,
@@ -386,7 +556,7 @@ export default function GrowthSettings() {
     setSidebarMode,
   ] =
     useState<SidebarMode>(
-      'cursor'
+      'fixed'
     );
 
 
@@ -418,9 +588,7 @@ export default function GrowthSettings() {
 
 
   // ==========================================================
-  // AUTHENTICATED WORKSPACE
-  //
-  // SERVER-OWNED BUSINESS DATA.
+  // AUTH CONTEXT
   // ==========================================================
 
   const [
@@ -444,6 +612,85 @@ export default function GrowthSettings() {
   const [
     authError,
     setAuthError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  // ==========================================================
+  // SUBSCRIPTION CONTEXT
+  // ==========================================================
+
+  const [
+    subscriptionContext,
+    setSubscriptionContext,
+  ] =
+    useState<WorkspaceSubscriptionResponse | null>(
+      null
+    );
+
+
+  const [
+    subscriptionLoading,
+    setSubscriptionLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    subscriptionError,
+    setSubscriptionError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  // ==========================================================
+  // USERS CONTEXT
+  //
+  // Loaded lazily only when Users & Access is opened.
+  // ==========================================================
+
+  const [
+    usersContext,
+    setUsersContext,
+  ] =
+    useState<WorkspaceUsersResponse | null>(
+      null
+    );
+
+
+  const [
+    usersLoading,
+    setUsersLoading,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    usersLoaded,
+    setUsersLoaded,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    usersError,
+    setUsersError,
   ] =
     useState<
       string |
@@ -531,7 +778,7 @@ export default function GrowthSettings() {
 
 
   // ==========================================================
-  // LOAD AUTHENTICATED WORKSPACE
+  // LOAD AUTH CONTEXT
   // ==========================================================
 
   async function loadAuthContext() {
@@ -552,9 +799,6 @@ export default function GrowthSettings() {
         await fetch(
           '/api/auth/me',
           {
-            method:
-              'GET',
-
             cache:
               'no-store',
 
@@ -593,7 +837,7 @@ export default function GrowthSettings() {
     ) {
 
       console.error(
-        'GROWTH_OS_SETTINGS_AUTH_CONTEXT_ERROR',
+        'GROWTH_OS_SETTINGS_AUTH_ERROR',
         error
       );
 
@@ -622,13 +866,232 @@ export default function GrowthSettings() {
   }
 
 
+  // ==========================================================
+  // LOAD SUBSCRIPTION
+  // ==========================================================
+
+  async function loadSubscriptionContext() {
+
+    setSubscriptionLoading(
+      true
+    );
+
+
+    setSubscriptionError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/workspace/subscription',
+          {
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+          }
+        );
+
+
+      const json:
+        WorkspaceSubscriptionResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          'Unable to load workspace subscription'
+        );
+
+      }
+
+
+      setSubscriptionContext(
+        json
+      );
+
+    } catch (
+      error: any
+    ) {
+
+      console.error(
+        'GROWTH_OS_SETTINGS_SUBSCRIPTION_ERROR',
+        error
+      );
+
+
+      setSubscriptionContext(
+        null
+      );
+
+
+      setSubscriptionError(
+        String(
+          error?.message
+          ||
+          'Unable to load subscription'
+        )
+      );
+
+    } finally {
+
+      setSubscriptionLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // LOAD USERS
+  // ==========================================================
+
+  async function loadUsersContext() {
+
+    setUsersLoading(
+      true
+    );
+
+
+    setUsersError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/workspace/users',
+          {
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+          }
+        );
+
+
+      const json:
+        WorkspaceUsersResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          'Unable to load workspace users'
+        );
+
+      }
+
+
+      setUsersContext(
+        json
+      );
+
+
+      setUsersLoaded(
+        true
+      );
+
+    } catch (
+      error: any
+    ) {
+
+      console.error(
+        'GROWTH_OS_SETTINGS_USERS_ERROR',
+        error
+      );
+
+
+      setUsersContext(
+        null
+      );
+
+
+      setUsersLoaded(
+        true
+      );
+
+
+      setUsersError(
+        String(
+          error?.message
+          ||
+          'Unable to load workspace users'
+        )
+      );
+
+    } finally {
+
+      setUsersLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // INITIAL SERVER LOAD
+  // ==========================================================
+
   useEffect(
     () => {
 
       loadAuthContext();
 
+      loadSubscriptionContext();
+
     },
     []
+  );
+
+
+  // ==========================================================
+  // LAZY USERS LOAD
+  // ==========================================================
+
+  useEffect(
+    () => {
+
+      if (
+        activeTab ===
+          'Users & Access'
+        &&
+        !usersLoaded
+        &&
+        !usersLoading
+      ) {
+
+        loadUsersContext();
+
+      }
+
+    },
+    [
+      activeTab,
+      usersLoaded,
+      usersLoading,
+    ]
   );
 
 
@@ -715,7 +1178,7 @@ export default function GrowthSettings() {
 
     const nextSidebarMode:
       SidebarMode =
-        'cursor';
+        'fixed';
 
 
     const nextPreferences:
@@ -790,7 +1253,7 @@ export default function GrowthSettings() {
 
 
   // ==========================================================
-  // LOADING PERSONAL SETTINGS
+  // LOADING LOCAL PREFERENCES
   // ==========================================================
 
   if (
@@ -801,12 +1264,7 @@ export default function GrowthSettings() {
 
       <section className="gos-panel !p-4">
 
-        <p
-          className="
-            text-[10px]
-            text-slate-500
-          "
-        >
+        <p className="text-[10px] text-slate-500">
           Loading settings...
         </p>
 
@@ -1019,10 +1477,6 @@ export default function GrowthSettings() {
         <div className="min-w-0">
 
 
-          {/* =================================================
-              WORKSPACE
-          ================================================= */}
-
           {activeTab ===
             'Workspace' && (
 
@@ -1049,57 +1503,97 @@ export default function GrowthSettings() {
           )}
 
 
-          {/* =================================================
-              PLAN & BILLING
-          ================================================= */}
-
           {activeTab ===
             'Plan & Billing' && (
 
-            <PlanBillingSettings />
+            <PlanBillingSettings
+
+              subscriptionContext={
+                subscriptionContext
+              }
+
+              loading={
+                subscriptionLoading
+              }
+
+              error={
+                subscriptionError
+              }
+
+              reload={
+                loadSubscriptionContext
+              }
+
+            />
 
           )}
 
-
-          {/* =================================================
-              MODULES
-          ================================================= */}
 
           {activeTab ===
             'Modules' && (
 
-            <ModuleSettings />
+            <ModuleSettings
+
+              subscriptionContext={
+                subscriptionContext
+              }
+
+              loading={
+                subscriptionLoading
+              }
+
+              error={
+                subscriptionError
+              }
+
+              reload={
+                loadSubscriptionContext
+              }
+
+            />
 
           )}
 
-
-          {/* =================================================
-              INTEGRATIONS
-          ================================================= */}
 
           {activeTab ===
             'Integrations' && (
 
-            <IntegrationSettings />
+             <AppIntegrations />
 
           )}
 
-
-          {/* =================================================
-              USERS
-          ================================================= */}
 
           {activeTab ===
             'Users & Access' && (
 
-            <UserAccessSettings />
+            <UserAccessSettings
+
+              usersContext={
+                usersContext
+              }
+
+              subscriptionContext={
+                subscriptionContext
+              }
+
+              loading={
+                usersLoading
+                ||
+                !usersLoaded
+              }
+
+              error={
+                usersError
+              }
+
+              reload={
+                loadUsersContext
+              }
+
+            />
 
           )}
 
-
-          {/* =================================================
-              PERSONAL PREFERENCES
-          ================================================= */}
 
           {activeTab ===
             'My Preferences' && (
@@ -1151,16 +1645,6 @@ export default function GrowthSettings() {
 
 // ============================================================
 // WORKSPACE
-//
-// REAL SERVER DATA
-//
-// Source:
-//
-// signed session
-//      ↓
-// /api/auth/me
-//      ↓
-// growthos_control workspaces / brands
 // ============================================================
 
 function WorkspaceSettings({
@@ -1210,30 +1694,10 @@ function WorkspaceSettings({
 
     return (
 
-      <div className="space-y-3">
-
-        <SectionHeader
-
-          icon={
-            Settings2
-          }
-
-          title="Workspace"
-
-          description="Business and workspace information associated with your current Growth OS brand."
-
-        />
-
-
-        <section className="gos-panel !p-4">
-
-          <p className="text-[10px] text-slate-500">
-            Loading authenticated workspace...
-          </p>
-
-        </section>
-
-      </div>
+      <LoadingPanel
+        title="Workspace"
+        text="Loading authenticated workspace..."
+      />
 
     );
 
@@ -1248,128 +1712,21 @@ function WorkspaceSettings({
 
     return (
 
-      <div className="space-y-3">
+      <ErrorPanel
 
-        <SectionHeader
+        title="Unable to load workspace"
 
-          icon={
-            Settings2
-          }
+        error={
+          error
+          ||
+          'Authenticated workspace context is unavailable.'
+        }
 
-          title="Workspace"
+        reload={
+          reload
+        }
 
-          description="Business and workspace information associated with your current Growth OS brand."
-
-        />
-
-
-        <section
-          className="
-            rounded-[10px]
-
-            border
-            border-red-200
-
-            bg-red-50
-
-            p-3
-          "
-        >
-
-          <div
-            className="
-              flex
-              items-start
-              justify-between
-              gap-3
-            "
-          >
-
-            <div
-              className="
-                flex
-                items-start
-                gap-2
-              "
-            >
-
-              <AlertCircle
-                size={14}
-                className="
-                  mt-0.5
-
-                  text-red-600
-                "
-              />
-
-
-              <div>
-
-                <p
-                  className="
-                    text-[10px]
-                    font-semibold
-
-                    text-red-800
-                  "
-                >
-                  Unable to load workspace
-                </p>
-
-
-                <p
-                  className="
-                    mt-0.5
-
-                    text-[9px]
-
-                    text-red-700
-                  "
-                >
-                  {error ||
-                    'Authenticated workspace context is unavailable.'}
-                </p>
-
-              </div>
-
-            </div>
-
-
-            <button
-
-              type="button"
-
-              onClick={
-                reload
-              }
-
-              className="
-                h-7
-                shrink-0
-
-                rounded-[7px]
-
-                border
-                border-red-200
-
-                bg-white
-
-                px-2.5
-
-                text-[9px]
-                font-semibold
-
-                text-red-700
-              "
-            >
-              Retry
-            </button>
-
-          </div>
-
-        </section>
-
-      </div>
+      />
 
     );
 
@@ -1394,10 +1751,6 @@ function WorkspaceSettings({
       />
 
 
-      {/* =====================================================
-          IDENTITY
-      ===================================================== */}
-
       <section className="gos-panel !p-3.5">
 
         <h3 className="gos-section-title">
@@ -1418,82 +1771,41 @@ function WorkspaceSettings({
         >
 
           <ServerValue
-
             label="Workspace Name"
-
-            value={
-              context.workspaceName
-            }
-
+            value={context.workspaceName}
           />
 
-
           <ServerValue
-
             label="Brand"
-
-            value={
-              context.brandName
-            }
-
+            value={context.brandName}
           />
 
-
           <ServerValue
-
             label="Workspace ID"
-
-            value={
-              context.workspaceId
-            }
-
+            value={context.workspaceId}
             mono
-
           />
 
-
           <ServerValue
-
             label="Brand ID"
-
-            value={
-              context.brandId
-            }
-
+            value={context.brandId}
             mono
-
           />
 
-
           <ServerValue
-
             label="Workspace Slug"
-
-            value={
-              context.workspaceSlug
-            }
-
+            value={context.workspaceSlug}
           />
 
-
           <ServerValue
-
             label="Brand Slug"
-
-            value={
-              context.brandSlug
-            }
-
+            value={context.brandSlug}
           />
 
         </div>
 
       </section>
 
-
-      {/* =====================================================
-          LOCALIZATION
-      ===================================================== */}
 
       <section className="gos-panel !p-3.5">
 
@@ -1515,58 +1827,30 @@ function WorkspaceSettings({
         >
 
           <ServerValue
-
             label="Currency"
-
-            value={
-              context.currency
-            }
-
+            value={context.currency}
           />
 
-
           <ServerValue
-
             label="Timezone"
-
-            value={
-              context.timezone
-            }
-
+            value={context.timezone}
           />
 
-
           <ServerValue
-
             label="Workspace Status"
-
             value="Active"
-
             status="green"
-
           />
 
-
           <ServerValue
-
             label="Your Role"
-
-            value={
-              formatRole(
-                context.role
-              )
-            }
-
+            value={formatRole(context.role)}
           />
 
         </div>
 
       </section>
 
-
-      {/* =====================================================
-          CURRENT USER
-      ===================================================== */}
 
       <section className="gos-panel !p-3.5">
 
@@ -1588,57 +1872,31 @@ function WorkspaceSettings({
         >
 
           <ServerValue
-
             label="Email"
-
-            value={
-              user?.email
-            }
-
+            value={user?.email}
           />
 
-
           <ServerValue
-
             label="Name"
-
-            value={
-              user?.fullName
-            }
-
+            value={user?.fullName}
           />
 
-
           <ServerValue
-
             label="User ID"
-
-            value={
-              user?.userId
-            }
-
+            value={user?.userId}
             mono
-
           />
 
-
           <ServerValue
-
             label="Authentication"
-
-            value={
-              formatAuthMethod(
-                auth?.method
-              )
-            }
-
+            value={formatAuthMethod(auth?.method)}
           />
 
         </div>
 
 
         <ServerNotice
-          text="Workspace identity is read from the authenticated Growth OS session and server-side control plane. It cannot be changed through browser storage."
+          text="Workspace identity comes from the authenticated session and Growth OS control plane."
         />
 
       </section>
@@ -1651,16 +1909,128 @@ function WorkspaceSettings({
 
 
 // ============================================================
-// PLAN + BILLING
-//
-// NEXT SERVER CONNECTION.
+// PLAN & BILLING
 // ============================================================
 
-function PlanBillingSettings() {
+function PlanBillingSettings({
+
+  subscriptionContext,
+
+  loading,
+
+  error,
+
+  reload,
+
+}: {
+
+  subscriptionContext:
+    WorkspaceSubscriptionResponse |
+    null;
+
+  loading:
+    boolean;
+
+  error:
+    string |
+    null;
+
+  reload:
+    () => void;
+
+}) {
+
+
+  if (
+    loading
+  ) {
+
+    return (
+
+      <LoadingPanel
+        title="Plan & Billing"
+        text="Loading workspace subscription..."
+      />
+
+    );
+
+  }
+
+
+  if (
+    error
+  ) {
+
+    return (
+
+      <ErrorPanel
+
+        title="Unable to load subscription"
+
+        error={
+          error
+        }
+
+        reload={
+          reload
+        }
+
+      />
+
+    );
+
+  }
+
+
+  if (
+    !subscriptionContext?.configured
+    ||
+    !subscriptionContext.plan
+    ||
+    !subscriptionContext.subscription
+  ) {
+
+    return (
+
+      <div className="space-y-3">
+
+        <SectionHeader
+          icon={WalletCards}
+          title="Plan & Billing"
+          description="Review your current Growth OS plan, capacity, usage and upgrades."
+        />
+
+
+        <section className="gos-panel !p-4">
+
+          <p className="text-[10px] font-semibold text-slate-800">
+            Subscription not configured
+          </p>
+
+          <p className="mt-1 text-[9px] text-slate-500">
+            Your Growth OS administrator has not assigned a commercial plan to this brand.
+          </p>
+
+        </section>
+
+      </div>
+
+    );
+
+  }
+
+
+  const {
+    plan,
+    subscription,
+  } =
+    subscriptionContext;
+
 
   return (
 
     <div className="space-y-3">
+
 
       <SectionHeader
 
@@ -1670,7 +2040,7 @@ function PlanBillingSettings() {
 
         title="Plan & Billing"
 
-        description="Review your current Growth OS plan, capacity, usage and available upgrades."
+        description="Review your current Growth OS plan, capacity and commercial access."
 
       />
 
@@ -1685,20 +2055,42 @@ function PlanBillingSettings() {
         "
       >
 
-        <ServerMetric
+        <MetricCard
           label="Current Plan"
+          value={plan.name}
         />
 
-        <ServerMetric
+        <MetricCard
           label="Monthly Allowance"
+          value={formatOrderLimit(
+            plan.effectiveMonthlyOrderLimit
+          )}
         />
 
-        <ServerMetric
-          label="Current Usage"
-        />
-
-        <ServerMetric
+        <MetricCard
           label="User Allowance"
+          value={
+            plan.maxUsers ===
+              null
+
+              ? 'Unlimited'
+
+              : `${formatNumber(
+                  plan.maxUsers
+                )} users`
+          }
+        />
+
+        <MetricCard
+          label="Subscription"
+          value={
+            formatRole(
+              subscription.status
+            )
+            ||
+            '—'
+          }
+          tone="green"
         />
 
       </section>
@@ -1721,20 +2113,23 @@ function PlanBillingSettings() {
           <div>
 
             <h3 className="gos-section-title">
-              Subscription
+              {plan.name}
             </h3>
 
 
             <p
               className="
-                mt-0.5
+                mt-1
+                max-w-2xl
 
                 text-[9px]
+                leading-4
 
                 text-slate-500
               "
             >
-              Billing cycle, renewal, invoices and commercial usage will appear here.
+              {plan.description ||
+                'Growth OS commercial plan.'}
             </p>
 
           </div>
@@ -1746,10 +2141,16 @@ function PlanBillingSettings() {
 
             disabled
 
+            title="Plan comparison will be connected next"
+
             className="
               h-8
+              shrink-0
 
               rounded-[8px]
+
+              border
+              border-slate-200
 
               bg-slate-100
 
@@ -1780,30 +2181,101 @@ function PlanBillingSettings() {
         >
 
           <ServerValue
+            label="Plan ID"
+            value={plan.planId}
+            mono
+          />
+
+          <ServerValue
+            label="Plan Status"
+            value={formatRole(plan.status)}
+            status={
+              plan.status ===
+                'active'
+
+                ? 'green'
+
+                : undefined
+            }
+          />
+
+          <ServerValue
+            label="Base Order Limit"
+            value={formatOrderLimit(
+              plan.monthlyOrderLimit
+            )}
+          />
+
+          <ServerValue
+            label="Effective Order Limit"
+            value={formatOrderLimit(
+              plan.effectiveMonthlyOrderLimit
+            )}
+          />
+
+          <ServerValue
+            label="Order Limit Rule"
+            value={formatRole(
+              subscription.orderLimitOverrideMode
+            )}
+          />
+
+          <ServerValue
+            label="Last Updated"
+            value={formatTimestamp(
+              subscription.updatedAt
+            )}
+          />
+
+        </div>
+
+      </section>
+
+
+      <section className="gos-panel !p-3.5">
+
+        <h3 className="gos-section-title">
+          Usage & Billing
+        </h3>
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+          "
+        >
+
+          <ServerValue
+            label="Current Order Usage"
+            value="Not connected yet"
+          />
+
+          <ServerValue
             label="Billing Cycle"
-            value={null}
+            value="Not connected yet"
           />
 
           <ServerValue
             label="Next Renewal"
-            value={null}
+            value="Not connected yet"
           />
 
           <ServerValue
-            label="Current Period"
-            value={null}
-          />
-
-          <ServerValue
-            label="Usage Reset"
-            value={null}
+            label="Invoices"
+            value="Not connected yet"
           />
 
         </div>
 
 
         <ServerNotice
-          text="Plan and usage will be read from the brand subscription and usage control plane. Customers can initiate an upgrade without directly modifying entitlement."
+          text="Plan entitlement is live. Usage metering, billing cycle, renewal and invoice history will be connected separately rather than showing estimated data."
         />
 
       </section>
@@ -1819,11 +2291,88 @@ function PlanBillingSettings() {
 // MODULES
 // ============================================================
 
-function ModuleSettings() {
+function ModuleSettings({
+
+  subscriptionContext,
+
+  loading,
+
+  error,
+
+  reload,
+
+}: {
+
+  subscriptionContext:
+    WorkspaceSubscriptionResponse |
+    null;
+
+  loading:
+    boolean;
+
+  error:
+    string |
+    null;
+
+  reload:
+    () => void;
+
+}) {
+
+
+  if (
+    loading
+  ) {
+
+    return (
+
+      <LoadingPanel
+        title="Modules"
+        text="Loading module entitlement..."
+      />
+
+    );
+
+  }
+
+
+  if (
+    error
+  ) {
+
+    return (
+
+      <ErrorPanel
+        title="Unable to load modules"
+        error={error}
+        reload={reload}
+      />
+
+    );
+
+  }
+
+
+  const modules =
+    subscriptionContext?.modules
+    ||
+    [];
+
+
+  const enabledCount =
+    modules.filter(
+      module =>
+        module.enabled
+        &&
+        module.status ===
+          'active'
+    ).length;
+
 
   return (
 
     <div className="space-y-3">
+
 
       <SectionHeader
 
@@ -1836,6 +2385,39 @@ function ModuleSettings() {
         description="See which Growth OS capabilities are included in your current plan."
 
       />
+
+
+      <section
+        className="
+          grid
+          grid-cols-2
+          gap-2
+
+          md:grid-cols-3
+        "
+      >
+
+        <MetricCard
+          label="Available Modules"
+          value={formatNumber(modules.length)}
+        />
+
+        <MetricCard
+          label="Enabled"
+          value={formatNumber(enabledCount)}
+          tone="green"
+        />
+
+        <MetricCard
+          label="Plan"
+          value={
+            subscriptionContext?.plan?.name
+            ||
+            '—'
+          }
+        />
+
+      </section>
 
 
       <section className="gos-panel !p-0">
@@ -1855,111 +2437,172 @@ function ModuleSettings() {
           </h3>
 
 
-          <p
-            className="
-              mt-0.5
-
-              text-[9px]
-
-              text-slate-500
-            "
-          >
-            Plan entitlement and brand-specific module access will be shown here.
+          <p className="mt-0.5 text-[9px] text-slate-500">
+            Access shown below comes from your server-side plan entitlement.
           </p>
 
         </div>
 
 
-        <EmptyServerState
+        {modules.length ===
+          0 ? (
 
-          icon={
-            Boxes
-          }
+          <EmptyServerState
+            icon={Boxes}
+            title="No module configuration found"
+            description="No module entitlement was returned for the current workspace subscription."
+          />
 
-          title="Module entitlement is server controlled"
+        ) : (
 
-          description="Available, enabled and upgrade-eligible modules will be loaded from the Growth OS control plane."
+          <div
+            className="
+              grid
+              grid-cols-1
+              gap-2
 
-        />
+              p-3
+
+              md:grid-cols-2
+            "
+          >
+
+            {modules.map(
+              module => {
+
+                const available =
+                  module.enabled
+                  &&
+                  module.status ===
+                    'active';
+
+
+                return (
+
+                  <div
+
+                    key={
+                      module.moduleId
+                    }
+
+                    className="
+                      rounded-[10px]
+
+                      border
+                      border-slate-200
+
+                      bg-slate-50
+
+                      p-3
+                    "
+                  >
+
+                    <div
+                      className="
+                        flex
+                        items-start
+                        justify-between
+                        gap-3
+                      "
+                    >
+
+                      <div>
+
+                        <p
+                          className="
+                            text-[11px]
+                            font-semibold
+
+                            text-slate-900
+                          "
+                        >
+                          {module.name ||
+                            module.moduleId}
+                        </p>
+
+
+                        <p
+                          className="
+                            mt-1
+
+                            text-[8px]
+                            leading-4
+
+                            text-slate-500
+                          "
+                        >
+                          {module.description ||
+                            'Growth OS module.'}
+                        </p>
+
+                      </div>
+
+
+                      <ModuleBadge
+                        available={available}
+                      />
+
+                    </div>
+
+
+                    <div
+                      className="
+                        mt-3
+
+                        flex
+                        flex-wrap
+                        gap-1.5
+                      "
+                    >
+
+                      {module.category && (
+
+                        <SmallBadge>
+                          {formatRole(
+                            module.category
+                          )}
+                        </SmallBadge>
+
+                      )}
+
+
+                      {module.setupRequired && (
+
+                        <SmallBadge>
+                          Setup Required
+                        </SmallBadge>
+
+                      )}
+
+
+                      {module.routeKey && (
+
+                        <SmallBadge>
+                          {module.routeKey}
+                        </SmallBadge>
+
+                      )}
+
+                    </div>
+
+                  </div>
+
+                );
+
+              }
+            )}
+
+          </div>
+
+        )}
 
       </section>
 
-    </div>
 
-  );
-
-}
-
-
-// ============================================================
-// INTEGRATIONS
-// ============================================================
-
-function IntegrationSettings() {
-
-  return (
-
-    <div className="space-y-3">
-
-      <SectionHeader
-
-        icon={
-          Plug
-        }
-
-        title="Integrations"
-
-        description="Review the platforms connected to this Growth OS workspace."
-
+      <ServerNotice
+        text="Module access is read from the Growth OS control plane. The browser cannot enable a module by changing local settings."
       />
 
-
-      <section className="gos-panel !p-0">
-
-        <div
-          className="
-            border-b
-            border-slate-200
-
-            px-3
-            py-2.5
-          "
-        >
-
-          <h3 className="gos-section-title">
-            Connected Sources
-          </h3>
-
-
-          <p
-            className="
-              mt-0.5
-
-              text-[9px]
-
-              text-slate-500
-            "
-          >
-            Shopify, Meta, Google and other source connections will appear here.
-          </p>
-
-        </div>
-
-
-        <EmptyServerState
-
-          icon={
-            Plug
-          }
-
-          title="Integration data will come from the server"
-
-          description="Connection status, account identity and data readiness will be read from the shared integration control plane."
-
-        />
-
-      </section>
-
     </div>
 
   );
@@ -1968,14 +2611,139 @@ function IntegrationSettings() {
 
 
 // ============================================================
-// USERS
+// USERS & ACCESS
 // ============================================================
 
-function UserAccessSettings() {
+function UserAccessSettings({
+
+  usersContext,
+
+  subscriptionContext,
+
+  loading,
+
+  error,
+
+  reload,
+
+}: {
+
+  usersContext:
+    WorkspaceUsersResponse |
+    null;
+
+  subscriptionContext:
+    WorkspaceSubscriptionResponse |
+    null;
+
+  loading:
+    boolean;
+
+  error:
+    string |
+    null;
+
+  reload:
+    () => void;
+
+}) {
+
+
+  if (
+    loading
+  ) {
+
+    return (
+
+      <LoadingPanel
+        title="Users & Access"
+        text="Loading workspace users..."
+      />
+
+    );
+
+  }
+
+
+  if (
+    error
+  ) {
+
+    return (
+
+      <ErrorPanel
+        title="Unable to load workspace users"
+        error={error}
+        reload={reload}
+      />
+
+    );
+
+  }
+
+
+  const users =
+    usersContext?.users
+    ||
+    [];
+
+
+  const summary =
+    usersContext?.summary
+    ||
+    {
+      totalUsers:
+        users.length,
+
+      activeUsers:
+        users.filter(
+          user =>
+            user.userStatus ===
+              'active'
+            &&
+            user.membershipStatus ===
+              'active'
+        ).length,
+
+      owners:
+        users.filter(
+          user =>
+            user.role ===
+              'owner'
+        ).length,
+
+      admins:
+        users.filter(
+          user =>
+            user.role ===
+              'admin'
+        ).length,
+    };
+
+
+  const maxUsers =
+    subscriptionContext?.plan?.maxUsers
+    ??
+    null;
+
+
+  const userAllowance =
+    maxUsers ===
+      null
+
+      ? 'Unlimited'
+
+      : `${formatNumber(
+          summary.activeUsers
+        )} / ${formatNumber(
+          maxUsers
+        )}`;
+
 
   return (
 
     <div className="space-y-3">
+
 
       <SectionHeader
 
@@ -1990,10 +2758,70 @@ function UserAccessSettings() {
       />
 
 
+      {/* =====================================================
+          SUMMARY
+      ===================================================== */}
+
+      <section
+        className="
+          grid
+          grid-cols-2
+          gap-2
+
+          xl:grid-cols-4
+        "
+      >
+
+        <MetricCard
+          label="Total Users"
+          value={formatNumber(
+            summary.totalUsers
+          )}
+        />
+
+
+        <MetricCard
+          label="Active Users"
+          value={formatNumber(
+            summary.activeUsers
+          )}
+          tone="green"
+        />
+
+
+        <MetricCard
+          label="Plan Usage"
+          value={userAllowance}
+        />
+
+
+        <MetricCard
+          label="Owners / Admins"
+          value={
+            `${formatNumber(
+              summary.owners
+            )} / ${formatNumber(
+              summary.admins
+            )}`
+          }
+        />
+
+      </section>
+
+
+      {/* =====================================================
+          USER TABLE
+      ===================================================== */}
+
       <section className="gos-panel !p-0">
 
         <div
           className="
+            flex
+            items-center
+            justify-between
+            gap-3
+
             border-b
             border-slate-200
 
@@ -2002,39 +2830,382 @@ function UserAccessSettings() {
           "
         >
 
-          <h3 className="gos-section-title">
-            Workspace Users
-          </h3>
+          <div>
+
+            <h3 className="gos-section-title">
+              Workspace Users
+            </h3>
 
 
-          <p
-            className="
-              mt-0.5
+            <p
+              className="
+                mt-0.5
 
-              text-[9px]
+                text-[9px]
 
-              text-slate-500
-            "
-          >
-            Owner, Admin, Analyst and Viewer memberships will be displayed here.
-          </p>
+                text-slate-500
+              "
+            >
+              Access is scoped to the current authenticated brand.
+            </p>
+
+          </div>
+
+
+          {maxUsers !==
+            null && (
+
+            <span
+              className="
+                rounded-full
+
+                border
+                border-slate-200
+
+                bg-slate-50
+
+                px-2
+                py-1
+
+                text-[8px]
+                font-semibold
+
+                text-slate-500
+              "
+            >
+              {formatNumber(
+                summary.activeUsers
+              )}
+              {' / '}
+              {formatNumber(
+                maxUsers
+              )}
+              {' users'}
+            </span>
+
+          )}
 
         </div>
 
 
-        <EmptyServerState
+        {users.length ===
+          0 ? (
 
-          icon={
-            Users
-          }
+          <EmptyServerState
+            icon={Users}
+            title="No users found"
+            description="No Growth OS users are currently assigned to this brand."
+          />
 
-          title="User access is centrally managed"
+        ) : (
 
-          description="Memberships will be loaded from growthos_control.users and brand_memberships."
+          <div className="overflow-x-auto">
 
-        />
+            <table
+              className="
+                w-full
+                min-w-[820px]
+
+                border-collapse
+              "
+            >
+
+              <thead>
+
+                <tr
+                  className="
+                    border-b
+                    border-slate-200
+
+                    bg-slate-50
+                  "
+                >
+
+                  <TableHeader>
+                    User
+                  </TableHeader>
+
+                  <TableHeader>
+                    Role
+                  </TableHeader>
+
+                  <TableHeader>
+                    Status
+                  </TableHeader>
+
+                  <TableHeader>
+                    Last Login
+                  </TableHeader>
+
+                  <TableHeader>
+                    Default
+                  </TableHeader>
+
+                  <TableHeader>
+                    Member Since
+                  </TableHeader>
+
+                </tr>
+
+              </thead>
+
+
+              <tbody>
+
+                {users.map(
+                  user => {
+
+                    const active =
+                      user.userStatus ===
+                        'active'
+                      &&
+                      user.membershipStatus ===
+                        'active';
+
+
+                    const statusLabel =
+                      getUserAccessStatus(
+                        user.userStatus,
+                        user.membershipStatus
+                      );
+
+
+                    return (
+
+                      <tr
+
+                        key={
+                          user.membershipId
+                        }
+
+                        className="
+                          border-b
+                          border-slate-100
+
+                          last:border-b-0
+
+                          hover:bg-slate-50
+                        "
+                      >
+
+
+                        {/* USER */}
+
+                        <td className="px-3 py-2.5">
+
+                          <div
+                            className="
+                              flex
+                              items-center
+                              gap-2.5
+                            "
+                          >
+
+                            <div
+                              className="
+                                flex
+                                h-8
+                                w-8
+                                shrink-0
+                                items-center
+                                justify-center
+
+                                rounded-full
+
+                                bg-violet-50
+
+                                text-[10px]
+                                font-semibold
+
+                                text-violet-700
+                              "
+                            >
+                              {getUserInitials(
+                                user.fullName,
+                                user.email
+                              )}
+                            </div>
+
+
+                            <div className="min-w-0">
+
+                              <p
+                                className="
+                                  max-w-[240px]
+
+                                  truncate
+
+                                  text-[10px]
+                                  font-semibold
+
+                                  text-slate-900
+                                "
+                              >
+                                {user.fullName
+                                  ||
+                                  user.email
+                                  ||
+                                  'Growth OS User'}
+                              </p>
+
+
+                              <p
+                                className="
+                                  mt-0.5
+                                  max-w-[240px]
+
+                                  truncate
+
+                                  text-[8px]
+
+                                  text-slate-500
+                                "
+                              >
+                                {user.email
+                                  ||
+                                  user.userId}
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                        </td>
+
+
+                        {/* ROLE */}
+
+                        <td className="px-3 py-2.5">
+
+                          <RoleBadge
+                            role={
+                              user.role
+                            }
+                          />
+
+                        </td>
+
+
+                        {/* STATUS */}
+
+                        <td className="px-3 py-2.5">
+
+                          <StatusBadge
+                            label={
+                              statusLabel
+                            }
+                            active={
+                              active
+                            }
+                          />
+
+                        </td>
+
+
+                        {/* LAST LOGIN */}
+
+                        <td
+                          className="
+                            px-3
+                            py-2.5
+
+                            text-[9px]
+
+                            text-slate-600
+                          "
+                        >
+                          {formatTimestamp(
+                            user.lastLoginAt
+                          )
+                          ||
+                          'Never'}
+                        </td>
+
+
+                        {/* DEFAULT */}
+
+                        <td className="px-3 py-2.5">
+
+                          {user.isDefault ? (
+
+                            <span
+                              className="
+                                rounded-full
+
+                                border
+                                border-violet-200
+
+                                bg-violet-50
+
+                                px-2
+                                py-0.5
+
+                                text-[8px]
+                                font-semibold
+
+                                text-violet-700
+                              "
+                            >
+                              Default
+                            </span>
+
+                          ) : (
+
+                            <span
+                              className="
+                                text-[9px]
+
+                                text-slate-400
+                              "
+                            >
+                              —
+                            </span>
+
+                          )}
+
+                        </td>
+
+
+                        {/* MEMBER SINCE */}
+
+                        <td
+                          className="
+                            px-3
+                            py-2.5
+
+                            text-[9px]
+
+                            text-slate-600
+                          "
+                        >
+                          {formatDate(
+                            user.membershipCreatedAt
+                          )
+                          ||
+                          '—'}
+                        </td>
+
+                      </tr>
+
+                    );
+
+                  }
+                )}
+
+              </tbody>
+
+            </table>
+
+          </div>
+
+        )}
 
       </section>
+
+
+      <ServerNotice
+        text="Users and roles are read from growthos_control.users and brand_memberships. Browser storage cannot grant or modify workspace access."
+      />
 
     </div>
 
@@ -2114,13 +3285,7 @@ function PreferenceSettings({
           "
         >
 
-          <div
-            className="
-              flex
-              items-start
-              gap-3
-            "
-          >
+          <div className="flex items-start gap-3">
 
             <div
               className="
@@ -2148,27 +3313,11 @@ function PreferenceSettings({
 
             <div>
 
-              <h2
-                className="
-                  text-[14px]
-                  font-semibold
-
-                  text-slate-950
-                "
-              >
+              <h2 className="text-[14px] font-semibold text-slate-950">
                 My Preferences
               </h2>
 
-
-              <p
-                className="
-                  mt-0.5
-
-                  text-[9px]
-
-                  text-slate-500
-                "
-              >
+              <p className="mt-0.5 text-[9px] text-slate-500">
                 Personal interface preferences that apply only to you.
               </p>
 
@@ -2180,13 +3329,8 @@ function PreferenceSettings({
           <div className="flex gap-2">
 
             <button
-
               type="button"
-
-              onClick={
-                resetPreferences
-              }
-
+              onClick={resetPreferences}
               className="
                 inline-flex
                 h-8
@@ -2208,24 +3352,14 @@ function PreferenceSettings({
                 text-slate-600
               "
             >
-
-              <RotateCcw
-                size={12}
-              />
-
+              <RotateCcw size={12} />
               Reset
-
             </button>
 
 
             <button
-
               type="button"
-
-              onClick={
-                savePreferences
-              }
-
+              onClick={savePreferences}
               className={`
                 inline-flex
                 h-8
@@ -2258,20 +3392,14 @@ function PreferenceSettings({
               {saved ? (
 
                 <>
-                  <CheckCircle2
-                    size={12}
-                  />
-
+                  <CheckCircle2 size={12} />
                   Saved
                 </>
 
               ) : (
 
                 <>
-                  <Save
-                    size={12}
-                  />
-
+                  <Save size={12} />
                   Save
                 </>
 
@@ -2289,15 +3417,9 @@ function PreferenceSettings({
       <section className="gos-panel !p-3.5">
 
         <SectionHeading
-
-          icon={
-            SlidersHorizontal
-          }
-
+          icon={SlidersHorizontal}
           title="Interface"
-
           description="Choose how the Growth OS workspace behaves for you."
-
         />
 
 
@@ -2314,19 +3436,12 @@ function PreferenceSettings({
         >
 
           <PreferenceRow
-
-            icon={
-              PanelLeft
-            }
-
+            icon={PanelLeft}
             title="Sidebar"
-
             description="Choose between hover expansion or a permanently fixed sidebar."
-
           >
 
             <SegmentedControl
-
               options={[
                 {
                   value:
@@ -2335,7 +3450,6 @@ function PreferenceSettings({
                   label:
                     'Hover',
                 },
-
                 {
                   value:
                     'fixed',
@@ -2344,37 +3458,25 @@ function PreferenceSettings({
                     'Fixed',
                 },
               ]}
-
-              value={
-                sidebarMode
-              }
-
+              value={sidebarMode}
               onChange={
                 value =>
                   setSidebarMode(
                     value as SidebarMode
                   )
               }
-
             />
 
           </PreferenceRow>
 
 
           <PreferenceRow
-
-            icon={
-              LayoutDashboard
-            }
-
+            icon={LayoutDashboard}
             title="Table Density"
-
             description="Control how much information appears vertically in data-heavy screens."
-
           >
 
             <SegmentedControl
-
               options={[
                 {
                   value:
@@ -2383,7 +3485,6 @@ function PreferenceSettings({
                   label:
                     'Compact',
                 },
-
                 {
                   value:
                     'comfortable',
@@ -2392,25 +3493,17 @@ function PreferenceSettings({
                     'Comfortable',
                 },
               ]}
-
-              value={
-                preferences.tableDensity
-              }
-
+              value={preferences.tableDensity}
               onChange={
                 value =>
                   setPreferences(
                     previous => ({
-
                       ...previous,
-
                       tableDensity:
                         value as TableDensity,
-
                     })
                   )
               }
-
             />
 
           </PreferenceRow>
@@ -2423,15 +3516,9 @@ function PreferenceSettings({
       <section className="gos-panel !p-3.5">
 
         <SectionHeading
-
-          icon={
-            CalendarDays
-          }
-
+          icon={CalendarDays}
           title="Personal Defaults"
-
           description="Choose the initial Growth OS view you prefer."
-
         />
 
 
@@ -2447,44 +3534,29 @@ function PreferenceSettings({
           "
         >
 
-          <FormField
-            label="Default Landing Page"
-          >
+          <FormField label="Default Landing Page">
 
             <select
-
-              value={
-                preferences.defaultLandingPage
-              }
-
+              value={preferences.defaultLandingPage}
               onChange={
                 event =>
                   setPreferences(
                     previous => ({
-
                       ...previous,
-
                       defaultLandingPage:
                         event.target.value as DefaultLandingPage,
-
                     })
                   )
               }
-
               className="gos-input w-full"
-
             >
 
               {LANDING_PAGE_OPTIONS.map(
                 option => (
 
                   <option
-                    key={
-                      option.value
-                    }
-                    value={
-                      option.value
-                    }
+                    key={option.value}
+                    value={option.value}
                   >
                     {option.label}
                   </option>
@@ -2497,32 +3569,21 @@ function PreferenceSettings({
           </FormField>
 
 
-          <FormField
-            label="Default Date Range"
-          >
+          <FormField label="Default Date Range">
 
             <select
-
-              value={
-                preferences.defaultDateRange
-              }
-
+              value={preferences.defaultDateRange}
               onChange={
                 event =>
                   setPreferences(
                     previous => ({
-
                       ...previous,
-
                       defaultDateRange:
                         event.target.value as DefaultDateRange,
-
                     })
                   )
               }
-
               className="gos-input w-full"
-
             >
 
               <option value="7">
@@ -2557,7 +3618,7 @@ function PreferenceSettings({
 
 
 // ============================================================
-// SECTION HEADER
+// COMMON UI
 // ============================================================
 
 function SectionHeader({
@@ -2586,13 +3647,7 @@ function SectionHeader({
 
     <section className="gos-panel !p-3.5">
 
-      <div
-        className="
-          flex
-          items-start
-          gap-3
-        "
-      >
+      <div className="flex items-start gap-3">
 
         <div
           className="
@@ -2610,38 +3665,17 @@ function SectionHeader({
             text-violet-600
           "
         >
-
-          <Icon
-            size={16}
-          />
-
+          <Icon size={16} />
         </div>
 
 
         <div>
 
-          <h2
-            className="
-              text-[14px]
-              font-semibold
-
-              text-slate-950
-            "
-          >
+          <h2 className="text-[14px] font-semibold text-slate-950">
             {title}
           </h2>
 
-
-          <p
-            className="
-              mt-0.5
-
-              text-[9px]
-              leading-4
-
-              text-slate-500
-            "
-          >
+          <p className="mt-0.5 text-[9px] leading-4 text-slate-500">
             {description}
           </p>
 
@@ -2655,10 +3689,6 @@ function SectionHeader({
 
 }
 
-
-// ============================================================
-// SECTION HEADING
-// ============================================================
 
 function SectionHeading({
 
@@ -2684,13 +3714,7 @@ function SectionHeading({
 
   return (
 
-    <div
-      className="
-        flex
-        items-start
-        gap-2.5
-      "
-    >
+    <div className="flex items-start gap-2.5">
 
       <div
         className="
@@ -2708,38 +3732,17 @@ function SectionHeading({
           text-slate-600
         "
       >
-
-        <Icon
-          size={14}
-        />
-
+        <Icon size={14} />
       </div>
 
 
       <div>
 
-        <h3
-          className="
-            text-[12px]
-            font-semibold
-
-            text-slate-900
-          "
-        >
+        <h3 className="text-[12px] font-semibold text-slate-900">
           {title}
         </h3>
 
-
-        <p
-          className="
-            mt-0.5
-
-            text-[9px]
-            leading-4
-
-            text-slate-500
-          "
-        >
+        <p className="mt-0.5 text-[9px] leading-4 text-slate-500">
           {description}
         </p>
 
@@ -2752,9 +3755,448 @@ function SectionHeading({
 }
 
 
-// ============================================================
-// SERVER VALUE
-// ============================================================
+function MetricCard({
+
+  label,
+
+  value,
+
+  tone =
+    'default',
+
+}: {
+
+  label:
+    string;
+
+  value:
+    string;
+
+  tone?:
+    'default'
+    |
+    'green';
+
+}) {
+
+  return (
+
+    <div
+      className="
+        gos-card
+
+        min-h-[70px]
+
+        px-3
+        py-2.5
+      "
+    >
+
+      <p className="gos-label">
+        {label}
+      </p>
+
+      <p
+        className={`
+          mt-2
+
+          truncate
+
+          text-[16px]
+          font-semibold
+
+          ${
+            tone ===
+              'green'
+
+              ? 'text-emerald-700'
+
+              : 'text-slate-950'
+          }
+        `}
+      >
+        {value}
+      </p>
+
+    </div>
+
+  );
+
+}
+
+
+function ModuleBadge({
+
+  available,
+
+}: {
+
+  available:
+    boolean;
+
+}) {
+
+  return (
+
+    <span
+      className={`
+        shrink-0
+
+        rounded-full
+
+        border
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        ${
+          available
+
+            ? `
+              border-emerald-200
+              bg-emerald-50
+              text-emerald-700
+            `
+
+            : `
+              border-slate-200
+              bg-slate-100
+              text-slate-500
+            `
+        }
+      `}
+    >
+      {available
+        ? 'Included'
+        : 'Not Included'
+      }
+    </span>
+
+  );
+
+}
+
+
+function RoleBadge({
+
+  role,
+
+}: {
+
+  role:
+    string;
+
+}) {
+
+  return (
+
+    <span
+      className="
+        rounded-full
+
+        border
+        border-violet-200
+
+        bg-violet-50
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        text-violet-700
+      "
+    >
+      {formatRole(
+        role
+      )
+      ||
+      role}
+    </span>
+
+  );
+
+}
+
+
+function StatusBadge({
+
+  label,
+
+  active,
+
+}: {
+
+  label:
+    string;
+
+  active:
+    boolean;
+
+}) {
+
+  return (
+
+    <span
+      className={`
+        rounded-full
+
+        border
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        ${
+          active
+
+            ? `
+              border-emerald-200
+              bg-emerald-50
+              text-emerald-700
+            `
+
+            : `
+              border-amber-200
+              bg-amber-50
+              text-amber-700
+            `
+        }
+      `}
+    >
+      {label}
+    </span>
+
+  );
+
+}
+
+
+function SmallBadge({
+
+  children,
+
+}: {
+
+  children:
+    ReactNode;
+
+}) {
+
+  return (
+
+    <span
+      className="
+        rounded-full
+
+        border
+        border-slate-200
+
+        bg-white
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-medium
+
+        text-slate-500
+      "
+    >
+      {children}
+    </span>
+
+  );
+
+}
+
+
+function TableHeader({
+
+  children,
+
+}: {
+
+  children:
+    ReactNode;
+
+}) {
+
+  return (
+
+    <th
+      className="
+        px-3
+        py-2
+
+        text-left
+
+        text-[8px]
+        font-semibold
+        uppercase
+        tracking-[0.06em]
+
+        text-slate-500
+      "
+    >
+      {children}
+    </th>
+
+  );
+
+}
+
+
+function LoadingPanel({
+
+  title,
+
+  text,
+
+}: {
+
+  title:
+    string;
+
+  text:
+    string;
+
+}) {
+
+  return (
+
+    <div className="space-y-3">
+
+      <section className="gos-panel !p-3.5">
+
+        <h2 className="text-[14px] font-semibold text-slate-950">
+          {title}
+        </h2>
+
+      </section>
+
+
+      <section className="gos-panel !p-4">
+
+        <p className="text-[10px] text-slate-500">
+          {text}
+        </p>
+
+      </section>
+
+    </div>
+
+  );
+
+}
+
+
+function ErrorPanel({
+
+  title,
+
+  error,
+
+  reload,
+
+}: {
+
+  title:
+    string;
+
+  error:
+    string;
+
+  reload:
+    () => void;
+
+}) {
+
+  return (
+
+    <section
+      className="
+        rounded-[10px]
+
+        border
+        border-red-200
+
+        bg-red-50
+
+        p-3
+      "
+    >
+
+      <div
+        className="
+          flex
+          items-start
+          justify-between
+          gap-3
+        "
+      >
+
+        <div className="flex items-start gap-2">
+
+          <AlertCircle
+            size={14}
+            className="mt-0.5 text-red-600"
+          />
+
+          <div>
+
+            <p className="text-[10px] font-semibold text-red-800">
+              {title}
+            </p>
+
+            <p className="mt-0.5 text-[9px] text-red-700">
+              {error}
+            </p>
+
+          </div>
+
+        </div>
+
+
+        <button
+          type="button"
+          onClick={reload}
+          className="
+            h-7
+            shrink-0
+
+            rounded-[7px]
+
+            border
+            border-red-200
+
+            bg-white
+
+            px-2.5
+
+            text-[9px]
+            font-semibold
+
+            text-red-700
+          "
+        >
+          Retry
+        </button>
+
+      </div>
+
+    </section>
+
+  );
+
+}
+
 
 function ServerValue({
 
@@ -2806,13 +4248,7 @@ function ServerValue({
       "
     >
 
-      <span
-        className="
-          text-[9px]
-
-          text-slate-500
-        "
-      >
+      <span className="text-[9px] text-slate-500">
         {label}
       </span>
 
@@ -2884,63 +4320,6 @@ function ServerValue({
 }
 
 
-// ============================================================
-// SERVER METRIC PLACEHOLDER
-// ============================================================
-
-function ServerMetric({
-
-  label,
-
-}: {
-
-  label:
-    string;
-
-}) {
-
-  return (
-
-    <div
-      className="
-        gos-card
-
-        min-h-[70px]
-
-        px-3
-        py-2.5
-      "
-    >
-
-      <p className="gos-label">
-        {label}
-      </p>
-
-
-      <p
-        className="
-          mt-2
-
-          text-[17px]
-          font-semibold
-
-          text-slate-400
-        "
-      >
-        —
-      </p>
-
-    </div>
-
-  );
-
-}
-
-
-// ============================================================
-// SERVER NOTICE
-// ============================================================
-
 function ServerNotice({
 
   text,
@@ -2970,14 +4349,7 @@ function ServerNotice({
       "
     >
 
-      <p
-        className="
-          text-[8px]
-          leading-4
-
-          text-violet-700
-        "
-      >
+      <p className="text-[8px] leading-4 text-violet-700">
         {text}
       </p>
 
@@ -2987,10 +4359,6 @@ function ServerNotice({
 
 }
 
-
-// ============================================================
-// EMPTY SERVER STATE
-// ============================================================
 
 function EmptyServerState({
 
@@ -3028,13 +4396,7 @@ function EmptyServerState({
       "
     >
 
-      <div
-        className="
-          max-w-[430px]
-
-          text-center
-        "
-      >
+      <div className="max-w-[430px] text-center">
 
         <div
           className="
@@ -3053,41 +4415,14 @@ function EmptyServerState({
             text-slate-500
           "
         >
-
-          <Icon
-            size={16}
-          />
-
+          <Icon size={16} />
         </div>
 
-
-        <p
-          className="
-            mt-2.5
-
-            text-[11px]
-            font-semibold
-
-            text-slate-800
-          "
-        >
+        <p className="mt-2.5 text-[11px] font-semibold text-slate-800">
           {title}
         </p>
 
-
-        <p
-          className="
-            mx-auto
-            mt-1
-
-            max-w-[400px]
-
-            text-[9px]
-            leading-4
-
-            text-slate-500
-          "
-        >
+        <p className="mx-auto mt-1 max-w-[400px] text-[9px] leading-4 text-slate-500">
           {description}
         </p>
 
@@ -3099,10 +4434,6 @@ function EmptyServerState({
 
 }
 
-
-// ============================================================
-// PREFERENCE ROW
-// ============================================================
 
 function PreferenceRow({
 
@@ -3153,14 +4484,7 @@ function PreferenceRow({
       "
     >
 
-      <div
-        className="
-          flex
-          min-w-0
-          items-start
-          gap-2.5
-        "
-      >
+      <div className="flex min-w-0 items-start gap-2.5">
 
         <div
           className="
@@ -3180,40 +4504,17 @@ function PreferenceRow({
             shadow-sm
           "
         >
-
-          <Icon
-            size={13}
-          />
-
+          <Icon size={13} />
         </div>
 
 
         <div className="min-w-0">
 
-          <p
-            className="
-              text-[10px]
-              font-semibold
-
-              text-slate-800
-            "
-          >
+          <p className="text-[10px] font-semibold text-slate-800">
             {title}
           </p>
 
-
-          <p
-            className="
-              mt-0.5
-
-              max-w-[430px]
-
-              text-[8px]
-              leading-4
-
-              text-slate-500
-            "
-          >
+          <p className="mt-0.5 max-w-[430px] text-[8px] leading-4 text-slate-500">
             {description}
           </p>
 
@@ -3223,9 +4524,7 @@ function PreferenceRow({
 
 
       <div className="shrink-0">
-
         {children}
-
       </div>
 
     </div>
@@ -3234,10 +4533,6 @@ function PreferenceRow({
 
 }
 
-
-// ============================================================
-// SEGMENTED CONTROL
-// ============================================================
 
 function SegmentedControl({
 
@@ -3297,19 +4592,13 @@ function SegmentedControl({
           return (
 
             <button
-
-              key={
-                option.value
-              }
-
+              key={option.value}
               type="button"
-
               onClick={() =>
                 onChange(
                   option.value
                 )
               }
-
               className={`
                 h-7
 
@@ -3353,10 +4642,6 @@ function SegmentedControl({
 
 }
 
-
-// ============================================================
-// FORM FIELD
-// ============================================================
 
 function FormField({
 
@@ -3405,8 +4690,135 @@ function FormField({
 
 
 // ============================================================
-// FORMAT ROLE
+// FORMATTERS
 // ============================================================
+
+function formatNumber(
+  value:
+    number
+) {
+
+  return new Intl.NumberFormat(
+    'en-IN',
+    {
+      maximumFractionDigits:
+        0,
+    }
+  ).format(
+    value
+  );
+
+}
+
+
+function formatOrderLimit(
+  value:
+    number |
+    null
+) {
+
+  if (
+    value ===
+    null
+  ) {
+
+    return 'Unlimited';
+
+  }
+
+
+  return `${formatNumber(
+    value
+  )} orders`;
+}
+
+
+function formatTimestamp(
+  value:
+    string |
+    null |
+    undefined
+) {
+
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return value;
+
+  }
+
+
+  return date.toLocaleString(
+    'en-IN',
+    {
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+    }
+  );
+
+}
+
+
+function formatDate(
+  value:
+    string |
+    null |
+    undefined
+) {
+
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return value;
+
+  }
+
+
+  return date.toLocaleDateString(
+    'en-IN',
+    {
+      dateStyle:
+        'medium',
+    }
+  );
+
+}
+
 
 function formatRole(
   value:
@@ -3445,10 +4857,6 @@ function formatRole(
 }
 
 
-// ============================================================
-// FORMAT AUTH METHOD
-// ============================================================
-
 function formatAuthMethod(
   value:
     string |
@@ -3483,5 +4891,169 @@ function formatAuthMethod(
   }
 
 
-  return value;
+  return formatRole(
+    value
+  );
+
+}
+
+
+// ============================================================
+// USER HELPERS
+// ============================================================
+
+function getUserInitials(
+
+  fullName:
+    string |
+    null |
+    undefined,
+
+  email:
+    string |
+    null |
+    undefined
+
+) {
+
+  const name =
+    String(
+      fullName
+      ||
+      ''
+    ).trim();
+
+
+  if (name) {
+
+    const parts =
+      name
+        .split(
+          /\s+/
+        )
+        .filter(
+          Boolean
+        );
+
+
+    if (
+      parts.length ===
+      1
+    ) {
+
+      return parts[0]
+        .slice(
+          0,
+          2
+        )
+        .toUpperCase();
+
+    }
+
+
+    return (
+      (
+        parts[0]?.[0]
+        ||
+        ''
+      )
+      +
+      (
+        parts[
+          parts.length - 1
+        ]?.[0]
+        ||
+        ''
+      )
+    ).toUpperCase();
+
+  }
+
+
+  const normalizedEmail =
+    String(
+      email
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    normalizedEmail
+  ) {
+
+    return normalizedEmail
+      .slice(
+        0,
+        2
+      )
+      .toUpperCase();
+
+  }
+
+
+  return 'U';
+
+}
+
+
+function getUserAccessStatus(
+
+  userStatus:
+    string |
+    null |
+    undefined,
+
+  membershipStatus:
+    string |
+    null |
+    undefined
+
+) {
+
+  if (
+    userStatus ===
+      'suspended'
+  ) {
+
+    return 'Suspended';
+
+  }
+
+
+  if (
+    userStatus ===
+      'inactive'
+  ) {
+
+    return 'User Inactive';
+
+  }
+
+
+  if (
+    membershipStatus ===
+      'inactive'
+  ) {
+
+    return 'Access Inactive';
+
+  }
+
+
+  if (
+    userStatus ===
+      'active'
+    &&
+    membershipStatus ===
+      'active'
+  ) {
+
+    return 'Active';
+
+  }
+
+
+  return 'Inactive';
+
 }

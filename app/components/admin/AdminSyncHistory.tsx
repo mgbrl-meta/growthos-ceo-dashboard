@@ -2,6 +2,7 @@
 
 import {
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -13,14 +14,9 @@ import {
   Clock3,
   LoaderCircle,
   RefreshCw,
-  RotateCcw,
   Search,
   XCircle,
 } from 'lucide-react';
-
-import {
-  useAdminStore,
-} from './AdminStore';
 
 
 // ============================================================
@@ -31,19 +27,44 @@ type SyncRunStatus =
   | 'success'
   | 'running'
   | 'failed'
+  | 'partial'
   | 'queued';
 
 
 type SyncRun = {
 
-  id:
+  runId:
     string;
 
-  clientId:
+  workspaceId:
     string;
 
-  providerId:
+  workspaceName:
+    string | null;
+
+  brandId:
     string;
+
+  brandName:
+    string | null;
+
+  connectionId:
+    string;
+
+  provider:
+    string;
+
+  entity:
+    string;
+
+  syncType:
+    string;
+
+  status:
+    SyncRunStatus;
+
+  attempt:
+    number;
 
   startedAt:
     string | null;
@@ -51,22 +72,103 @@ type SyncRun = {
   completedAt:
     string | null;
 
-  status:
-    SyncRunStatus;
-
-  records:
-    number;
-
-  durationSeconds:
+  durationMs:
     number | null;
 
-  error:
+  sourceStartAt:
     string | null;
 
-  attempt:
+  sourceEndAt:
+    string | null;
+
+  recordsFetched:
     number;
 
+  recordsLoaded:
+    number;
+
+  recordsRejected:
+    number;
+
+  bytesProcessed:
+    number;
+
+  cursorBefore:
+    string | null;
+
+  cursorAfter:
+    string | null;
+
+  errorCode:
+    string | null;
+
+  errorMessage:
+    string | null;
+
 };
+
+
+type SyncHistoryResponse = {
+
+  ok:
+    boolean;
+
+  scope?:
+    string;
+
+  summary?: {
+
+    total:
+      number;
+
+    running:
+      number;
+
+    success:
+      number;
+
+    partial:
+      number;
+
+    failed:
+      number;
+
+    clients:
+      number;
+
+    providers:
+      number;
+
+  };
+
+  runs?:
+    SyncRun[];
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+    source?:
+      string;
+
+    limit?:
+      number;
+
+    readOnly?:
+      boolean;
+
+  };
+
+  error?:
+    string;
+
+};
+
+
+type StatusFilter =
+  | 'all'
+  | SyncRunStatus;
 
 
 // ============================================================
@@ -76,37 +178,33 @@ type SyncRun = {
 export default function AdminSyncHistory() {
 
 
-  const {
+  const [
+    data,
+    setData,
+  ] =
+    useState<SyncHistoryResponse | null>(
+      null
+    );
 
-    integrations,
-
-    clients,
-
-    integrationProviders,
-
-    getClient,
-
-    getIntegrationProvider,
-
-  } =
-    useAdminStore();
-
-
-  // ==========================================================
-  // LOCAL RUN HISTORY
-  //
-  // Later replace with actual sync-run/control tables.
-  // ==========================================================
 
   const [
-    runs,
-    setRuns,
+    loading,
+    setLoading,
   ] =
-    useState<SyncRun[]>(
-      () =>
-        buildInitialRuns(
-          integrations
-        )
+    useState(
+      true
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
     );
 
 
@@ -145,11 +243,16 @@ export default function AdminSyncHistory() {
     statusFilter,
     setStatusFilter,
   ] =
-    useState<
+    useState<StatusFilter>(
       'all'
-      |
-      SyncRunStatus
-    >(
+    );
+
+
+  const [
+    syncTypeFilter,
+    setSyncTypeFilter,
+  ] =
+    useState(
       'all'
     );
 
@@ -163,6 +266,255 @@ export default function AdminSyncHistory() {
       null
     >(
       null
+    );
+
+
+  // ==========================================================
+  // LOAD REAL RUN HISTORY
+  // ==========================================================
+
+  async function loadSyncHistory() {
+
+    setLoading(
+      true
+    );
+
+
+    setError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/sync-history',
+          {
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+          }
+        );
+
+
+      const json:
+        SyncHistoryResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load Sync History'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+    } catch (
+      error: any
+    ) {
+
+      console.error(
+        'ADMIN_SYNC_HISTORY_UI_ERROR',
+        error
+      );
+
+
+      setData(
+        null
+      );
+
+
+      setError(
+        String(
+          error?.message
+          ||
+          'Unable to load Sync History'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadSyncHistory();
+
+    },
+    []
+  );
+
+
+  // ==========================================================
+  // REAL RUNS
+  // ==========================================================
+
+  const runs =
+    data?.runs
+    ||
+    [];
+
+
+  // ==========================================================
+  // CLIENT OPTIONS
+  // ==========================================================
+
+  const clients =
+    useMemo(
+      () => {
+
+        const map =
+          new Map<
+            string,
+            string
+          >();
+
+
+        runs.forEach(
+          run => {
+
+            const value =
+              getClientKey(
+                run
+              );
+
+
+            const label =
+              run.brandName
+              ||
+              run.workspaceName
+              ||
+              run.brandId
+              ||
+              run.workspaceId;
+
+
+            map.set(
+              value,
+              label
+            );
+
+          }
+        );
+
+
+        return Array
+          .from(
+            map.entries()
+          )
+          .map(
+            (
+              [
+                value,
+                label,
+              ]
+            ) => ({
+
+              value,
+
+              label,
+
+            })
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              a.label.localeCompare(
+                b.label
+              )
+          );
+
+      },
+      [
+        runs,
+      ]
+    );
+
+
+  // ==========================================================
+  // PROVIDER OPTIONS
+  // ==========================================================
+
+  const providers =
+    useMemo(
+      () => {
+
+        return Array
+          .from(
+            new Set(
+              runs
+                .map(
+                  run =>
+                    run.provider
+                )
+                .filter(
+                  Boolean
+                )
+            )
+          )
+          .sort();
+
+      },
+      [
+        runs,
+      ]
+    );
+
+
+  // ==========================================================
+  // SYNC TYPE OPTIONS
+  // ==========================================================
+
+  const syncTypes =
+    useMemo(
+      () => {
+
+        return Array
+          .from(
+            new Set(
+              runs
+                .map(
+                  run =>
+                    run.syncType
+                )
+                .filter(
+                  Boolean
+                )
+            )
+          )
+          .sort();
+
+      },
+      [
+        runs,
+      ]
     );
 
 
@@ -183,11 +535,18 @@ export default function AdminSyncHistory() {
         return runs.filter(
           run => {
 
+
+            // --------------------------------------------------
+            // CLIENT
+            // --------------------------------------------------
+
             if (
               clientFilter !==
                 'all'
               &&
-              run.clientId !==
+              getClientKey(
+                run
+              ) !==
                 clientFilter
             ) {
 
@@ -196,11 +555,15 @@ export default function AdminSyncHistory() {
             }
 
 
+            // --------------------------------------------------
+            // PROVIDER
+            // --------------------------------------------------
+
             if (
               providerFilter !==
                 'all'
               &&
-              run.providerId !==
+              run.provider !==
                 providerFilter
             ) {
 
@@ -208,6 +571,10 @@ export default function AdminSyncHistory() {
 
             }
 
+
+            // --------------------------------------------------
+            // STATUS
+            // --------------------------------------------------
 
             if (
               statusFilter !==
@@ -222,6 +589,27 @@ export default function AdminSyncHistory() {
             }
 
 
+            // --------------------------------------------------
+            // SYNC TYPE
+            // --------------------------------------------------
+
+            if (
+              syncTypeFilter !==
+                'all'
+              &&
+              run.syncType !==
+                syncTypeFilter
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SEARCH
+            // --------------------------------------------------
+
             if (!query) {
 
               return true;
@@ -229,59 +617,34 @@ export default function AdminSyncHistory() {
             }
 
 
-            const client =
-              getClient(
-                run.clientId
-              );
+            const haystack =
+              [
 
+                run.runId,
+                run.workspaceId,
+                run.workspaceName,
+                run.brandId,
+                run.brandName,
+                run.connectionId,
+                run.provider,
+                run.entity,
+                run.syncType,
+                run.status,
+                run.errorCode,
+                run.errorMessage,
 
-            const provider =
-              getIntegrationProvider(
-                run.providerId
-              );
-
-
-            return (
-
-              run.id
-                .toLowerCase()
-                .includes(
-                  query
+              ]
+                .filter(
+                  Boolean
                 )
-
-              ||
-
-              (
-                client?.name ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
+                .join(
+                  ' '
                 )
+                .toLowerCase();
 
-              ||
 
-              (
-                provider?.name ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
-                )
-
-              ||
-
-              (
-                run.error ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
-                )
-
+            return haystack.includes(
+              query
             );
 
           }
@@ -294,56 +657,68 @@ export default function AdminSyncHistory() {
         clientFilter,
         providerFilter,
         statusFilter,
-        clients,
-        integrationProviders,
+        syncTypeFilter,
       ]
     );
 
 
   // ==========================================================
-  // COUNTS
+  // SUMMARY
   // ==========================================================
 
-  const successCount =
-    runs.filter(
-      run =>
-        run.status ===
-        'success'
-    ).length;
+  const summary =
+    data?.summary
+    ||
+    {
 
+      total:
+        runs.length,
 
-  const failedCount =
-    runs.filter(
-      run =>
-        run.status ===
-        'failed'
-    ).length;
+      running:
+        runs.filter(
+          run =>
+            run.status ===
+              'running'
+        ).length,
 
+      success:
+        runs.filter(
+          run =>
+            run.status ===
+              'success'
+        ).length,
 
-  const runningCount =
-    runs.filter(
-      run =>
-        run.status ===
-        'running'
-    ).length;
+      partial:
+        runs.filter(
+          run =>
+            run.status ===
+              'partial'
+        ).length,
 
+      failed:
+        runs.filter(
+          run =>
+            run.status ===
+              'failed'
+        ).length,
 
-  const queuedCount =
-    runs.filter(
-      run =>
-        run.status ===
-        'queued'
-    ).length;
+      clients:
+        clients.length,
+
+      providers:
+        providers.length,
+
+    };
 
 
   // ==========================================================
-  // SELECTED
+  // SELECTED RUN
   // ==========================================================
 
   const selectedRun =
     runs.find(
       run =>
-        run.id ===
+        run.runId ===
         selectedRunId
     )
     ||
@@ -351,146 +726,152 @@ export default function AdminSyncHistory() {
 
 
   // ==========================================================
-  // RETRY
+  // LOADING
   // ==========================================================
 
-  function retryRun(
-    run:
-      SyncRun
+  if (
+    loading
+    &&
+    !data
   ) {
 
-    const retry:
-      SyncRun = {
+    return (
 
-      id:
-        `run-${Date.now()}`,
+      <section className="gos-panel !p-4">
 
-      clientId:
-        run.clientId,
+        <p
+          className="
+            text-[10px]
 
-      providerId:
-        run.providerId,
+            text-slate-500
+          "
+        >
+          Loading Sync History...
+        </p>
 
-      startedAt:
-        null,
+      </section>
 
-      completedAt:
-        null,
-
-      status:
-        'queued',
-
-      records:
-        0,
-
-      durationSeconds:
-        null,
-
-      error:
-        null,
-
-      attempt:
-        run.attempt
-        +
-        1,
-
-    };
-
-
-    setRuns(
-      previous => [
-        retry,
-        ...previous,
-      ]
-    );
-
-
-    setSelectedRunId(
-      retry.id
     );
 
   }
 
 
   // ==========================================================
-  // SIMULATE START
+  // ERROR
   // ==========================================================
 
-  function startQueuedRun(
-    runId:
-      string
+  if (
+    error
+    &&
+    !data
   ) {
 
-    setRuns(
-      previous =>
-        previous.map(
-          run =>
+    return (
 
-            run.id ===
-              runId
+      <section
+        className="
+          rounded-[10px]
 
-              ? {
-                  ...run,
+          border
+          border-red-200
 
-                  status:
-                    'running',
+          bg-red-50
 
-                  startedAt:
-                    formatNow(),
+          p-4
+        "
+      >
 
-                }
+        <div
+          className="
+            flex
+            items-start
+            justify-between
+            gap-3
+          "
+        >
 
-              : run
-        )
-    );
+          <div
+            className="
+              flex
+              items-start
+              gap-2
+            "
+          >
 
-  }
+            <XCircle
+              size={15}
+              className="
+                mt-0.5
+
+                text-red-600
+              "
+            />
 
 
-  // ==========================================================
-  // SIMULATE COMPLETE
-  // ==========================================================
+            <div>
 
-  function completeRun(
-    runId:
-      string
-  ) {
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
 
-    setRuns(
-      previous =>
-        previous.map(
-          run =>
+                  text-red-800
+                "
+              >
+                Unable to load Sync History
+              </p>
 
-            run.id ===
-              runId
 
-              ? {
-                  ...run,
+              <p
+                className="
+                  mt-1
 
-                  status:
-                    'success',
+                  text-[9px]
 
-                  completedAt:
-                    formatNow(),
+                  text-red-700
+                "
+              >
+                {error}
+              </p>
 
-                  records:
-                    Math.max(
-                      run.records,
-                      1250
-                    ),
+            </div>
 
-                  durationSeconds:
-                    run.durationSeconds
-                    ??
-                    42,
+          </div>
 
-                  error:
-                    null,
 
-                }
+          <button
 
-              : run
-        )
+            type="button"
+
+            onClick={
+              loadSyncHistory
+            }
+
+            className="
+              h-7
+
+              rounded-[7px]
+
+              border
+              border-red-200
+
+              bg-white
+
+              px-2.5
+
+              text-[9px]
+              font-semibold
+
+              text-red-700
+            "
+          >
+            Retry
+          </button>
+
+        </div>
+
+      </section>
+
     );
 
   }
@@ -515,24 +896,6 @@ export default function AdminSyncHistory() {
         onBack={() =>
           setSelectedRunId(
             null
-          )
-        }
-
-        onRetry={() =>
-          retryRun(
-            selectedRun
-          )
-        }
-
-        onStart={() =>
-          startQueuedRun(
-            selectedRun.id
-          )
-        }
-
-        onComplete={() =>
-          completeRun(
-            selectedRun.id
           )
         }
 
@@ -596,210 +959,63 @@ export default function AdminSyncHistory() {
               text-slate-500
             "
           >
-            Review ingestion runs, failures, records processed and retry history.
+            Real cross-client ingestion history from Growth OS sync-control telemetry.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
+        <button
 
-            sm:flex-row
-            sm:flex-wrap
+          type="button"
+
+          onClick={
+            loadSyncHistory
+          }
+
+          disabled={
+            loading
+          }
+
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-1.5
+
+            rounded-[8px]
+
+            border
+            border-slate-200
+
+            bg-white
+
+            px-3
+
+            text-[9px]
+            font-semibold
+
+            text-slate-700
+
+            hover:bg-slate-50
+
+            disabled:opacity-60
           "
         >
 
-          <div
-            className="
-              relative
+          <RefreshCw
+            size={12}
 
-              w-full
-
-              sm:w-[220px]
-            "
-          >
-
-            <Search
-              size={14}
-              className="
-                absolute
-                left-2.5
-                top-1/2
-
-                -translate-y-1/2
-
-                text-slate-400
-              "
-            />
-
-
-            <input
-
-              value={
-                search
-              }
-
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
-
-              placeholder="Search sync runs"
-
-              className="
-                h-8
-                w-full
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                pl-8
-                pr-3
-
-                text-[10px]
-
-                outline-none
-              "
-
-            />
-
-          </div>
-
-
-          <select
-
-            value={
-              clientFilter
+            className={
+              loading
+                ? 'animate-spin'
+                : ''
             }
+          />
 
-            onChange={
-              event =>
-                setClientFilter(
-                  event.target.value
-                )
-            }
+          Refresh
 
-            className="gos-input"
-          >
-
-            <option value="all">
-              All Clients
-            </option>
-
-
-            {clients.map(
-              client => (
-
-                <option
-                  key={
-                    client.id
-                  }
-                  value={
-                    client.id
-                  }
-                >
-                  {client.name}
-                </option>
-
-              )
-            )}
-
-          </select>
-
-
-          <select
-
-            value={
-              providerFilter
-            }
-
-            onChange={
-              event =>
-                setProviderFilter(
-                  event.target.value
-                )
-            }
-
-            className="gos-input"
-          >
-
-            <option value="all">
-              All Sources
-            </option>
-
-
-            {integrationProviders.map(
-              provider => (
-
-                <option
-                  key={
-                    provider.id
-                  }
-                  value={
-                    provider.id
-                  }
-                >
-                  {provider.name}
-                </option>
-
-              )
-            )}
-
-          </select>
-
-
-          <select
-
-            value={
-              statusFilter
-            }
-
-            onChange={
-              event =>
-                setStatusFilter(
-                  event.target.value as
-                    'all'
-                    |
-                    SyncRunStatus
-                )
-            }
-
-            className="gos-input"
-          >
-
-            <option value="all">
-              All Status
-            </option>
-
-            <option value="failed">
-              Failed
-            </option>
-
-            <option value="running">
-              Running
-            </option>
-
-            <option value="queued">
-              Queued
-            </option>
-
-            <option value="success">
-              Success
-            </option>
-
-          </select>
-
-        </div>
+        </button>
 
       </section>
 
@@ -814,14 +1030,15 @@ export default function AdminSyncHistory() {
           grid-cols-2
           gap-2
 
-          xl:grid-cols-5
+          md:grid-cols-4
+          xl:grid-cols-7
         "
       >
 
         <SummaryCard
           label="Runs"
           value={
-            runs.length
+            summary.total
           }
         />
 
@@ -829,7 +1046,7 @@ export default function AdminSyncHistory() {
         <SummaryCard
           label="Success"
           value={
-            successCount
+            summary.success
           }
           tone="green"
         />
@@ -838,7 +1055,7 @@ export default function AdminSyncHistory() {
         <SummaryCard
           label="Failed"
           value={
-            failedCount
+            summary.failed
           }
           tone="red"
         />
@@ -847,18 +1064,35 @@ export default function AdminSyncHistory() {
         <SummaryCard
           label="Running"
           value={
-            runningCount
+            summary.running
           }
           tone="blue"
         />
 
 
         <SummaryCard
-          label="Queued"
+          label="Partial"
           value={
-            queuedCount
+            summary.partial
           }
           tone="amber"
+        />
+
+
+        <SummaryCard
+          label="Clients"
+          value={
+            summary.clients
+          }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="Providers"
+          value={
+            summary.providers
+          }
         />
 
       </section>
@@ -883,10 +1117,10 @@ export default function AdminSyncHistory() {
           label="Failed"
 
           count={
-            failedCount
+            summary.failed
           }
 
-          description="Runs that require investigation or retry."
+          description="Runs that terminated with an execution error."
 
           tone="red"
 
@@ -904,10 +1138,10 @@ export default function AdminSyncHistory() {
           label="Running"
 
           count={
-            runningCount
+            summary.running
           }
 
-          description="Jobs currently processing."
+          description="Sync executions currently in progress."
 
           tone="blue"
 
@@ -922,19 +1156,19 @@ export default function AdminSyncHistory() {
 
         <StatusCard
 
-          label="Queued"
+          label="Partial"
 
           count={
-            queuedCount
+            summary.partial
           }
 
-          description="Jobs waiting to start."
+          description="Runs that completed with only partial processing."
 
           tone="amber"
 
           onClick={() =>
             setStatusFilter(
-              'queued'
+              'partial'
             )
           }
 
@@ -946,10 +1180,10 @@ export default function AdminSyncHistory() {
           label="Success"
 
           count={
-            successCount
+            summary.success
           }
 
-          description="Runs completed successfully."
+          description="Runs that completed successfully."
 
           tone="green"
 
@@ -960,6 +1194,286 @@ export default function AdminSyncHistory() {
           }
 
         />
+
+      </section>
+
+
+      {/* =====================================================
+          FILTERS
+      ===================================================== */}
+
+      <section
+        className="
+          gos-panel
+
+          flex
+          flex-col
+          gap-2
+
+          !p-3
+
+          xl:flex-row
+          xl:items-center
+        "
+      >
+
+        <div
+          className="
+            relative
+
+            w-full
+
+            xl:max-w-[310px]
+          "
+        >
+
+          <Search
+            size={14}
+
+            className="
+              absolute
+              left-2.5
+              top-1/2
+
+              -translate-y-1/2
+
+              text-slate-400
+            "
+          />
+
+
+          <input
+
+            value={
+              search
+            }
+
+            onChange={
+              event =>
+                setSearch(
+                  event.target.value
+                )
+            }
+
+            placeholder="Search run, client, entity, error..."
+
+            className="
+              h-8
+              w-full
+
+              rounded-[8px]
+
+              border
+              border-slate-300
+
+              bg-white
+
+              pl-8
+              pr-3
+
+              text-[10px]
+
+              outline-none
+
+              focus:border-violet-400
+              focus:ring-2
+              focus:ring-violet-100
+            "
+
+          />
+
+        </div>
+
+
+        <select
+
+          value={
+            clientFilter
+          }
+
+          onChange={
+            event =>
+              setClientFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Clients
+          </option>
+
+
+          {clients.map(
+            client => (
+
+              <option
+
+                key={
+                  client.value
+                }
+
+                value={
+                  client.value
+                }
+
+              >
+                {client.label}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            providerFilter
+          }
+
+          onChange={
+            event =>
+              setProviderFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Providers
+          </option>
+
+
+          {providers.map(
+            provider => (
+
+              <option
+                key={
+                  provider
+                }
+                value={
+                  provider
+                }
+              >
+                {formatProvider(
+                  provider
+                )}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            syncTypeFilter
+          }
+
+          onChange={
+            event =>
+              setSyncTypeFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Sync Types
+          </option>
+
+
+          {syncTypes.map(
+            syncType => (
+
+              <option
+                key={
+                  syncType
+                }
+                value={
+                  syncType
+                }
+              >
+                {formatLabel(
+                  syncType
+                )}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            statusFilter
+          }
+
+          onChange={
+            event =>
+              setStatusFilter(
+                event.target.value as StatusFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Status
+          </option>
+
+          <option value="failed">
+            Failed
+          </option>
+
+          <option value="running">
+            Running
+          </option>
+
+          <option value="partial">
+            Partial
+          </option>
+
+          <option value="success">
+            Success
+          </option>
+
+          <option value="queued">
+            Queued
+          </option>
+
+        </select>
+
+
+        <div
+          className="
+            ml-auto
+
+            whitespace-nowrap
+
+            text-[9px]
+
+            text-slate-500
+          "
+        >
+          {filteredRuns.length}
+          {' / '}
+          {runs.length}
+          {' runs'}
+        </div>
 
       </section>
 
@@ -1000,24 +1514,55 @@ export default function AdminSyncHistory() {
                 text-slate-500
               "
             >
-              {filteredRuns.length} run{filteredRuns.length === 1 ? '' : 's'}
+              Immutable execution history from integration_sync_runs.
             </p>
 
           </div>
 
 
-          {statusFilter !==
-            'all' && (
+          {(
+            statusFilter !==
+              'all'
+            ||
+            clientFilter !==
+              'all'
+            ||
+            providerFilter !==
+              'all'
+            ||
+            syncTypeFilter !==
+              'all'
+            ||
+            search
+          ) && (
 
             <button
 
               type="button"
 
-              onClick={() =>
+              onClick={() => {
+
+                setSearch(
+                  ''
+                );
+
+                setClientFilter(
+                  'all'
+                );
+
+                setProviderFilter(
+                  'all'
+                );
+
                 setStatusFilter(
                   'all'
-                )
-              }
+                );
+
+                setSyncTypeFilter(
+                  'all'
+                );
+
+              }}
 
               className="
                 text-[9px]
@@ -1026,7 +1571,7 @@ export default function AdminSyncHistory() {
                 text-violet-600
               "
             >
-              Clear filter
+              Clear filters
             </button>
 
           )}
@@ -1038,8 +1583,8 @@ export default function AdminSyncHistory() {
 
           <table
             className="
-              min-w-[1200px]
               w-full
+              min-w-[1650px]
 
               border-collapse
             "
@@ -1065,7 +1610,15 @@ export default function AdminSyncHistory() {
                 </TableHeader>
 
                 <TableHeader>
-                  Source
+                  Provider
+                </TableHeader>
+
+                <TableHeader>
+                  Entity
+                </TableHeader>
+
+                <TableHeader>
+                  Type
                 </TableHeader>
 
                 <TableHeader>
@@ -1081,7 +1634,15 @@ export default function AdminSyncHistory() {
                 </TableHeader>
 
                 <TableHeader>
-                  Records
+                  Fetched
+                </TableHeader>
+
+                <TableHeader>
+                  Loaded
+                </TableHeader>
+
+                <TableHeader>
+                  Rejected
                 </TableHeader>
 
                 <TableHeader>
@@ -1104,225 +1665,378 @@ export default function AdminSyncHistory() {
             <tbody>
 
               {filteredRuns.map(
-                run => {
+                run => (
 
-                  const client =
-                    getClient(
-                      run.clientId
-                    );
+                  <tr
+
+                    key={
+                      run.runId
+                    }
+
+                    className="
+                      border-b
+                      border-slate-100
+
+                      last:border-0
+
+                      hover:bg-slate-50/70
+                    "
+                  >
 
 
-                  const provider =
-                    getIntegrationProvider(
-                      run.providerId
-                    );
+                    {/* RUN */}
 
-
-                  return (
-
-                    <tr
-                      key={
-                        run.id
-                      }
-
+                    <td
                       className="
-                        border-b
-                        border-slate-100
+                        max-w-[170px]
 
-                        last:border-0
+                        truncate
 
-                        hover:bg-slate-50/70
+                        px-3
+                        py-2
+
+                        font-mono
+                        text-[8px]
+
+                        text-slate-500
                       "
+                      title={
+                        run.runId
+                      }
                     >
+                      {run.runId}
+                    </td>
 
-                      <td
+
+                    {/* CLIENT */}
+
+                    <td className="px-3 py-2">
+
+                      <div
                         className="
-                          px-3
-                          py-2
-
-                          font-mono
-                          text-[8px]
-
-                          text-slate-500
-                        "
-                      >
-                        {run.id}
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
                           text-[10px]
                           font-semibold
 
                           text-slate-900
                         "
                       >
-                        {client?.name ||
-                          run.clientId}
-                      </td>
+                        {getClientName(
+                          run
+                        )}
+                      </div>
 
 
-                      <td
+                      <div
                         className="
-                          px-3
-                          py-2
+                          mt-0.5
 
-                          text-[10px]
-
-                          text-slate-700
-                        "
-                      >
-                        {provider?.name ||
-                          run.providerId}
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <RunStatusBadge
-                          status={
-                            run.status
-                          }
-                        />
-
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[9px]
+                          text-[8px]
 
                           text-slate-500
                         "
                       >
-                        {run.startedAt ||
-                          'Not started'}
-                      </td>
+                        {run.workspaceId}
+                        {' · '}
+                        {run.brandId}
+                      </div>
+
+                    </td>
 
 
-                      <td
-                        className="
-                          px-3
-                          py-2
+                    {/* PROVIDER */}
 
-                          text-[9px]
-                          font-medium
+                    <td
+                      className="
+                        px-3
+                        py-2
 
-                          text-slate-600
-                        "
-                      >
-                        {formatDuration(
-                          run.durationSeconds
+                        text-[10px]
+
+                        text-slate-700
+                      "
+                    >
+                      {formatProvider(
+                        run.provider
+                      )}
+                    </td>
+
+
+                    {/* ENTITY */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2
+
+                        text-[10px]
+                        font-semibold
+
+                        text-slate-700
+                      "
+                    >
+                      {formatLabel(
+                        run.entity
+                      )}
+                    </td>
+
+
+                    {/* SYNC TYPE */}
+
+                    <td className="px-3 py-2">
+
+                      <SmallBadge>
+                        {formatLabel(
+                          run.syncType
                         )}
-                      </td>
+                      </SmallBadge>
+
+                    </td>
 
 
-                      <td
-                        className="
-                          px-3
-                          py-2
+                    {/* STATUS */}
 
-                          text-[10px]
-                          font-semibold
+                    <td className="px-3 py-2">
 
-                          text-slate-800
-                        "
-                      >
-                        {formatNumber(
-                          run.records
-                        )}
-                      </td>
+                      <RunStatusBadge
+                        status={
+                          run.status
+                        }
+                      />
+
+                    </td>
 
 
-                      <td
-                        className="
-                          px-3
-                          py-2
+                    {/* STARTED */}
 
-                          text-[10px]
+                    <td
+                      className="
+                        px-3
+                        py-2
 
-                          text-slate-600
-                        "
-                      >
-                        {run.attempt}
-                      </td>
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        run.startedAt
+                      )
+                      ||
+                      'Not started'}
+                    </td>
 
 
-                      <td
-                        className="
+                    {/* DURATION */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2
+
+                        text-[9px]
+                        font-medium
+
+                        text-slate-600
+                      "
+                    >
+                      {formatRunDuration(
+                        run
+                      )}
+                    </td>
+
+
+                    {/* FETCHED */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2
+
+                        text-[10px]
+                        font-semibold
+
+                        text-slate-800
+                      "
+                    >
+                      {formatNumber(
+                        run.recordsFetched
+                      )}
+                    </td>
+
+
+                    {/* LOADED */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2
+
+                        text-[10px]
+                        font-semibold
+
+                        text-slate-800
+                      "
+                    >
+                      {formatNumber(
+                        run.recordsLoaded
+                      )}
+                    </td>
+
+
+                    {/* REJECTED */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2
+
+                        text-[10px]
+                        font-semibold
+
+                        text-slate-800
+                      "
+                    >
+                      {formatNumber(
+                        run.recordsRejected
+                      )}
+                    </td>
+
+
+                    {/* ATTEMPT */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2
+
+                        text-[10px]
+
+                        text-slate-600
+                      "
+                    >
+                      {run.attempt}
+                    </td>
+
+
+                    {/* ERROR */}
+
+                    <td className="px-3 py-2">
+
+                      <div
+                        title={
+                          formatRunError(
+                            run
+                          )
+                        }
+                        className={`
                           max-w-[260px]
 
                           truncate
 
-                          px-3
-                          py-2
-
                           text-[9px]
 
-                          text-red-600
+                          ${
+                            run.errorCode
+                            ||
+                            run.errorMessage
+
+                              ? 'text-red-600'
+
+                              : 'text-slate-400'
+                          }
+                        `}
+                      >
+                        {formatRunError(
+                          run
+                        )
+                        ||
+                        '—'}
+                      </div>
+
+                    </td>
+
+
+                    {/* ACTION */}
+
+                    <td className="px-3 py-2 text-right">
+
+                      <button
+
+                        type="button"
+
+                        onClick={() =>
+                          setSelectedRunId(
+                            run.runId
+                          )
+                        }
+
+                        className="
+                          inline-flex
+                          h-7
+                          items-center
+                          gap-1
+
+                          rounded-[7px]
+
+                          border
+                          border-slate-200
+
+                          bg-white
+
+                          px-2.5
+
+                          text-[9px]
+                          font-semibold
+
+                          text-slate-700
+
+                          hover:bg-slate-50
                         "
                       >
-                        {run.error ||
-                          '—'}
-                      </td>
+
+                        Inspect
+
+                        <ChevronRight
+                          size={12}
+                        />
+
+                      </button>
+
+                    </td>
+
+                  </tr>
+
+                )
+              )}
 
 
-                      <td className="px-3 py-2 text-right">
+              {filteredRuns.length ===
+                0 && (
 
-                        <button
+                <tr>
 
-                          type="button"
+                  <td
 
-                          onClick={() =>
-                            setSelectedRunId(
-                              run.id
-                            )
-                          }
+                    colSpan={
+                      14
+                    }
 
-                          className="
-                            inline-flex
-                            h-7
-                            items-center
-                            gap-1
+                    className="
+                      px-4
+                      py-14
 
-                            rounded-[7px]
+                      text-center
 
-                            border
-                            border-slate-200
+                      text-[10px]
 
-                            bg-white
+                      text-slate-500
+                    "
+                  >
+                    No sync runs match the selected filters.
+                  </td>
 
-                            px-2.5
+                </tr>
 
-                            text-[9px]
-                            font-semibold
-
-                            text-slate-700
-                          "
-                        >
-
-                          Inspect
-
-                          <ChevronRight
-                            size={12}
-                          />
-
-                        </button>
-
-                      </td>
-
-                    </tr>
-
-                  );
-
-                }
               )}
 
             </tbody>
@@ -1330,6 +2044,64 @@ export default function AdminSyncHistory() {
           </table>
 
         </div>
+
+      </section>
+
+
+      {/* =====================================================
+          SOURCE
+      ===================================================== */}
+
+      <section
+        className="
+          rounded-[9px]
+
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          px-3
+          py-2.5
+        "
+      >
+
+        <p
+          className="
+            text-[8px]
+            leading-4
+
+            text-violet-700
+          "
+        >
+          Source of truth: growthos_control.integration_sync_runs. This view is read-only and does not create, retry, start or complete synchronization jobs.
+        </p>
+
+
+        {data?.meta?.durationMs !==
+          undefined && (
+
+          <p
+            className="
+              mt-1
+
+              text-[8px]
+
+              text-violet-500
+            "
+          >
+            API runtime: {formatNumber(
+              data.meta.durationMs
+            )} ms
+            {' · '}
+            API limit: {formatNumber(
+              data.meta.limit
+              ??
+              runs.length
+            )} runs
+          </p>
+
+        )}
 
       </section>
 
@@ -1350,12 +2122,6 @@ function SyncRunDetail({
 
   onBack,
 
-  onRetry,
-
-  onStart,
-
-  onComplete,
-
 }: {
 
   run:
@@ -1364,36 +2130,7 @@ function SyncRunDetail({
   onBack:
     () => void;
 
-  onRetry:
-    () => void;
-
-  onStart:
-    () => void;
-
-  onComplete:
-    () => void;
-
 }) {
-
-
-  const {
-    getClient,
-    getIntegrationProvider,
-  } =
-    useAdminStore();
-
-
-  const client =
-    getClient(
-      run.clientId
-    );
-
-
-  const provider =
-    getIntegrationProvider(
-      run.providerId
-    );
-
 
   return (
 
@@ -1447,6 +2184,10 @@ function SyncRunDetail({
                 border-slate-200
 
                 bg-white
+
+                text-slate-700
+
+                hover:bg-slate-50
               "
             >
               ←
@@ -1512,13 +2253,20 @@ function SyncRunDetail({
                 className="
                   mt-0.5
 
+                  max-w-[620px]
+
+                  truncate
+
                   font-mono
                   text-[8px]
 
                   text-slate-500
                 "
+                title={
+                  run.runId
+                }
               >
-                {run.id}
+                {run.runId}
               </p>
 
             </div>
@@ -1526,119 +2274,26 @@ function SyncRunDetail({
           </div>
 
 
-          <div
+          <span
             className="
-              flex
-              flex-wrap
-              gap-2
+              rounded-full
+
+              border
+              border-slate-200
+
+              bg-slate-50
+
+              px-2.5
+              py-1
+
+              text-[8px]
+              font-semibold
+
+              text-slate-500
             "
           >
-
-            {run.status ===
-              'failed' && (
-
-              <button
-
-                type="button"
-
-                onClick={
-                  onRetry
-                }
-
-                className="
-                  inline-flex
-                  h-8
-                  items-center
-                  gap-1.5
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[9px]
-                  font-semibold
-
-                  text-white
-                "
-              >
-
-                <RotateCcw
-                  size={13}
-                />
-
-                Retry
-
-              </button>
-
-            )}
-
-
-            {run.status ===
-              'queued' && (
-
-              <button
-
-                type="button"
-
-                onClick={
-                  onStart
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-blue-600
-
-                  px-3
-
-                  text-[9px]
-                  font-semibold
-
-                  text-white
-                "
-              >
-                Start Run
-              </button>
-
-            )}
-
-
-            {run.status ===
-              'running' && (
-
-              <button
-
-                type="button"
-
-                onClick={
-                  onComplete
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-emerald-600
-
-                  px-3
-
-                  text-[9px]
-                  font-semibold
-
-                  text-white
-                "
-              >
-                Complete Run
-              </button>
-
-            )}
-
-          </div>
+            Read Only
+          </span>
 
         </div>
 
@@ -1655,7 +2310,7 @@ function SyncRunDetail({
           grid-cols-2
           gap-2
 
-          md:grid-cols-4
+          md:grid-cols-5
         "
       >
 
@@ -1670,10 +2325,20 @@ function SyncRunDetail({
 
 
         <SummaryCard
-          label="Records"
+          label="Fetched"
           value={
             formatNumber(
-              run.records
+              run.recordsFetched
+            )
+          }
+        />
+
+
+        <SummaryCard
+          label="Loaded"
+          value={
+            formatNumber(
+              run.recordsLoaded
             )
           }
         />
@@ -1682,8 +2347,8 @@ function SyncRunDetail({
         <SummaryCard
           label="Duration"
           value={
-            formatDuration(
-              run.durationSeconds
+            formatRunDuration(
+              run
             )
           }
         />
@@ -1700,7 +2365,7 @@ function SyncRunDetail({
 
 
       {/* =====================================================
-          RUN DETAILS
+          CORE DETAILS
       ===================================================== */}
 
       <section
@@ -1712,6 +2377,11 @@ function SyncRunDetail({
           lg:grid-cols-2
         "
       >
+
+
+        {/* ===================================================
+            SOURCE
+        =================================================== */}
 
         <section className="gos-panel !p-3.5">
 
@@ -1725,25 +2395,141 @@ function SyncRunDetail({
             <ValueRow
               label="Client"
               value={
-                client?.name ||
-                run.clientId
+                getClientName(
+                  run
+                )
               }
+            />
+
+
+            <ValueRow
+              label="Workspace ID"
+              value={
+                run.workspaceId
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Brand ID"
+              value={
+                run.brandId
+              }
+              mono
             />
 
 
             <ValueRow
               label="Provider"
               value={
-                provider?.name ||
-                run.providerId
+                formatProvider(
+                  run.provider
+                )
               }
             />
 
 
             <ValueRow
-              label="Run ID"
+              label="Entity"
               value={
-                run.id
+                formatLabel(
+                  run.entity
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Sync Type"
+              value={
+                formatLabel(
+                  run.syncType
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Connection ID"
+              value={
+                run.connectionId
+              }
+              mono
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* ===================================================
+            TIMING
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Timing
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Started"
+              value={
+                formatTimestamp(
+                  run.startedAt
+                )
+                ||
+                'Not started'
+              }
+            />
+
+
+            <ValueRow
+              label="Completed"
+              value={
+                formatTimestamp(
+                  run.completedAt
+                )
+                ||
+                'Not completed'
+              }
+            />
+
+
+            <ValueRow
+              label="Duration"
+              value={
+                formatRunDuration(
+                  run
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Source Start"
+              value={
+                formatTimestamp(
+                  run.sourceStartAt
+                )
+                ||
+                '—'
+              }
+            />
+
+
+            <ValueRow
+              label="Source End"
+              value={
+                formatTimestamp(
+                  run.sourceEndAt
+                )
+                ||
+                '—'
               }
             />
 
@@ -1762,51 +2548,125 @@ function SyncRunDetail({
         </section>
 
 
+        {/* ===================================================
+            PROCESSING
+        =================================================== */}
+
         <section className="gos-panel !p-3.5">
 
           <h3 className="gos-section-title">
-            Timing
+            Processing
           </h3>
 
 
           <div className="mt-3 space-y-2">
 
             <ValueRow
-              label="Started"
-              value={
-                run.startedAt ||
-                'Not started'
-              }
-            />
-
-
-            <ValueRow
-              label="Completed"
-              value={
-                run.completedAt ||
-                'Not completed'
-              }
-            />
-
-
-            <ValueRow
-              label="Duration"
-              value={
-                formatDuration(
-                  run.durationSeconds
-                )
-              }
-            />
-
-
-            <ValueRow
-              label="Records"
+              label="Records Fetched"
               value={
                 formatNumber(
-                  run.records
+                  run.recordsFetched
                 )
               }
             />
+
+
+            <ValueRow
+              label="Records Loaded"
+              value={
+                formatNumber(
+                  run.recordsLoaded
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Records Rejected"
+              value={
+                formatNumber(
+                  run.recordsRejected
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Bytes Processed"
+              value={
+                formatBytes(
+                  run.bytesProcessed
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* ===================================================
+            CURSOR
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Cursor / Watermark
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Cursor Before"
+              value={
+                run.cursorBefore
+                ||
+                '—'
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Cursor After"
+              value={
+                run.cursorAfter
+                ||
+                '—'
+              }
+              mono
+            />
+
+          </div>
+
+
+          <div
+            className="
+              mt-3
+
+              rounded-[8px]
+
+              border
+              border-slate-200
+
+              bg-slate-50
+
+              p-2.5
+            "
+          >
+
+            <p
+              className="
+                text-[8px]
+                leading-4
+
+                text-slate-500
+              "
+            >
+              Cursor values are shown exactly as stored by the provider sync engine. A null cursor is valid where the integration uses source timestamps or another durable watermark instead.
+            </p>
 
           </div>
 
@@ -1819,7 +2679,11 @@ function SyncRunDetail({
           ERROR
       ===================================================== */}
 
-      {run.error && (
+      {(
+        run.errorCode
+        ||
+        run.errorMessage
+      ) && (
 
         <section
           className="
@@ -1844,6 +2708,7 @@ function SyncRunDetail({
 
             <AlertCircle
               size={15}
+
               className="
                 mt-0.5
                 shrink-0
@@ -1853,7 +2718,7 @@ function SyncRunDetail({
             />
 
 
-            <div>
+            <div className="min-w-0">
 
               <p
                 className="
@@ -1867,19 +2732,43 @@ function SyncRunDetail({
               </p>
 
 
-              <p
-                className="
-                  mt-1
+              {run.errorCode && (
 
-                  font-mono
-                  text-[9px]
-                  leading-4
+                <p
+                  className="
+                    mt-1
 
-                  text-red-700
-                "
-              >
-                {run.error}
-              </p>
+                    font-mono
+                    text-[8px]
+
+                    text-red-600
+                  "
+                >
+                  {run.errorCode}
+                </p>
+
+              )}
+
+
+              {run.errorMessage && (
+
+                <p
+                  className="
+                    mt-1
+
+                    break-words
+
+                    font-mono
+                    text-[9px]
+                    leading-4
+
+                    text-red-700
+                  "
+                >
+                  {run.errorMessage}
+                </p>
+
+              )}
 
             </div>
 
@@ -1891,7 +2780,7 @@ function SyncRunDetail({
 
 
       {/* =====================================================
-          BACKEND MAPPING
+          SOURCE OF TRUTH
       ===================================================== */}
 
       <section
@@ -1899,9 +2788,9 @@ function SyncRunDetail({
           rounded-[10px]
 
           border
-          border-slate-200
+          border-violet-200
 
-          bg-slate-50
+          bg-violet-50
 
           p-3
         "
@@ -1909,13 +2798,13 @@ function SyncRunDetail({
 
         <p
           className="
-            text-[10px]
+            text-[9px]
             font-semibold
 
-            text-slate-800
+            text-violet-800
           "
         >
-          Backend mapping
+          Immutable execution history
         </p>
 
 
@@ -1923,13 +2812,13 @@ function SyncRunDetail({
           className="
             mt-1
 
-            text-[9px]
+            text-[8px]
             leading-4
 
-            text-slate-500
+            text-violet-600
           "
         >
-          This screen is intentionally shaped to later consume the actual sync run ID, status, start/end timestamps, records processed, errors and retry attempts from your Growth OS sync-control tables.
+          This run is read directly from growthos_control.integration_sync_runs. Sync History does not simulate, create or mutate run state.
         </p>
 
       </section>
@@ -1969,13 +2858,10 @@ function StatusCard({
     string;
 
   tone:
-    'green'
-    |
-    'red'
-    |
-    'blue'
-    |
-    'amber';
+    | 'green'
+    | 'red'
+    | 'blue'
+    | 'amber';
 
   onClick:
     () => void;
@@ -2021,6 +2907,10 @@ function StatusCard({
 
         text-left
 
+        transition
+
+        hover:-translate-y-[1px]
+
         ${cls}
       `}
     >
@@ -2053,7 +2943,9 @@ function StatusCard({
             text-slate-950
           "
         >
-          {count}
+          {formatNumber(
+            count
+          )}
         </span>
 
       </div>
@@ -2097,7 +2989,7 @@ function RunStatusBadge({
 
   if (
     status ===
-    'success'
+      'success'
   ) {
 
     return (
@@ -2117,7 +3009,7 @@ function RunStatusBadge({
 
   if (
     status ===
-    'failed'
+      'failed'
   ) {
 
     return (
@@ -2137,7 +3029,7 @@ function RunStatusBadge({
 
   if (
     status ===
-    'running'
+      'running'
   ) {
 
     return (
@@ -2155,6 +3047,26 @@ function RunStatusBadge({
   }
 
 
+  if (
+    status ===
+      'partial'
+  ) {
+
+    return (
+
+      <Badge
+        icon={
+          AlertCircle
+        }
+        label="Partial"
+        className="border-amber-200 bg-amber-50 text-amber-700"
+      />
+
+    );
+
+  }
+
+
   return (
 
     <Badge
@@ -2162,7 +3074,7 @@ function RunStatusBadge({
         Clock3
       }
       label="Queued"
-      className="border-amber-200 bg-amber-50 text-amber-700"
+      className="border-slate-200 bg-slate-50 text-slate-600"
     />
 
   );
@@ -2232,6 +3144,51 @@ function Badge({
 
 
 // ============================================================
+// SMALL BADGE
+// ============================================================
+
+function SmallBadge({
+
+  children,
+
+}: {
+
+  children:
+    ReactNode;
+
+}) {
+
+  return (
+
+    <span
+      className="
+        inline-flex
+
+        rounded-full
+
+        border
+        border-slate-200
+
+        bg-slate-50
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        text-slate-600
+      "
+    >
+      {children}
+    </span>
+
+  );
+
+}
+
+
+// ============================================================
 // SUMMARY
 // ============================================================
 
@@ -2254,15 +3211,12 @@ function SummaryCard({
     number;
 
   tone?:
-    'default'
-    |
-    'green'
-    |
-    'red'
-    |
-    'blue'
-    |
-    'amber';
+    | 'default'
+    | 'green'
+    | 'red'
+    | 'blue'
+    | 'amber'
+    | 'violet';
 
 }) {
 
@@ -2288,7 +3242,12 @@ function SummaryCard({
 
             ? 'text-amber-700'
 
-            : 'text-slate-950';
+            : tone ===
+                'violet'
+
+              ? 'text-violet-700'
+
+              : 'text-slate-950';
 
 
   return (
@@ -2312,6 +3271,8 @@ function SummaryCard({
       <p
         className={`
           mt-1.5
+
+          truncate
 
           text-[18px]
           font-semibold
@@ -2340,6 +3301,9 @@ function ValueRow({
 
   value,
 
+  mono =
+    false,
+
 }: {
 
   label:
@@ -2347,6 +3311,9 @@ function ValueRow({
 
   value:
     string;
+
+  mono?:
+    boolean;
 
 }) {
 
@@ -2373,6 +3340,8 @@ function ValueRow({
 
       <span
         className="
+          shrink-0
+
           text-[9px]
 
           text-slate-500
@@ -2383,8 +3352,11 @@ function ValueRow({
 
 
       <span
-        className="
-          max-w-[65%]
+        title={
+          value
+        }
+        className={`
+          max-w-[68%]
 
           truncate
 
@@ -2393,7 +3365,13 @@ function ValueRow({
           font-semibold
 
           text-slate-800
-        "
+
+          ${
+            mono
+              ? 'font-mono text-[8px]'
+              : ''
+          }
+        `}
       >
         {value}
       </span>
@@ -2436,7 +3414,7 @@ function TableHeader({
 
         px-3
 
-        text-[9px]
+        text-[8px]
         font-semibold
         uppercase
         tracking-[0.05em]
@@ -2462,156 +3440,120 @@ function TableHeader({
 
 
 // ============================================================
-// INITIAL MOCK RUNS
-//
-// Generated from the existing client integration registry.
+// HELPERS
 // ============================================================
 
-function buildInitialRuns(
-  integrations:
-    Array<{
-      clientId:
-        string;
-
-      providerId:
-        string;
-
-      connectionStatus:
-        string;
-
-      dataStatus:
-        string;
-    }>
+function getClientKey(
+  run:
+    SyncRun
 ) {
 
-  const runs:
-    SyncRun[] =
-    [];
-
-
-  integrations.forEach(
-    (
-      integration,
-      index
-    ) => {
-
-
-      runs.push({
-
-        id:
-          `run-${integration.clientId}-${integration.providerId}-001`,
-
-        clientId:
-          integration.clientId,
-
-        providerId:
-          integration.providerId,
-
-        startedAt:
-          `08 Sep 2026 ${String(
-            9 + index
-          ).padStart(
-            2,
-            '0'
-          )}:00`,
-
-        completedAt:
-          `08 Sep 2026 ${String(
-            9 + index
-          ).padStart(
-            2,
-            '0'
-          )}:01`,
-
-        status:
-          'success',
-
-        records:
-          1250
-          +
-          (
-            index
-            *
-            720
-          ),
-
-        durationSeconds:
-          31
-          +
-          (
-            index
-            *
-            8
-          ),
-
-        error:
-          null,
-
-        attempt:
-          1,
-
-      });
-
-
-      // ------------------------------------------------------
-      // Add one failure example for operational testing.
-      // ------------------------------------------------------
-
-      if (
-        index ===
-        integrations.length
-        -
-        1
-      ) {
-
-        runs.push({
-
-          id:
-            `run-${integration.clientId}-${integration.providerId}-failed`,
-
-          clientId:
-            integration.clientId,
-
-          providerId:
-            integration.providerId,
-
-          startedAt:
-            '08 Sep 2026 08:00',
-
-          completedAt:
-            '08 Sep 2026 08:01',
-
-          status:
-            'failed',
-
-          records:
-            0,
-
-          durationSeconds:
-            18,
-
-          error:
-            'Source request failed before data processing completed.',
-
-          attempt:
-            1,
-
-        });
-
-      }
-
-    }
+  return [
+    run.workspaceId,
+    run.brandId,
+  ].join(
+    ':'
   );
-
-
-  return runs;
 
 }
 
 
-// ============================================================
-// HELPERS
-// ============================================================
+function getClientName(
+  run:
+    SyncRun
+) {
+
+  return (
+    run.brandName
+    ||
+    run.workspaceName
+    ||
+    run.brandId
+    ||
+    run.workspaceId
+  );
+
+}
+
+
+function formatProvider(
+  value:
+    string
+) {
+
+  const labels:
+    Record<
+      string,
+      string
+    > = {
+
+    shopify:
+      'Shopify',
+
+    meta_ads:
+      'Meta Ads',
+
+    google_ads:
+      'Google Ads',
+
+    bigquery:
+      'BigQuery',
+
+  };
+
+
+  return labels[
+    value
+  ]
+  ||
+  formatLabel(
+    value
+  );
+
+}
+
+
+function formatLabel(
+  value:
+    string
+) {
+
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return value
+    .replace(
+      /[_-]+/g,
+      ' '
+    )
+    .split(
+      ' '
+    )
+    .filter(
+      Boolean
+    )
+    .map(
+      word =>
+        word
+          .charAt(
+            0
+          )
+          .toUpperCase()
+        +
+        word.slice(
+          1
+        )
+    )
+    .join(
+      ' '
+    );
+
+}
+
 
 function formatNumber(
   value:
@@ -2631,14 +3573,130 @@ function formatNumber(
 }
 
 
-function formatDuration(
-  seconds:
-    number |
+function formatTimestamp(
+  value:
+    string |
     null
 ) {
 
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
   if (
-    seconds ===
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return value;
+
+  }
+
+
+  return date.toLocaleString(
+    'en-IN',
+    {
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+    }
+  );
+
+}
+
+
+function getEffectiveDurationMs(
+  run:
+    SyncRun
+) {
+
+  if (
+    run.durationMs !==
+      null
+    &&
+    Number.isFinite(
+      run.durationMs
+    )
+  ) {
+
+    return Math.max(
+      0,
+      run.durationMs
+    );
+
+  }
+
+
+  if (
+    run.startedAt
+    &&
+    run.completedAt
+  ) {
+
+    const start =
+      new Date(
+        run.startedAt
+      ).getTime();
+
+
+    const end =
+      new Date(
+        run.completedAt
+      ).getTime();
+
+
+    if (
+      Number.isFinite(
+        start
+      )
+      &&
+      Number.isFinite(
+        end
+      )
+      &&
+      end >=
+        start
+    ) {
+
+      return end
+      -
+      start;
+
+    }
+
+  }
+
+
+  return null;
+
+}
+
+
+function formatRunDuration(
+  run:
+    SyncRun
+) {
+
+  const durationMs =
+    getEffectiveDurationMs(
+      run
+    );
+
+
+  if (
+    durationMs ===
     null
   ) {
 
@@ -2648,28 +3706,69 @@ function formatDuration(
 
 
   if (
-    seconds <
+    durationMs <
+    1000
+  ) {
+
+    return `${Math.round(
+      durationMs
+    )} ms`;
+
+  }
+
+
+  const totalSeconds =
+    Math.round(
+      durationMs /
+      1000
+    );
+
+
+  if (
+    totalSeconds <
     60
   ) {
 
-    return `${seconds}s`;
+    return `${totalSeconds}s`;
 
   }
 
 
   const minutes =
     Math.floor(
-      seconds /
+      totalSeconds /
       60
     );
 
 
-  const remainder =
-    seconds %
+  const seconds =
+    totalSeconds %
     60;
 
 
-  return `${minutes}m ${remainder}s`;
+  if (
+    minutes <
+    60
+  ) {
+
+    return `${minutes}m ${seconds}s`;
+
+  }
+
+
+  const hours =
+    Math.floor(
+      minutes /
+      60
+    );
+
+
+  const remainingMinutes =
+    minutes %
+    60;
+
+
+  return `${hours}h ${remainingMinutes}m`;
 
 }
 
@@ -2679,46 +3778,114 @@ function formatStatus(
     SyncRunStatus
 ) {
 
-  if (
-    status ===
-    'success'
-  ) {
-
-    return 'Success';
-
-  }
-
-
-  if (
-    status ===
-    'failed'
-  ) {
-
-    return 'Failed';
-
-  }
-
-
-  if (
-    status ===
-    'running'
-  ) {
-
-    return 'Running';
-
-  }
-
-
-  return 'Queued';
+  return formatLabel(
+    status
+  );
 
 }
 
 
-function formatNow() {
+function formatRunError(
+  run:
+    SyncRun
+) {
 
-  return new Date()
-    .toLocaleString(
-      'en-IN'
-    );
+  if (
+    run.errorCode
+    &&
+    run.errorMessage
+  ) {
+
+    return `${run.errorCode}: ${run.errorMessage}`;
+
+  }
+
+
+  return (
+    run.errorMessage
+    ||
+    run.errorCode
+    ||
+    ''
+  );
+
+}
+
+
+function formatBytes(
+  value:
+    number
+) {
+
+  if (
+    !value
+    ||
+    value <
+      0
+  ) {
+
+    return '0 B';
+
+  }
+
+
+  if (
+    value <
+    1024
+  ) {
+
+    return `${formatNumber(
+      value
+    )} B`;
+
+  }
+
+
+  if (
+    value <
+    1024 *
+    1024
+  ) {
+
+    return `${(
+      value /
+      1024
+    ).toFixed(
+      1
+    )} KB`;
+
+  }
+
+
+  if (
+    value <
+    1024 *
+    1024 *
+    1024
+  ) {
+
+    return `${(
+      value /
+      (
+        1024 *
+        1024
+      )
+    ).toFixed(
+      1
+    )} MB`;
+
+  }
+
+
+  return `${(
+    value /
+    (
+      1024 *
+      1024 *
+      1024
+    )
+  ).toFixed(
+    2
+  )} GB`;
 
 }

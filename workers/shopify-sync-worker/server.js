@@ -6,6 +6,7 @@ import {
 
 import {
   fetchOrdersPage,
+  fetchCustomersPage,
   fetchEarliestShopifyOrder,
   fetchShopifyOrderById,
 } from './shopify-api.js';
@@ -13,6 +14,10 @@ import {
 import {
   writeShopifyOrders,
 } from './shopify-writer.js';
+
+import {
+  writeShopifyCustomers,
+} from './shopify-customer-writer.js';
 
 import {
   startOrdersBulkOperation,
@@ -1049,6 +1054,196 @@ app.post(
 
             tokenRefreshed:
               fetched.tokenRefreshed,
+
+            warehouseReceived:
+              warehouse.received,
+
+            warehouseChanged:
+              warehouse.changed,
+
+            warehouseSkipped:
+              warehouse.skipped,
+
+            warehouseLoaded:
+              warehouse.loaded,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          }
+        );
+
+
+        return res
+          .status(204)
+          .end();
+
+      }
+
+
+            // ======================================================
+      // CUSTOMERS — C1 MANUAL SYNC
+      //
+      // Development proof only.
+      //
+      // Final architecture will later add:
+      //
+      // historical Bulk
+      // incremental recovery
+      // scheduler
+      // customers/create
+      // customers/update
+      //
+      // without changing this canonical Customer shape.
+      // ======================================================
+
+      if (
+        job.entity ===
+          'customers'
+      ) {
+
+        // ====================================================
+        // C1 ONLY SUPPORTS MANUAL
+        // ====================================================
+
+        if (
+          job.syncType !==
+            'manual'
+        ) {
+
+          throw new Error(
+            'SHOPIFY_CUSTOMERS_SYNC_TYPE_NOT_IMPLEMENTED'
+          );
+
+        }
+
+
+        // ====================================================
+        // RUNTIME / CREDENTIAL
+        // ====================================================
+
+        const runtime =
+          await resolveShopifyRuntimeContext(
+            job
+          );
+
+
+        // ====================================================
+        // FETCH LATEST 25 CUSTOMERS
+        // ====================================================
+
+        const page =
+          await fetchCustomersPage(
+
+            runtime,
+
+            {
+
+              first:
+                25,
+
+              after:
+                null,
+
+              reverse:
+                true,
+
+            }
+
+          );
+
+
+        // ====================================================
+        // CANONICAL WAREHOUSE WRITE
+        // ====================================================
+
+        const warehouse =
+          await writeShopifyCustomers({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            customers:
+              page.customers,
+
+          });
+
+
+        // ====================================================
+        // RESULT
+        // ====================================================
+
+        console.log(
+          'SHOPIFY_CUSTOMERS_SYNC_COMPLETED',
+          {
+
+            pubsubMessageId:
+              message.messageId
+              ??
+              null,
+
+            jobId:
+              job.jobId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            entity:
+              'customers',
+
+            syncType:
+              job.syncType,
+
+            recordsFetched:
+              page.customers.length,
+
+            firstCustomerId:
+              page.customers[0]
+                ?.id
+              ??
+              null,
+
+            firstCustomerUpdatedAt:
+              page.customers[0]
+                ?.updatedAt
+              ??
+              null,
+
+            lastCustomerId:
+              page.customers[
+                page.customers.length - 1
+              ]
+                ?.id
+              ??
+              null,
+
+            lastCustomerUpdatedAt:
+              page.customers[
+                page.customers.length - 1
+              ]
+                ?.updatedAt
+              ??
+              null,
+
+            hasNextPage:
+              page.pageInfo.hasNextPage,
+
+            tokenRefreshed:
+              page.tokenRefreshed,
 
             warehouseReceived:
               warehouse.received,

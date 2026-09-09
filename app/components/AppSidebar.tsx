@@ -7,15 +7,11 @@ import {
 } from 'react';
 
 import {
-  Activity,
   ChevronDown,
   CircleGauge,
-  Database,
   GitBranch,
-  History,
   Megaphone,
   PackageSearch,
-  Plug,
   Repeat2,
   Search,
   Settings,
@@ -356,121 +352,6 @@ const groups:
 
   },
 
-
-  // ==========================================================
-  // DATA SOURCES
-  //
-  // These are workspace/platform operational pages.
-  //
-  // Access rules will later come from server-side permission
-  // data instead of being decided inside this component.
-  // ==========================================================
-
-  {
-
-    label:
-      'Data Sources',
-
-    items: [
-
-      {
-
-        name:
-          'App Integrations',
-
-        label:
-          'App Integrations',
-
-        icon:
-          Plug,
-
-        moduleId:
-          null,
-
-        children:
-          [],
-
-      },
-
-
-      {
-
-        name:
-          'Data Health',
-
-        label:
-          'Data Health',
-
-        icon:
-          Activity,
-
-        moduleId:
-          null,
-
-        children:
-          [],
-
-      },
-
-
-      {
-
-        name:
-          'Sync History',
-
-        label:
-          'Sync History',
-
-        icon:
-          History,
-
-        moduleId:
-          null,
-
-        children:
-          [],
-
-      },
-
-    ],
-
-  },
-
-
-  // ==========================================================
-  // SYSTEM
-  // ==========================================================
-
-  {
-
-    label:
-      'System',
-
-    items: [
-
-      {
-
-        name:
-          'Warehouse Audit',
-
-        label:
-          'Warehouse',
-
-        icon:
-          Database,
-
-        moduleId:
-          null,
-
-        children:
-          [],
-
-      },
-
-    ],
-
-  },
-
 ];
 
 
@@ -554,43 +435,54 @@ export default function AppSidebar({
   // ==========================================================
 
   function applySidebarMode(
-    mode:
-      string |
-      null
+  mode:
+    string |
+    null
+) {
+
+  // ==========================================================
+  // EXPLICIT HOVER MODE
+  // ==========================================================
+
+  if (
+    mode ===
+      'cursor'
   ) {
 
-    if (
-      mode ===
-      'fixed'
-    ) {
-
-      setSidebarOpen(
-        true
-      );
+    setSidebarOpen(
+      false
+    );
 
 
-      setHovered(
-        false
-      );
-
-
-      return;
-
-    }
-
-
-    if (
-      mode ===
-      'cursor'
-    ) {
-
-      setSidebarOpen(
-        false
-      );
-
-    }
+    return;
 
   }
+
+
+  // ==========================================================
+  // DEFAULT = FIXED
+  //
+  // Covers:
+  //
+  // fixed
+  // null
+  // missing localStorage
+  // invalid / old preference values
+  //
+  // A fresh browser should never unexpectedly open as only
+  // the collapsed icon rail.
+  // ==========================================================
+
+  setSidebarOpen(
+    true
+  );
+
+
+  setHovered(
+    false
+  );
+
+}
 
 
   // ==========================================================

@@ -1545,3 +1545,311 @@ export async function touchGrowthOSUserLogin(
   });
 
 }
+
+// ============================================================
+// RUNTIME WORKSPACE USERS
+//
+// FAST CLIENT RUNTIME READ.
+//
+// IMPORTANT:
+//
+// This function intentionally DOES NOT call:
+//
+// ensureGrowthOSAuthStore()
+//
+// Normal client requests must NEVER perform:
+//
+// - CREATE TABLE
+// - schema checks
+// - bootstrap
+//
+// Returns the latest logical membership for every user in the
+// requested workspace + brand, joined to the latest user row.
+// ============================================================
+
+export type GrowthOSWorkspaceUser = {
+
+  membership_id:
+    string;
+
+  user_id:
+    string;
+
+  email:
+    string | null;
+
+  full_name:
+    string | null;
+
+  user_status:
+    GrowthOSUserStatus | null;
+
+  role:
+    GrowthOSBrandRole;
+
+  membership_status:
+    GrowthOSMembershipStatus;
+
+  is_default:
+    boolean;
+
+  membership_created_at:
+    string | null;
+
+  membership_updated_at:
+    string | null;
+
+  last_login_at:
+    string | null;
+
+};
+
+
+export async function listGrowthOSWorkspaceUsersFast(
+
+  workspaceId:
+    string,
+
+  brandId:
+    string
+
+):
+
+  Promise<
+    GrowthOSWorkspaceUser[]
+  > {
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedWorkspaceId =
+    String(
+      workspaceId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedBrandId =
+    String(
+      brandId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !normalizedWorkspaceId
+    ||
+    !normalizedBrandId
+  ) {
+
+    throw new Error(
+      'workspaceId and brandId are required'
+    );
+
+  }
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        WITH latest_memberships AS
+        (
+
+          SELECT
+            *
+
+          FROM
+            \`${projectId}.${DATASET_ID}.brand_memberships\`
+
+          WHERE
+
+            workspace_id =
+              @workspace_id
+
+            AND brand_id =
+              @brand_id
+
+          QUALIFY
+
+            ROW_NUMBER() OVER
+            (
+
+              PARTITION BY
+
+                user_id,
+
+                workspace_id,
+
+                brand_id
+
+              ORDER BY
+
+                updated_at DESC,
+
+                created_at DESC,
+
+                membership_id DESC
+
+            ) = 1
+
+        ),
+
+
+        latest_users AS
+        (
+
+          SELECT
+            *
+
+          FROM
+            \`${projectId}.${DATASET_ID}.users\`
+
+          QUALIFY
+
+            ROW_NUMBER() OVER
+            (
+
+              PARTITION BY
+                user_id
+
+              ORDER BY
+
+                updated_at DESC,
+
+                created_at DESC,
+
+                user_id DESC
+
+            ) = 1
+
+        )
+
+
+        SELECT
+
+          m.membership_id,
+
+          m.user_id,
+
+          u.email,
+
+          u.full_name,
+
+          u.status
+            AS user_status,
+
+          m.role,
+
+          m.status
+            AS membership_status,
+
+          COALESCE(
+            m.is_default,
+            FALSE
+          )
+            AS is_default,
+
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            m.created_at
+          )
+            AS membership_created_at,
+
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            m.updated_at
+          )
+            AS membership_updated_at,
+
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            u.last_login_at
+          )
+            AS last_login_at
+
+
+        FROM
+          latest_memberships
+          AS m
+
+
+        LEFT JOIN
+          latest_users
+          AS u
+
+        ON
+          u.user_id =
+            m.user_id
+
+
+        ORDER BY
+
+          CASE m.role
+
+            WHEN 'owner'
+              THEN 1
+
+            WHEN 'admin'
+              THEN 2
+
+            WHEN 'analyst'
+              THEN 3
+
+            WHEN 'viewer'
+              THEN 4
+
+            ELSE 99
+
+          END,
+
+          COALESCE(
+            u.full_name,
+            u.email,
+            m.user_id
+          )
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        workspace_id:
+          normalizedWorkspaceId,
+
+        brand_id:
+          normalizedBrandId,
+
+      },
+
+      types: {
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows
+    ||
+    []
+  ) as GrowthOSWorkspaceUser[];
+
+}

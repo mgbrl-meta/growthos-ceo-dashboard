@@ -147,61 +147,6 @@ const TITLES: Record<
 
   },
 
-
-  // ==========================================================
-  // APP INTEGRATIONS
-  // ==========================================================
-
-  'App Integrations': {
-
-    eyebrow:
-      'Data Sources',
-
-    title:
-      'App Integrations',
-
-    subtitle:
-      'Manage connected commerce, marketing and infrastructure platforms.',
-
-  },
-
-
-  // ==========================================================
-  // DATA HEALTH
-  // ==========================================================
-
-  'Data Health': {
-
-    eyebrow:
-      'Data Sources',
-
-    title:
-      'Data Health',
-
-    subtitle:
-      'Monitor collection, ingestion, processing and data freshness.',
-
-  },
-
-
-  // ==========================================================
-  // SYNC HISTORY
-  // ==========================================================
-
-  'Sync History': {
-
-    eyebrow:
-      'Data Sources',
-
-    title:
-      'Sync History',
-
-    subtitle:
-      'Review scheduled jobs, successful refreshes, failures and retries.',
-
-  },
-
-
   // ==========================================================
   // SETTINGS
   // ==========================================================

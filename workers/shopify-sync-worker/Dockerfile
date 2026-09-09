@@ -21,6 +21,7 @@ COPY shopify-context.js ./
 COPY shopify-auth.js ./
 COPY shopify-api.js ./
 COPY shopify-writer.js ./
+COPY shopify-customer-writer.js ./
 
 COPY shopify-bulk.js ./
 COPY shopify-backfill-state.js ./

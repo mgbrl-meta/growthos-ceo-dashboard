@@ -177,7 +177,7 @@ export default function WarehouseAudit() {
 
       const response =
         await fetch(
-          '/api/system/warehouse-audit',
+          '/api/admin/warehouse/audit',
           {
             cache:
               'no-store',
@@ -1502,3 +1502,4 @@ function formatDate(
   );
 
 }
+

@@ -5,6 +5,7 @@ import {
 } from 'react';
 
 import {
+  Activity,
   Building2,
   Boxes,
   CreditCard,
@@ -12,6 +13,7 @@ import {
   History,
   LayoutDashboard,
   Plug,
+  ServerCog,
   Settings,
   Users,
 } from 'lucide-react';
@@ -31,17 +33,20 @@ import AdminUsers
 import AdminIntegrations
   from './AdminIntegrations';
 
-import AdminDataOperations
-  from './AdminDataOperations';
-
 import AdminSyncHistory
   from './AdminSyncHistory';
 
 import AdminOverview
-  from './AdminOverview';  
+  from './AdminOverview';
 
 import AdminSystem
-  from './AdminSystem';  
+  from './AdminSystem';
+
+import WarehouseAudit
+  from './warehouse/WarehouseAudit';
+
+import AdminDataHealth
+  from './AdminDataHealth';  
 
 
 // ============================================================
@@ -55,7 +60,8 @@ type AdminTab =
   | 'Modules'
   | 'Users'
   | 'Integrations'
-  | 'Data Operations'
+  | 'Data Health'
+  | 'Warehouse'
   | 'Sync History'
   | 'System';
 
@@ -245,13 +251,27 @@ export default function AdminDashboard() {
               active={activeTab === 'Integrations'}
               onClick={() => setActiveTab('Integrations')}
             />
+          
+             {/* =================================================
+                DATA HEALTH
+            ================================================= */}
+            
+            <AdminNavItem
+              label="Data Health"
+              icon={Activity}
+              active={activeTab === 'Data Health'}
+              onClick={() => setActiveTab('Data Health')}
+            />
 
+            {/* =================================================
+                WAREHOUSE
+            ================================================= */}
 
             <AdminNavItem
-              label="Data Operations"
+              label="Warehouse"
               icon={Database}
-              active={activeTab === 'Data Operations'}
-              onClick={() => setActiveTab('Data Operations')}
+              active={activeTab === 'Warehouse'}
+              onClick={() => setActiveTab('Warehouse')}
             />
 
 
@@ -467,16 +487,28 @@ export default function AdminDashboard() {
               <AdminIntegrations />
 
             )}
-
+            
 
             {/* ================================================
-                DATA OPERATIONS
+                DATA HEALTH
             ================================================ */}
 
             {activeTab ===
-              'Data Operations' && (
+                'Data Health' && (
 
-              <AdminDataOperations />
+               <AdminDataHealth />
+
+            )}
+
+
+            {/* ================================================
+                WAREHOUSE
+            ================================================ */}
+
+            {activeTab ===
+              'Warehouse' && (
+
+              <WarehouseAudit />
 
             )}
 
@@ -500,7 +532,7 @@ export default function AdminDashboard() {
             {activeTab ===
               'System' && (
 
-               <AdminSystem />
+              <AdminSystem />
 
             )}
 
@@ -617,110 +649,6 @@ function AdminNavItem({
 
 
 // ============================================================
-// PLACEHOLDER
-// ============================================================
-
-function AdminPlaceholder({
-
-  title,
-
-  description,
-
-}: {
-
-  title:
-    string;
-
-  description:
-    string;
-
-}) {
-
-  return (
-
-    <section
-      className="
-        gos-panel
-        !p-4
-      "
-    >
-
-      <div className="max-w-2xl">
-
-        <p
-          className="
-            text-[9px]
-            font-semibold
-            uppercase
-            tracking-[0.16em]
-
-            text-violet-600
-          "
-        >
-          Admin
-        </p>
-
-
-        <h2
-          className="
-            mt-1
-
-            text-[15px]
-            font-semibold
-            tracking-[-0.03em]
-
-            text-slate-950
-          "
-        >
-          {title}
-        </h2>
-
-
-        <p
-          className="
-            mt-1.5
-
-            text-[11px]
-            leading-5
-
-            text-slate-500
-          "
-        >
-          {description}
-        </p>
-
-
-        <span
-          className="
-            mt-3
-            inline-flex
-
-            rounded-full
-
-            bg-slate-100
-
-            px-2.5
-            py-1
-
-            text-[9px]
-            font-semibold
-
-            text-slate-500
-          "
-        >
-          Admin shell ready
-        </span>
-
-      </div>
-
-    </section>
-
-  );
-
-}
-
-
-// ============================================================
 // HEADER CONTENT
 // ============================================================
 
@@ -753,8 +681,11 @@ function getAdminTitle(
     Integrations:
       'Integrations',
 
-    'Data Operations':
-      'Data Operations',
+    'Data Health':
+      'Data Health',  
+
+    Warehouse:
+      'Warehouse',
 
     'Sync History':
       'Sync History',
@@ -771,6 +702,10 @@ function getAdminTitle(
 
 }
 
+
+// ============================================================
+// HEADER SUBTITLE
+// ============================================================
 
 function getAdminSubtitle(
   activeTab:
@@ -801,8 +736,11 @@ function getAdminSubtitle(
     Integrations:
       'Review and manage client integration setup and status.',
 
-    'Data Operations':
-      'Monitor data ingestion, processing and operational health.',
+    'Data Health':
+      'Monitor cross-client ingestion freshness, failures and synchronization health.',  
+
+    Warehouse:
+      'Audit BigQuery tables, storage architecture, partitioning and warehouse risks.',
 
     'Sync History':
       'Review ingestion runs, failures, processing volume and retry history.',
