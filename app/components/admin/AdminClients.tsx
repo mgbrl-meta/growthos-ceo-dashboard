@@ -2,6 +2,7 @@
 
 import {
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -10,48 +11,194 @@ import {
   ArrowLeft,
   Building2,
   ChevronRight,
-  Database,
-  ExternalLink,
-  Plus,
   Plug,
+  RefreshCw,
   Search,
-  X,
+  Users,
+  XCircle,
 } from 'lucide-react';
-
-import {
-  type AdminClient,
-  type ClientStatus,
-  type ModuleOverride,
-  type SetupStatus,
-  useAdminStore,
-} from './AdminStore';
-
-import AdminClientUsers
-  from './AdminClientUsers';
-
-import AdminClientIntegrations
-  from './AdminClientIntegrations';  
-
-import AdminClientDataSetup
-  from './AdminClientDataSetup';  
 
 
 // ============================================================
 // TYPES
 // ============================================================
 
-type DetailTab =
-  | 'Overview'
-  | 'Modules'
-  | 'Users'
-  | 'Integrations'
-  | 'Data Setup';
+type AdminClient = {
+
+  workspaceId:
+    string;
+
+  workspaceName:
+    string | null;
+
+  workspaceSlug:
+    string | null;
+
+  workspaceStatus:
+    string | null;
+
+  brandId:
+    string;
+
+  brandName:
+    string | null;
+
+  brandSlug:
+    string | null;
+
+  brandStatus:
+    string | null;
+
+  currency:
+    string | null;
+
+  timezone:
+    string | null;
+
+  createdAt:
+    string | null;
+
+  updatedAt:
+    string | null;
 
 
-type OrderOverrideMode =
-  | 'default'
-  | 'custom'
-  | 'unlimited';
+  // ----------------------------------------------------------
+  // SUBSCRIPTION
+  // ----------------------------------------------------------
+
+  subscriptionId:
+    string | null;
+
+  subscriptionStatus:
+    string | null;
+
+  planId:
+    string | null;
+
+  planName:
+    string | null;
+
+  planStatus:
+    string | null;
+
+  orderLimitOverrideMode:
+    string | null;
+
+  monthlyOrderLimitOverride:
+    number | null;
+
+  planMonthlyOrderLimit:
+    number | null;
+
+  effectiveMonthlyOrderLimit:
+    number | null;
+
+  unlimitedOrders:
+    boolean;
+
+  maxUsers:
+    number | null;
+
+
+  // ----------------------------------------------------------
+  // USERS
+  // ----------------------------------------------------------
+
+  totalUsers:
+    number;
+
+  activeUsers:
+    number;
+
+  owners:
+    number;
+
+  admins:
+    number;
+
+
+  // ----------------------------------------------------------
+  // INTEGRATIONS
+  // ----------------------------------------------------------
+
+  integrations:
+    number;
+
+  connectedIntegrations:
+    number;
+
+};
+
+
+type AdminClientsResponse = {
+
+  ok:
+    boolean;
+
+  scope?:
+    string;
+
+  summary?: {
+
+    total:
+      number;
+
+    active:
+      number;
+
+    setup:
+      number;
+
+    suspended:
+      number;
+
+    withSubscription:
+      number;
+
+    withoutSubscription:
+      number;
+
+    users:
+      number;
+
+    integrations:
+      number;
+
+  };
+
+  clients?:
+    AdminClient[];
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+    source?:
+      string;
+
+    readOnly?:
+      boolean;
+
+  };
+
+  error?:
+    string;
+
+};
+
+
+type StatusFilter =
+  | 'all'
+  | 'active'
+  | 'setup'
+  | 'suspended';
+
+
+type SubscriptionFilter =
+  | 'all'
+  | 'with'
+  | 'without';
 
 
 // ============================================================
@@ -62,25 +209,44 @@ export default function AdminClients() {
 
 
   // ==========================================================
-  // SHARED ADMIN STORE
+  // SERVER DATA
   // ==========================================================
 
-  const {
-    clients,
-    setClients,
-    plans,
-    modules,
-    getPlan,
-    getClientModuleAccess,
-    getClientOrderLimit,
-    getClientUserCount,
-    getClientIntegrationCount,
-  } =
-    useAdminStore();
+  const [
+    data,
+    setData,
+  ] =
+    useState<
+      AdminClientsResponse |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
 
 
   // ==========================================================
-  // LOCAL UI STATE
+  // FILTERS
   // ==========================================================
 
   const [
@@ -93,8 +259,35 @@ export default function AdminClients() {
 
 
   const [
-    selectedClientId,
-    setSelectedClientId,
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>(
+      'all'
+    );
+
+
+  const [
+    planFilter,
+    setPlanFilter,
+  ] =
+    useState(
+      'all'
+    );
+
+
+  const [
+    subscriptionFilter,
+    setSubscriptionFilter,
+  ] =
+    useState<SubscriptionFilter>(
+      'all'
+    );
+
+
+  const [
+    selectedClientKey,
+    setSelectedClientKey,
   ] =
     useState<
       string |
@@ -104,57 +297,193 @@ export default function AdminClients() {
     );
 
 
-  const [
-    detailTab,
-    setDetailTab,
-  ] =
-    useState<DetailTab>(
-      'Overview'
+  // ==========================================================
+  // LOAD
+  // ==========================================================
+
+  async function loadClients() {
+
+    setLoading(
+      true
     );
 
 
-  const [
-    addOpen,
-    setAddOpen,
-  ] =
-    useState(
-      false
+    setError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/clients',
+          {
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+          }
+        );
+
+
+      const json:
+        AdminClientsResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load Admin Clients'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+    } catch (
+      error:
+        any
+    ) {
+
+      console.error(
+        'ADMIN_CLIENTS_UI_ERROR',
+        error
+      );
+
+
+      setData(
+        null
+      );
+
+
+      setError(
+        String(
+          error?.message
+          ||
+          'Unable to load Admin Clients'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadClients();
+
+    },
+    []
+  );
+
+
+  // ==========================================================
+  // CLIENTS
+  // ==========================================================
+
+  const clients =
+    data?.clients
+    ||
+    [];
+
+
+  // ==========================================================
+  // PLAN OPTIONS
+  // ==========================================================
+
+  const plans =
+    useMemo(
+      () => {
+
+        const map =
+          new Map<
+            string,
+            string
+          >();
+
+
+        clients.forEach(
+          client => {
+
+            if (
+              !client.planId
+            ) {
+
+              return;
+
+            }
+
+
+            map.set(
+              client.planId,
+              client.planName
+              ||
+              client.planId
+            );
+
+          }
+        );
+
+
+        return Array
+          .from(
+            map.entries()
+          )
+          .map(
+            (
+              [
+                value,
+                label,
+              ]
+            ) => ({
+
+              value,
+
+              label,
+
+            })
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              a.label.localeCompare(
+                b.label
+              )
+          );
+
+      },
+      [
+        clients,
+      ]
     );
 
 
   // ==========================================================
-  // NEW CLIENT
-  // ==========================================================
-
-  const [
-    newClientName,
-    setNewClientName,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newClientDomain,
-    setNewClientDomain,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newPlanId,
-    setNewPlanId,
-  ] =
-    useState(
-      'starter'
-    );
-
-
-  // ==========================================================
-  // FILTER
+  // FILTERED CLIENTS
   // ==========================================================
 
   const filteredClients =
@@ -167,49 +496,122 @@ export default function AdminClients() {
             .toLowerCase();
 
 
-        if (!query) {
-
-          return clients;
-
-        }
-
-
         return clients.filter(
           client => {
 
-            const plan =
-              getPlan(
-                client.planId
-              );
+
+            // --------------------------------------------------
+            // STATUS
+            // --------------------------------------------------
+
+            if (
+              statusFilter !==
+                'all'
+              &&
+              getClientStatusGroup(
+                client
+              ) !==
+                statusFilter
+            ) {
+
+              return false;
+
+            }
 
 
-            return (
+            // --------------------------------------------------
+            // PLAN
+            // --------------------------------------------------
 
-              client.name
-                .toLowerCase()
-                .includes(
-                  query
+            if (
+              planFilter !==
+                'all'
+              &&
+              client.planId !==
+                planFilter
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SUBSCRIPTION
+            // --------------------------------------------------
+
+            if (
+              subscriptionFilter ===
+                'with'
+              &&
+              !client.subscriptionId
+            ) {
+
+              return false;
+
+            }
+
+
+            if (
+              subscriptionFilter ===
+                'without'
+              &&
+              client.subscriptionId
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SEARCH
+            // --------------------------------------------------
+
+            if (!query) {
+
+              return true;
+
+            }
+
+
+            const haystack =
+              [
+
+                client.workspaceId,
+                client.workspaceName,
+                client.workspaceSlug,
+                client.workspaceStatus,
+
+                client.brandId,
+                client.brandName,
+                client.brandSlug,
+                client.brandStatus,
+
+                client.currency,
+                client.timezone,
+
+                client.subscriptionId,
+                client.subscriptionStatus,
+
+                client.planId,
+                client.planName,
+                client.planStatus,
+
+                client.orderLimitOverrideMode,
+
+              ]
+                .filter(
+                  Boolean
                 )
-
-              ||
-
-              client.domain
-                .toLowerCase()
-                .includes(
-                  query
+                .join(
+                  ' '
                 )
+                .toLowerCase();
 
-              ||
 
-              (
-                plan?.name ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
-                )
-
+            return haystack.includes(
+              query
             );
 
           }
@@ -218,10 +620,92 @@ export default function AdminClients() {
       },
       [
         clients,
-        plans,
         search,
+        statusFilter,
+        planFilter,
+        subscriptionFilter,
       ]
     );
+
+
+  // ==========================================================
+  // SUMMARY
+  // ==========================================================
+
+  const summary =
+    data?.summary
+    ||
+    {
+
+      total:
+        clients.length,
+
+      active:
+        clients.filter(
+          client =>
+            getClientStatusGroup(
+              client
+            ) ===
+            'active'
+        ).length,
+
+      setup:
+        clients.filter(
+          client =>
+            getClientStatusGroup(
+              client
+            ) ===
+            'setup'
+        ).length,
+
+      suspended:
+        clients.filter(
+          client =>
+            getClientStatusGroup(
+              client
+            ) ===
+            'suspended'
+        ).length,
+
+      withSubscription:
+        clients.filter(
+          client =>
+            Boolean(
+              client.subscriptionId
+            )
+        ).length,
+
+      withoutSubscription:
+        clients.filter(
+          client =>
+            !client.subscriptionId
+        ).length,
+
+      users:
+        clients.reduce(
+          (
+            total,
+            client
+          ) =>
+            total
+            +
+            client.totalUsers,
+          0
+        ),
+
+      integrations:
+        clients.reduce(
+          (
+            total,
+            client
+          ) =>
+            total
+            +
+            client.integrations,
+          0
+        ),
+
+    };
 
 
   // ==========================================================
@@ -231,178 +715,164 @@ export default function AdminClients() {
   const selectedClient =
     clients.find(
       client =>
-        client.id ===
-        selectedClientId
+        getClientKey(
+          client
+        ) ===
+        selectedClientKey
     )
     ||
     null;
 
 
   // ==========================================================
-  // ENABLED MODULE COUNT
+  // LOADING
   // ==========================================================
 
-  function getEnabledModuleCount(
-    client:
-      AdminClient
+  if (
+    loading
+    &&
+    !data
   ) {
 
-    return modules.filter(
-      module =>
-        getClientModuleAccess(
-          client,
-          module.id
-        ).enabled
-    ).length;
+    return (
+
+      <section className="gos-panel !p-4">
+
+        <p
+          className="
+            text-[10px]
+
+            text-slate-500
+          "
+        >
+          Loading Clients...
+        </p>
+
+      </section>
+
+    );
 
   }
 
 
   // ==========================================================
-  // CREATE CLIENT
+  // ERROR
   // ==========================================================
 
-  function createClient() {
+  if (
+    error
+    &&
+    !data
+  ) {
 
-    const name =
-      newClientName.trim();
+    return (
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-red-200
+
+          bg-red-50
+
+          p-4
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-start
+            justify-between
+            gap-3
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              gap-2
+            "
+          >
+
+            <XCircle
+              size={15}
+
+              className="
+                mt-0.5
+                shrink-0
+
+                text-red-600
+              "
+            />
 
 
-    if (!name) {
+            <div>
 
-      return;
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
 
-    }
-
-
-    const slug =
-      name
-        .toLowerCase()
-        .replace(
-          /[^a-z0-9]+/g,
-          '-'
-        )
-        .replace(
-          /^-|-$/g,
-          ''
-        );
+                  text-red-800
+                "
+              >
+                Unable to load Clients
+              </p>
 
 
-    const client:
-      AdminClient = {
+              <p
+                className="
+                  mt-1
 
-      id:
-        `${slug}-${Date.now()}`,
+                  text-[9px]
 
-      name,
+                  text-red-700
+                "
+              >
+                {error}
+              </p>
 
-      slug,
+            </div>
 
-      domain:
-        newClientDomain.trim(),
+          </div>
 
-      planId:
-        newPlanId,
 
-      status:
-        'setup',
+          <button
 
-      // ------------------------------------------------------
-      // Legacy compatibility fields.
-      //
-      // Real counts are calculated from AdminStore registries.
-      // ------------------------------------------------------
+            type="button"
 
-      users:
-        0,
-
-      integrations:
-        0,
-
-      createdAt:
-        new Date()
-          .toLocaleDateString(
-            'en-IN',
-            {
-              day:
-                '2-digit',
-
-              month:
-                'short',
-
-              year:
-                'numeric',
+            onClick={
+              loadClients
             }
-          ),
 
-      moduleOverrides:
-        {},
+            className="
+              h-7
 
-    };
+              rounded-[7px]
 
+              border
+              border-red-200
 
-    setClients(
-      previous => [
-        client,
-        ...previous,
-      ]
-    );
+              bg-white
 
+              px-2.5
 
-    setAddOpen(
-      false
-    );
+              text-[9px]
+              font-semibold
 
+              text-red-700
+            "
+          >
+            Retry
+          </button>
 
-    setNewClientName(
-      ''
-    );
+        </div>
 
+      </section>
 
-    setNewClientDomain(
-      ''
-    );
-
-
-    setNewPlanId(
-      plans[0]?.id ||
-      'starter'
-    );
-
-
-    setSelectedClientId(
-      client.id
-    );
-
-
-    setDetailTab(
-      'Overview'
-    );
-
-  }
-
-
-  // ==========================================================
-  // UPDATE CLIENT
-  // ==========================================================
-
-  function updateClient(
-    updatedClient:
-      AdminClient
-  ) {
-
-    setClients(
-      previous =>
-        previous.map(
-          client =>
-
-            client.id ===
-              updatedClient.id
-
-              ? updatedClient
-
-              : client
-        )
     );
 
   }
@@ -424,29 +894,10 @@ export default function AdminClients() {
           selectedClient
         }
 
-        activeTab={
-          detailTab
-        }
-
-        setActiveTab={
-          setDetailTab
-        }
-
-        onBack={() => {
-
-          setSelectedClientId(
+        onBack={() =>
+          setSelectedClientKey(
             null
-          );
-
-
-          setDetailTab(
-            'Overview'
-          );
-
-        }}
-
-        onChange={
-          updateClient
+          )
         }
 
       />
@@ -457,7 +908,7 @@ export default function AdminClients() {
 
 
   // ==========================================================
-  // CLIENT LIST
+  // LIST
   // ==========================================================
 
   return (
@@ -466,7 +917,7 @@ export default function AdminClients() {
 
 
       {/* =====================================================
-          TOOLBAR
+          HEADER
       ===================================================== */}
 
       <section
@@ -479,13 +930,13 @@ export default function AdminClients() {
 
           p-3
 
-          md:flex-row
-          md:items-center
-          md:justify-between
+          xl:flex-row
+          xl:items-center
+          xl:justify-between
         "
       >
 
-        <div className="min-w-0">
+        <div>
 
           <h2
             className="
@@ -509,138 +960,63 @@ export default function AdminClients() {
               text-slate-500
             "
           >
-            Manage plans, order allowances, modules, users and integrations.
+            Global registry of Growth OS workspaces, brands, subscriptions, users and integrations.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
+        <button
 
-            sm:flex-row
-            sm:items-center
+          type="button"
+
+          onClick={
+            loadClients
+          }
+
+          disabled={
+            loading
+          }
+
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-1.5
+
+            rounded-[8px]
+
+            border
+            border-slate-200
+
+            bg-white
+
+            px-3
+
+            text-[9px]
+            font-semibold
+
+            text-slate-700
+
+            hover:bg-slate-50
+
+            disabled:opacity-60
           "
         >
 
-          <div
-            className="
-              relative
-              w-full
+          <RefreshCw
+            size={12}
 
-              sm:w-[260px]
-            "
-          >
+            className={
+              loading
+                ? 'animate-spin'
+                : ''
+            }
+          />
 
-            <Search
-              size={14}
-              className="
-                absolute
-                left-2.5
-                top-1/2
+          Refresh
 
-                -translate-y-1/2
-
-                text-slate-400
-              "
-            />
-
-
-            <input
-
-              value={
-                search
-              }
-
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
-
-              placeholder="Search clients"
-
-              className="
-                h-8
-                w-full
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                pl-8
-                pr-3
-
-                text-[11px]
-
-                outline-none
-
-                focus:border-violet-400
-                focus:ring-2
-                focus:ring-violet-100
-              "
-
-            />
-
-          </div>
-
-
-          <button
-
-            type="button"
-
-            onClick={() => {
-
-              setNewPlanId(
-                plans[0]?.id ||
-                ''
-              );
-
-
-              setAddOpen(
-                true
-              );
-
-            }}
-
-            className="
-              inline-flex
-              h-8
-              items-center
-              justify-center
-              gap-1.5
-
-              rounded-[8px]
-
-              bg-slate-950
-
-              px-3
-
-              text-[10px]
-              font-semibold
-
-              text-white
-
-              hover:bg-slate-800
-            "
-          >
-
-            <Plus
-              size={14}
-            />
-
-            Add Client
-
-          </button>
-
-        </div>
+        </button>
 
       </section>
 
@@ -656,13 +1032,14 @@ export default function AdminClients() {
           gap-2
 
           md:grid-cols-4
+          xl:grid-cols-8
         "
       >
 
         <SummaryCard
-          label="Total Clients"
+          label="Clients"
           value={
-            clients.length
+            summary.total
           }
         />
 
@@ -670,35 +1047,60 @@ export default function AdminClients() {
         <SummaryCard
           label="Active"
           value={
-            clients.filter(
-              client =>
-                client.status ===
-                'active'
-            ).length
+            summary.active
           }
+          tone="green"
         />
 
 
         <SummaryCard
-          label="Setup Required"
+          label="Setup"
           value={
-            clients.filter(
-              client =>
-                client.status ===
-                'setup'
-            ).length
+            summary.setup
           }
+          tone="amber"
         />
 
 
         <SummaryCard
           label="Suspended"
           value={
-            clients.filter(
-              client =>
-                client.status ===
-                'suspended'
-            ).length
+            summary.suspended
+          }
+          tone="red"
+        />
+
+
+        <SummaryCard
+          label="Subscribed"
+          value={
+            summary.withSubscription
+          }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="No Plan"
+          value={
+            summary.withoutSubscription
+          }
+          tone="amber"
+        />
+
+
+        <SummaryCard
+          label="Users"
+          value={
+            summary.users
+          }
+        />
+
+
+        <SummaryCard
+          label="Integrations"
+          value={
+            summary.integrations
           }
         />
 
@@ -706,13 +1108,234 @@ export default function AdminClients() {
 
 
       {/* =====================================================
-          CLIENT TABLE
+          FILTERS
+      ===================================================== */}
+
+      <section
+        className="
+          gos-panel
+
+          flex
+          flex-col
+          gap-2
+
+          !p-3
+
+          xl:flex-row
+          xl:items-center
+        "
+      >
+
+        <div
+          className="
+            relative
+
+            w-full
+
+            xl:max-w-[340px]
+          "
+        >
+
+          <Search
+            size={14}
+
+            className="
+              absolute
+              left-2.5
+              top-1/2
+
+              -translate-y-1/2
+
+              text-slate-400
+            "
+          />
+
+
+          <input
+
+            value={
+              search
+            }
+
+            onChange={
+              event =>
+                setSearch(
+                  event.target.value
+                )
+            }
+
+            placeholder="Search client, workspace, plan..."
+
+            className="
+              h-8
+              w-full
+
+              rounded-[8px]
+
+              border
+              border-slate-300
+
+              bg-white
+
+              pl-8
+              pr-3
+
+              text-[10px]
+
+              outline-none
+
+              focus:border-violet-400
+              focus:ring-2
+              focus:ring-violet-100
+            "
+
+          />
+
+        </div>
+
+
+        <select
+
+          value={
+            statusFilter
+          }
+
+          onChange={
+            event =>
+              setStatusFilter(
+                event.target.value as StatusFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Status
+          </option>
+
+          <option value="active">
+            Active
+          </option>
+
+          <option value="setup">
+            Setup
+          </option>
+
+          <option value="suspended">
+            Suspended
+          </option>
+
+        </select>
+
+
+        <select
+
+          value={
+            planFilter
+          }
+
+          onChange={
+            event =>
+              setPlanFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Plans
+          </option>
+
+
+          {plans.map(
+            plan => (
+
+              <option
+
+                key={
+                  plan.value
+                }
+
+                value={
+                  plan.value
+                }
+
+              >
+                {plan.label}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            subscriptionFilter
+          }
+
+          onChange={
+            event =>
+              setSubscriptionFilter(
+                event.target.value as SubscriptionFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Subscription States
+          </option>
+
+          <option value="with">
+            With Subscription
+          </option>
+
+          <option value="without">
+            Without Subscription
+          </option>
+
+        </select>
+
+
+        <div
+          className="
+            ml-auto
+
+            whitespace-nowrap
+
+            text-[9px]
+
+            text-slate-500
+          "
+        >
+          {filteredClients.length}
+          {' / '}
+          {clients.length}
+          {' clients'}
+        </div>
+
+      </section>
+
+
+      {/* =====================================================
+          TABLE
       ===================================================== */}
 
       <section className="gos-panel !p-0">
 
         <div
           className="
+            flex
+            items-center
+            justify-between
+
             border-b
             border-slate-200
 
@@ -721,22 +1344,76 @@ export default function AdminClients() {
           "
         >
 
-          <h3 className="gos-section-title">
-            Clients
-          </h3>
+          <div>
+
+            <h3 className="gos-section-title">
+              Clients
+            </h3>
 
 
-          <p
-            className="
-              mt-0.5
+            <p
+              className="
+                mt-0.5
 
-              text-[9px]
+                text-[9px]
 
-              text-slate-500
-            "
-          >
-            {filteredClients.length} workspace{filteredClients.length === 1 ? '' : 's'}
-          </p>
+                text-slate-500
+              "
+            >
+              One row per Growth OS workspace and brand.
+            </p>
+
+          </div>
+
+
+          {(
+            search
+            ||
+            statusFilter !==
+              'all'
+            ||
+            planFilter !==
+              'all'
+            ||
+            subscriptionFilter !==
+              'all'
+          ) && (
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setSearch(
+                  ''
+                );
+
+                setStatusFilter(
+                  'all'
+                );
+
+                setPlanFilter(
+                  'all'
+                );
+
+                setSubscriptionFilter(
+                  'all'
+                );
+
+              }}
+
+              className="
+                text-[9px]
+                font-semibold
+
+                text-violet-600
+              "
+            >
+              Clear filters
+            </button>
+
+          )}
 
         </div>
 
@@ -745,8 +1422,8 @@ export default function AdminClients() {
 
           <table
             className="
-              min-w-[1100px]
               w-full
+              min-w-[1350px]
 
               border-collapse
             "
@@ -780,15 +1457,15 @@ export default function AdminClients() {
                 </TableHeader>
 
                 <TableHeader>
-                  Modules
-                </TableHeader>
-
-                <TableHeader>
                   Users
                 </TableHeader>
 
                 <TableHeader>
                   Integrations
+                </TableHeader>
+
+                <TableHeader>
+                  Currency
                 </TableHeader>
 
                 <TableHeader>
@@ -807,272 +1484,330 @@ export default function AdminClients() {
             <tbody>
 
               {filteredClients.map(
-                client => {
+                client => (
 
-                  const plan =
-                    getPlan(
-                      client.planId
-                    );
+                  <tr
+
+                    key={
+                      getClientKey(
+                        client
+                      )
+                    }
+
+                    className="
+                      border-b
+                      border-slate-100
+
+                      last:border-0
+
+                      hover:bg-slate-50/70
+                    "
+                  >
 
 
-                  return (
+                    {/* CLIENT */}
 
-                    <tr
-                      key={
-                        client.id
-                      }
+                    <td className="px-3 py-2.5">
 
-                      className="
-                        border-b
-                        border-slate-100
-
-                        last:border-0
-
-                        hover:bg-slate-50/70
-                      "
-                    >
-
-                      <td className="px-3 py-2">
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-2.5
+                        "
+                      >
 
                         <div
                           className="
                             flex
+                            h-8
+                            w-8
+                            shrink-0
                             items-center
-                            gap-2.5
+                            justify-center
+
+                            rounded-[8px]
+
+                            bg-violet-50
+
+                            text-violet-600
                           "
                         >
+                          <Building2
+                            size={15}
+                          />
+                        </div>
+
+
+                        <div className="min-w-0">
 
                           <div
                             className="
-                              flex
-                              h-8
-                              w-8
-                              shrink-0
-                              items-center
-                              justify-center
+                              text-[10px]
+                              font-semibold
 
-                              rounded-[8px]
-
-                              bg-violet-50
-
-                              text-violet-600
+                              text-slate-900
                             "
                           >
-
-                            <Building2
-                              size={15}
-                            />
-
+                            {getClientName(
+                              client
+                            )}
                           </div>
 
 
-                          <div className="min-w-0">
+                          <div
+                            className="
+                              mt-0.5
 
-                            <div
-                              className="
-                                text-[11px]
-                                font-semibold
+                              max-w-[250px]
 
-                                text-slate-900
-                              "
-                            >
-                              {client.name}
-                            </div>
+                              truncate
 
+                              font-mono
+                              text-[8px]
 
-                            <div
-                              className="
-                                mt-0.5
-
-                                max-w-[220px]
-
-                                truncate
-
-                                text-[9px]
-
-                                text-slate-500
-                              "
-                            >
-                              {client.domain ||
-                                'No domain configured'}
-                            </div>
-
+                              text-slate-500
+                            "
+                          >
+                            {client.workspaceId}
+                            {' · '}
+                            {client.brandId}
                           </div>
 
                         </div>
 
-                      </td>
+                      </div>
+
+                    </td>
 
 
-                      <td className="px-3 py-2">
+                    {/* STATUS */}
 
-                        <ClientStatusBadge
-                          status={
-                            client.status
-                          }
-                        />
+                    <td className="px-3 py-2.5">
 
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[10px]
-                          font-medium
-
-                          text-slate-700
-                        "
-                      >
-                        {plan?.name ||
-                          'No Plan'}
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[10px]
-                          font-semibold
-
-                          text-slate-800
-                        "
-                      >
-                        {formatOrderLimit(
-                          getClientOrderLimit(
-                            client
-                          )
-                        )}
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[10px]
-                          font-semibold
-
-                          text-slate-800
-                        "
-                      >
-                        {getEnabledModuleCount(
+                      <ClientStatusBadge
+                        client={
                           client
-                        )}
-                      </td>
+                        }
+                      />
+
+                    </td>
 
 
-                      <td
+                    {/* PLAN */}
+
+                    <td className="px-3 py-2.5">
+
+                      <div
                         className="
-                          px-3
-                          py-2
-
                           text-[10px]
                           font-semibold
 
                           text-slate-800
                         "
                       >
-                        {getClientUserCount(
-                          client.id
-                        )}
-                      </td>
+                        {client.planName
+                          ||
+                          'No Plan'}
+                      </div>
 
 
-                      <td
-                        className="
-                          px-3
-                          py-2
+                      {client.subscriptionStatus && (
 
-                          text-[10px]
-                          font-semibold
-
-                          text-slate-800
-                        "
-                      >
-                        {getClientIntegrationCount(
-                          client.id
-                        )}
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[9px]
-
-                          text-slate-500
-                        "
-                      >
-                        {client.createdAt}
-                      </td>
-
-
-                      <td className="px-3 py-2 text-right">
-
-                        <button
-
-                          type="button"
-
-                          onClick={() => {
-
-                            setSelectedClientId(
-                              client.id
-                            );
-
-
-                            setDetailTab(
-                              'Overview'
-                            );
-
-                          }}
-
+                        <div
                           className="
-                            inline-flex
-                            h-7
-                            items-center
-                            gap-1
+                            mt-0.5
 
-                            rounded-[7px]
+                            text-[8px]
 
-                            border
-                            border-slate-200
-
-                            bg-white
-
-                            px-2.5
-
-                            text-[9px]
-                            font-semibold
-
-                            text-slate-700
-
-                            hover:bg-slate-50
+                            text-slate-500
                           "
                         >
+                          {formatLabel(
+                            client.subscriptionStatus
+                          )}
+                        </div>
 
-                          Manage
+                      )}
 
-                          <ChevronRight
-                            size={12}
-                          />
+                    </td>
 
-                        </button>
 
-                      </td>
+                    {/* ORDERS */}
 
-                    </tr>
+                    <td
+                      className="
+                        px-3
+                        py-2.5
 
-                  );
+                        text-[10px]
+                        font-semibold
 
-                }
+                        text-slate-800
+                      "
+                    >
+                      {formatClientOrderLimit(
+                        client
+                      )}
+                    </td>
+
+
+                    {/* USERS */}
+
+                    <td className="px-3 py-2.5">
+
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-1.5
+
+                          text-[10px]
+                          font-semibold
+
+                          text-slate-800
+                        "
+                      >
+                        <Users
+                          size={12}
+
+                          className="
+                            text-slate-400
+                          "
+                        />
+
+                        {client.activeUsers}
+                        {' / '}
+                        {client.totalUsers}
+                      </div>
+
+                    </td>
+
+
+                    {/* INTEGRATIONS */}
+
+                    <td className="px-3 py-2.5">
+
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-1.5
+
+                          text-[10px]
+                          font-semibold
+
+                          text-slate-800
+                        "
+                      >
+                        <Plug
+                          size={12}
+
+                          className="
+                            text-slate-400
+                          "
+                        />
+
+                        {client.connectedIntegrations}
+                        {' / '}
+                        {client.integrations}
+                      </div>
+
+                    </td>
+
+
+                    {/* CURRENCY */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+                        font-semibold
+
+                        text-slate-600
+                      "
+                    >
+                      {client.currency
+                        ||
+                        '—'}
+                    </td>
+
+
+                    {/* CREATED */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        client.createdAt
+                      )
+                      ||
+                      '—'}
+                    </td>
+
+
+                    {/* ACTION */}
+
+                    <td className="px-3 py-2.5 text-right">
+
+                      <button
+
+                        type="button"
+
+                        onClick={() =>
+                          setSelectedClientKey(
+                            getClientKey(
+                              client
+                            )
+                          )
+                        }
+
+                        className="
+                          inline-flex
+                          h-7
+                          items-center
+                          gap-1
+
+                          rounded-[7px]
+
+                          border
+                          border-slate-200
+
+                          bg-white
+
+                          px-2.5
+
+                          text-[9px]
+                          font-semibold
+
+                          text-slate-700
+
+                          hover:bg-slate-50
+                        "
+                      >
+
+                        Inspect
+
+                        <ChevronRight
+                          size={12}
+                        />
+
+                      </button>
+
+                    </td>
+
+                  </tr>
+
+                )
               )}
 
 
@@ -1082,21 +1817,23 @@ export default function AdminClients() {
                 <tr>
 
                   <td
+
                     colSpan={
                       9
                     }
 
                     className="
                       px-4
-                      py-10
+                      py-14
 
                       text-center
+
                       text-[10px]
 
                       text-slate-500
                     "
                   >
-                    No clients found.
+                    No clients match the selected filters.
                   </td>
 
                 </tr>
@@ -1113,311 +1850,55 @@ export default function AdminClients() {
 
 
       {/* =====================================================
-          ADD CLIENT
+          SOURCE
       ===================================================== */}
 
-      {addOpen && (
+      <section
+        className="
+          rounded-[9px]
 
-        <div
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          px-3
+          py-2.5
+        "
+      >
+
+        <p
           className="
-            fixed
-            inset-0
-            z-[100]
+            text-[8px]
+            leading-4
 
-            flex
-            items-center
-            justify-center
-
-            bg-slate-950/40
-
-            p-4
-
-            backdrop-blur-[2px]
+            text-violet-700
           "
         >
+          Source of truth: Growth OS workspaces, brands, subscriptions, plans, memberships and integration connections. Admin Clients is read-only during this architecture phase.
+        </p>
 
-          <div
+
+        {data?.meta?.durationMs !==
+          undefined && (
+
+          <p
             className="
-              w-full
-              max-w-[540px]
+              mt-1
 
-              rounded-[14px]
+              text-[8px]
 
-              border
-              border-slate-200
-
-              bg-white
-
-              shadow-xl
+              text-violet-500
             "
           >
+            API runtime: {formatNumber(
+              data.meta.durationMs
+            )} ms
+          </p>
 
-            <div
-              className="
-                flex
-                items-center
-                justify-between
+        )}
 
-                border-b
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <div>
-
-                <h3
-                  className="
-                    text-[14px]
-                    font-semibold
-
-                    text-slate-950
-                  "
-                >
-                  Add Client
-                </h3>
-
-
-                <p
-                  className="
-                    mt-0.5
-
-                    text-[9px]
-
-                    text-slate-500
-                  "
-                >
-                  Create a new Growth OS client workspace.
-                </p>
-
-              </div>
-
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-                  setAddOpen(
-                    false
-                  )
-                }
-
-                className="
-                  flex
-                  h-7
-                  w-7
-                  items-center
-                  justify-center
-
-                  rounded-[7px]
-
-                  text-slate-400
-
-                  hover:bg-slate-100
-                "
-              >
-
-                <X
-                  size={15}
-                />
-
-              </button>
-
-            </div>
-
-
-            <div className="space-y-3 p-4">
-
-
-              <FormField
-                label="Client Name"
-              >
-
-                <input
-
-                  value={
-                    newClientName
-                  }
-
-                  onChange={
-                    event =>
-                      setNewClientName(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Example: Brillare"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <FormField
-                label="Store / Domain"
-              >
-
-                <input
-
-                  value={
-                    newClientDomain
-                  }
-
-                  onChange={
-                    event =>
-                      setNewClientDomain(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="example.com"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <FormField
-                label="Plan"
-              >
-
-                <select
-
-                  value={
-                    newPlanId
-                  }
-
-                  onChange={
-                    event =>
-                      setNewPlanId(
-                        event.target.value
-                      )
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  {plans.map(
-                    plan => (
-
-                      <option
-                        key={
-                          plan.id
-                        }
-                        value={
-                          plan.id
-                        }
-                      >
-                        {plan.name}
-                        {' · '}
-                        {formatOrderLimit(
-                          plan.monthlyOrderLimit
-                        )}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </FormField>
-
-            </div>
-
-
-            <div
-              className="
-                flex
-                justify-end
-                gap-2
-
-                border-t
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-                  setAddOpen(
-                    false
-                  )
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  border
-                  border-slate-200
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-slate-600
-                "
-              >
-                Cancel
-              </button>
-
-
-              <button
-
-                type="button"
-
-                disabled={
-                  !newClientName.trim()
-                  ||
-                  !newPlanId
-                }
-
-                onClick={
-                  createClient
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-
-                  disabled:opacity-40
-                "
-              >
-                Create Client
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      </section>
 
     </div>
 
@@ -1434,214 +1915,17 @@ function ClientDetail({
 
   client,
 
-  activeTab,
-
-  setActiveTab,
-
   onBack,
-
-  onChange,
 
 }: {
 
   client:
     AdminClient;
 
-  activeTab:
-    DetailTab;
-
-  setActiveTab:
-    (
-      tab:
-        DetailTab
-    ) => void;
-
   onBack:
     () => void;
 
-  onChange:
-    (
-      client:
-        AdminClient
-    ) => void;
-
 }) {
-
-
-  const {
-    plans,
-    modules,
-    getPlan,
-    getClientModuleAccess,
-    getClientOrderLimit,
-    getClientUserCount,
-    getClientIntegrationCount,
-  } =
-    useAdminStore();
-
-
-  const plan =
-    getPlan(
-      client.planId
-    );
-
-
-  const tabs:
-    DetailTab[] = [
-
-    'Overview',
-    'Modules',
-    'Users',
-    'Integrations',
-    'Data Setup',
-
-  ];
-
-
-  const enabledModuleCount =
-    modules.filter(
-      module =>
-        getClientModuleAccess(
-          client,
-          module.id
-        ).enabled
-    ).length;
-
-
-  // ==========================================================
-  // MODULE OVERRIDE
-  // ==========================================================
-
-  function setModuleOverride(
-
-    moduleId:
-      string,
-
-    override:
-      ModuleOverride
-
-  ) {
-
-    // --------------------------------------------------------
-    // Command Center remains mandatory.
-    // --------------------------------------------------------
-
-    if (
-      moduleId ===
-      'command-center'
-    ) {
-
-      return;
-
-    }
-
-
-    onChange({
-
-      ...client,
-
-      moduleOverrides: {
-
-        ...client.moduleOverrides,
-
-        [moduleId]:
-          override,
-
-      },
-
-    });
-
-  }
-
-
-  // ==========================================================
-  // ORDER OVERRIDE MODE
-  // ==========================================================
-
-  const orderOverrideMode:
-    OrderOverrideMode =
-
-    client.monthlyOrderLimitOverride ===
-      undefined
-
-      ? 'default'
-
-      : client.monthlyOrderLimitOverride ===
-          null
-
-        ? 'unlimited'
-
-        : 'custom';
-
-
-  function setOrderOverrideMode(
-    mode:
-      OrderOverrideMode
-  ) {
-
-    if (
-      mode ===
-      'default'
-    ) {
-
-      onChange({
-
-        ...client,
-
-        monthlyOrderLimitOverride:
-          undefined,
-
-      });
-
-
-      return;
-
-    }
-
-
-    if (
-      mode ===
-      'unlimited'
-    ) {
-
-      onChange({
-
-        ...client,
-
-        monthlyOrderLimitOverride:
-          null,
-
-      });
-
-
-      return;
-
-    }
-
-
-    onChange({
-
-      ...client,
-
-      monthlyOrderLimitOverride:
-
-        typeof client.monthlyOrderLimitOverride ===
-          'number'
-
-          ? client.monthlyOrderLimitOverride
-
-          : plan?.monthlyOrderLimit
-            ??
-            10000,
-
-    });
-
-  }
-
-
-  // ==========================================================
-  // UI
-  // ==========================================================
 
   return (
 
@@ -1660,9 +1944,9 @@ function ClientDetail({
             flex-col
             gap-3
 
-            lg:flex-row
-            lg:items-center
-            lg:justify-between
+            md:flex-row
+            md:items-center
+            md:justify-between
           "
         >
 
@@ -1697,16 +1981,12 @@ function ClientDetail({
 
                 bg-white
 
-                text-slate-500
-
                 hover:bg-slate-50
               "
             >
-
               <ArrowLeft
                 size={14}
               />
-
             </button>
 
 
@@ -1726,11 +2006,9 @@ function ClientDetail({
                 text-violet-600
               "
             >
-
               <Building2
                 size={17}
               />
-
             </div>
 
 
@@ -1753,13 +2031,15 @@ function ClientDetail({
                     text-slate-950
                   "
                 >
-                  {client.name}
+                  {getClientName(
+                    client
+                  )}
                 </h2>
 
 
                 <ClientStatusBadge
-                  status={
-                    client.status
+                  client={
+                    client
                   }
                 />
 
@@ -1770,16 +2050,15 @@ function ClientDetail({
                 className="
                   mt-0.5
 
-                  text-[9px]
+                  font-mono
+                  text-[8px]
 
                   text-slate-500
                 "
               >
-                {client.domain ||
-                  'No domain configured'}
+                {client.workspaceId}
                 {' · '}
-                {plan?.name ||
-                  'No Plan'}
+                {client.brandId}
               </p>
 
             </div>
@@ -1787,765 +2066,30 @@ function ClientDetail({
           </div>
 
 
-          <div
+          <span
             className="
-              flex
-              flex-wrap
-              gap-2
+              rounded-full
+
+              border
+              border-slate-200
+
+              bg-slate-50
+
+              px-2.5
+              py-1
+
+              text-[8px]
+              font-semibold
+
+              text-slate-500
             "
           >
-
-            <select
-
-              value={
-                client.status
-              }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...client,
-
-                    status:
-                      event.target.value as ClientStatus,
-
-                  })
-              }
-
-              className="
-                h-8
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                px-2.5
-
-                text-[10px]
-                font-medium
-
-                text-slate-700
-              "
-            >
-
-              <option value="active">
-                Active
-              </option>
-
-              <option value="setup">
-                Setup Required
-              </option>
-
-              <option value="suspended">
-                Suspended
-              </option>
-
-            </select>
-
-
-            <button
-
-              type="button"
-
-              disabled
-
-              title="Client workspace connection will be added after admin completion"
-
-              className="
-                inline-flex
-                h-8
-                items-center
-                gap-1.5
-
-                rounded-[8px]
-
-                border
-                border-slate-200
-
-                bg-white
-
-                px-3
-
-                text-[10px]
-                font-semibold
-
-                text-slate-400
-              "
-            >
-
-              <ExternalLink
-                size={13}
-              />
-
-              Open Workspace
-
-            </button>
-
-          </div>
+            Read Only
+          </span>
 
         </div>
 
       </section>
-
-
-      {/* =====================================================
-          DETAIL NAV
-      ===================================================== */}
-
-      <section
-        className="
-          gos-card
-
-          flex
-          gap-1
-
-          overflow-x-auto
-
-          p-1
-        "
-      >
-
-        {tabs.map(
-          tab => (
-
-            <button
-
-              key={
-                tab
-              }
-
-              type="button"
-
-              onClick={() =>
-                setActiveTab(
-                  tab
-                )
-              }
-
-              className={`
-                h-8
-                shrink-0
-
-                rounded-[8px]
-
-                px-3
-
-                text-[10px]
-                font-semibold
-
-                transition
-
-                ${
-                  activeTab ===
-                    tab
-
-                    ? `
-                      bg-slate-950
-                      text-white
-                    `
-
-                    : `
-                      text-slate-500
-
-                      hover:bg-slate-100
-                      hover:text-slate-900
-                    `
-                }
-              `}
-            >
-              {tab}
-            </button>
-
-          )
-        )}
-
-      </section>
-
-
-      {/* =====================================================
-          OVERVIEW
-      ===================================================== */}
-
-      {activeTab ===
-        'Overview' && (
-
-        <div className="space-y-3">
-
-
-          {/* ===============================================
-              SUMMARY
-          =============================================== */}
-
-          <section
-            className="
-              grid
-              grid-cols-2
-              gap-2
-
-              md:grid-cols-4
-            "
-          >
-
-            <SummaryCard
-              label="Plan"
-              value={
-                plan?.name ||
-                'None'
-              }
-            />
-
-
-            <SummaryCard
-              label="Orders / Month"
-              value={
-                formatOrderLimit(
-                  getClientOrderLimit(
-                    client
-                  )
-                )
-              }
-            />
-
-
-            <SummaryCard
-              label="Modules"
-              value={
-                enabledModuleCount
-              }
-            />
-
-
-            <SummaryCard
-              label="Users"
-              value={
-                getClientUserCount(
-                  client.id
-                )
-              }
-            />
-
-          </section>
-
-
-          {/* ===============================================
-              COMMERCIAL ACCESS
-          =============================================== */}
-
-          <section className="gos-panel !p-3.5">
-
-            <h3 className="gos-section-title">
-              Commercial Access
-            </h3>
-
-
-            <p
-              className="
-                mt-0.5
-
-                text-[9px]
-
-                text-slate-500
-              "
-            >
-              Assign the plan and optionally override this client's monthly order allowance.
-            </p>
-
-
-            <div
-              className="
-                mt-3
-
-                grid
-                grid-cols-1
-                gap-3
-
-                lg:grid-cols-3
-              "
-            >
-
-              <FormField
-                label="Assigned Plan"
-              >
-
-                <select
-
-                  value={
-                    client.planId
-                  }
-
-                  onChange={
-                    event =>
-                      onChange({
-
-                        ...client,
-
-                        planId:
-                          event.target.value,
-
-                      })
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  {plans.map(
-                    item => (
-
-                      <option
-                        key={
-                          item.id
-                        }
-                        value={
-                          item.id
-                        }
-                      >
-                        {item.name}
-                        {' · '}
-                        {formatOrderLimit(
-                          item.monthlyOrderLimit
-                        )}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </FormField>
-
-
-              <FormField
-                label="Order Limit Rule"
-              >
-
-                <select
-
-                  value={
-                    orderOverrideMode
-                  }
-
-                  onChange={
-                    event =>
-                      setOrderOverrideMode(
-                        event.target.value as OrderOverrideMode
-                      )
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  <option value="default">
-                    Use Plan Default
-                  </option>
-
-                  <option value="custom">
-                    Custom Limit
-                  </option>
-
-                  <option value="unlimited">
-                    Unlimited
-                  </option>
-
-                </select>
-
-              </FormField>
-
-
-              <FormField
-                label="Custom Monthly Limit"
-              >
-
-                <input
-
-                  type="number"
-
-                  min="1"
-
-                  disabled={
-                    orderOverrideMode !==
-                    'custom'
-                  }
-
-                  value={
-
-                    typeof client.monthlyOrderLimitOverride ===
-                      'number'
-
-                      ? client.monthlyOrderLimitOverride
-
-                      : ''
-
-                  }
-
-                  placeholder={
-                    orderOverrideMode ===
-                      'custom'
-
-                      ? 'Enter monthly orders'
-
-                      : 'Not applicable'
-                  }
-
-                  onChange={
-                    event =>
-                      onChange({
-
-                        ...client,
-
-                        monthlyOrderLimitOverride:
-                          parsePositiveNumber(
-                            event.target.value
-                          ),
-
-                      })
-                  }
-
-                  className="
-                    gos-input
-                    w-full
-
-                    disabled:cursor-not-allowed
-                    disabled:bg-slate-100
-                    disabled:text-slate-400
-                  "
-
-                />
-
-              </FormField>
-
-            </div>
-
-
-            <div
-              className="
-                mt-3
-
-                grid
-                grid-cols-1
-                gap-2
-
-                md:grid-cols-3
-              "
-            >
-
-              <ValueRow
-                label="Plan Default"
-                value={
-                  formatOrderLimit(
-                    plan?.monthlyOrderLimit ??
-                    null
-                  )
-                }
-              />
-
-
-              <ValueRow
-                label="Client Override"
-                value={
-                  formatClientOverride(
-                    client.monthlyOrderLimitOverride
-                  )
-                }
-              />
-
-
-              <ValueRow
-                label="Final Allowance"
-                value={
-                  formatOrderLimit(
-                    getClientOrderLimit(
-                      client
-                    )
-                  )
-                }
-                strong
-              />
-
-            </div>
-
-          </section>
-
-
-          {/* ===============================================
-              WORKSPACE + ACCESS SUMMARY
-          =============================================== */}
-
-          <section
-            className="
-              grid
-              grid-cols-1
-              gap-3
-
-              lg:grid-cols-2
-            "
-          >
-
-            <section className="gos-panel !p-3.5">
-
-              <h3 className="gos-section-title">
-                Workspace
-              </h3>
-
-
-              <div className="mt-3 space-y-2">
-
-                <ValueRow
-                  label="Client"
-                  value={
-                    client.name
-                  }
-                />
-
-
-                <ValueRow
-                  label="Workspace ID"
-                  value={
-                    client.slug
-                  }
-                />
-
-
-                <ValueRow
-                  label="Domain"
-                  value={
-                    client.domain ||
-                    'Not configured'
-                  }
-                />
-
-
-                <ValueRow
-                  label="Created"
-                  value={
-                    client.createdAt
-                  }
-                />
-
-              </div>
-
-            </section>
-
-
-            <section className="gos-panel !p-3.5">
-
-              <h3 className="gos-section-title">
-                Access Summary
-              </h3>
-
-
-              <div className="mt-3 space-y-2">
-
-                <ValueRow
-                  label="Final Module Access"
-                  value={
-                    String(
-                      enabledModuleCount
-                    )
-                  }
-                />
-
-
-                <ValueRow
-                  label="Users"
-                  value={
-                    String(
-                      getClientUserCount(
-                        client.id
-                      )
-                    )
-                  }
-                />
-
-
-                <ValueRow
-                  label="Integrations"
-                  value={
-                    String(
-                      getClientIntegrationCount(
-                        client.id
-                      )
-                    )
-                  }
-                />
-
-
-                <ValueRow
-                  label="Status"
-                  value={
-                    formatClientStatus(
-                      client.status
-                    )
-                  }
-                />
-
-              </div>
-
-            </section>
-
-          </section>
-
-        </div>
-
-      )}
-
-
-      {/* =====================================================
-          MODULES
-      ===================================================== */}
-
-      {activeTab ===
-        'Modules' && (
-
-        <ClientModules
-
-          client={
-            client
-          }
-
-          onSetOverride={
-            setModuleOverride
-          }
-
-        />
-
-      )}
-
-
-      {/* =====================================================
-          USERS
-      ===================================================== */}
-
-      {activeTab ===
-        'Users' && (
-
-        <AdminClientUsers
-          client={
-            client
-          }
-        />
-
-      )}
-
-
-      {/* =====================================================
-          INTEGRATIONS
-          
-          We will replace this with AdminClientIntegrations
-          in the next step.
-      ===================================================== */}
-
-      {activeTab ===
-        'Integrations' && (
-
-        <AdminClientIntegrations
-          client={
-            client
-          }
-        />
-
-      )}
-
-
-      {/* =====================================================
-          DATA SETUP
-      ===================================================== */}
-
-      {activeTab ===
-        'Data Setup' && (
-
-        <AdminClientDataSetup
-          client={
-            client
-          }
-        />
-
-      )}
-
-    </div>
-
-  );
-
-}
-
-
-// ============================================================
-// CLIENT MODULES
-// ============================================================
-
-function ClientModules({
-
-  client,
-
-  onSetOverride,
-
-}: {
-
-  client:
-    AdminClient;
-
-  onSetOverride:
-    (
-      moduleId:
-        string,
-      override:
-        ModuleOverride
-    ) => void;
-
-}) {
-
-
-  const {
-    modules,
-    getClientModuleAccess,
-  } =
-    useAdminStore();
-
-
-  const enabledCount =
-    modules.filter(
-      module =>
-        getClientModuleAccess(
-          client,
-          module.id
-        ).enabled
-    ).length;
-
-
-  const overrideCount =
-    Object
-      .values(
-        client.moduleOverrides
-      )
-      .filter(
-        value =>
-          value !==
-          'default'
-      )
-      .length;
-
-
-  const customCount =
-    modules.filter(
-      module =>
-        module.type ===
-          'custom'
-        &&
-        getClientModuleAccess(
-          client,
-          module.id
-        ).enabled
-    ).length;
-
-
-  return (
-
-    <div className="space-y-3">
 
 
       {/* =====================================================
@@ -2563,401 +2107,577 @@ function ClientModules({
       >
 
         <SummaryCard
-          label="Registry Modules"
+          label="Plan"
           value={
-            modules.length
+            client.planName
+            ||
+            'No Plan'
+          }
+          tone={
+            client.planId
+              ? 'violet'
+              : 'amber'
           }
         />
 
 
         <SummaryCard
-          label="Final Access"
+          label="Orders / Month"
           value={
-            enabledCount
+            formatClientOrderLimit(
+              client
+            )
           }
         />
 
 
         <SummaryCard
-          label="Overrides"
+          label="Users"
           value={
-            overrideCount
+            `${client.activeUsers} / ${client.totalUsers}`
           }
+          tone="green"
         />
 
 
         <SummaryCard
-          label="Custom Modules"
+          label="Integrations"
           value={
-            customCount
+            `${client.connectedIntegrations} / ${client.integrations}`
           }
+          tone="green"
         />
 
       </section>
 
 
       {/* =====================================================
-          ENTITLEMENT TABLE
+          WORKSPACE / BRAND
       ===================================================== */}
 
-      <section className="gos-panel !p-0">
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
 
-        <div
-          className="
-            border-b
-            border-slate-200
+          lg:grid-cols-2
+        "
+      >
 
-            px-3
-            py-2.5
-          "
-        >
+
+        {/* ===================================================
+            WORKSPACE
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
 
           <h3 className="gos-section-title">
-            Module Entitlement
+            Workspace
           </h3>
 
 
-          <p
-            className="
-              mt-0.5
+          <div className="mt-3 space-y-2">
 
-              text-[9px]
+            <ValueRow
+              label="Workspace"
+              value={
+                client.workspaceName
+                ||
+                client.workspaceId
+              }
+            />
 
-              text-slate-500
-            "
-          >
-            Plan inclusion sets the default. Client overrides can explicitly enable or disable modules.
-          </p>
+
+            <ValueRow
+              label="Workspace ID"
+              value={
+                client.workspaceId
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Workspace Slug"
+              value={
+                client.workspaceSlug
+                ||
+                '—'
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Status"
+              value={
+                formatLabelOrDash(
+                  client.workspaceStatus
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* ===================================================
+            BRAND
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Brand
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Brand"
+              value={
+                client.brandName
+                ||
+                client.brandId
+              }
+            />
+
+
+            <ValueRow
+              label="Brand ID"
+              value={
+                client.brandId
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Brand Slug"
+              value={
+                client.brandSlug
+                ||
+                '—'
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Status"
+              value={
+                formatLabelOrDash(
+                  client.brandStatus
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Currency"
+              value={
+                client.currency
+                ||
+                '—'
+              }
+            />
+
+
+            <ValueRow
+              label="Timezone"
+              value={
+                client.timezone
+                ||
+                '—'
+              }
+            />
+
+          </div>
+
+        </section>
+
+      </section>
+
+
+      {/* =====================================================
+          SUBSCRIPTION
+      ===================================================== */}
+
+      <section className="gos-panel !p-3.5">
+
+        <div
+          className="
+            flex
+            items-center
+            justify-between
+            gap-3
+          "
+        >
+
+          <div>
+
+            <h3 className="gos-section-title">
+              Subscription
+            </h3>
+
+
+            <p
+              className="
+                mt-0.5
+
+                text-[9px]
+
+                text-slate-500
+              "
+            >
+              Commercial entitlement currently assigned to this brand.
+            </p>
+
+          </div>
+
+
+          <SubscriptionBadge
+            client={
+              client
+            }
+          />
 
         </div>
 
 
-        <div className="overflow-x-auto">
-
-          <table
-            className="
-              min-w-[950px]
-              w-full
-
-              border-collapse
-            "
-          >
-
-            <thead>
-
-              <tr
-                className="
-                  border-b
-                  border-slate-200
-
-                  bg-slate-50
-                "
-              >
-
-                <TableHeader>
-                  Module
-                </TableHeader>
-
-                <TableHeader>
-                  Type
-                </TableHeader>
-
-                <TableHeader>
-                  Plan Default
-                </TableHeader>
-
-                <TableHeader>
-                  Client Override
-                </TableHeader>
-
-                <TableHeader>
-                  Final Access
-                </TableHeader>
-
-                <TableHeader>
-                  Module Status
-                </TableHeader>
-
-                <TableHeader>
-                  Setup
-                </TableHeader>
-
-              </tr>
-
-            </thead>
-
-
-            <tbody>
-
-              {modules.map(
-                module => {
-
-                  const access =
-                    getClientModuleAccess(
-                      client,
-                      module.id
-                    );
-
-
-                  const mandatory =
-                    module.id ===
-                    'command-center';
-
-
-                  return (
-
-                    <tr
-                      key={
-                        module.id
-                      }
-
-                      className="
-                        border-b
-                        border-slate-100
-
-                        last:border-0
-
-                        hover:bg-slate-50/70
-                      "
-                    >
-
-                      <td className="px-3 py-2">
-
-                        <div>
-
-                          <div
-                            className="
-                              flex
-                              items-center
-                              gap-2
-                            "
-                          >
-
-                            <span
-                              className="
-                                text-[10px]
-                                font-semibold
-
-                                text-slate-900
-                              "
-                            >
-                              {module.name}
-                            </span>
-
-
-                            {mandatory && (
-
-                              <span
-                                className="
-                                  rounded-full
-
-                                  bg-slate-100
-
-                                  px-1.5
-                                  py-0.5
-
-                                  text-[7px]
-                                  font-semibold
-
-                                  text-slate-500
-                                "
-                              >
-                                Required
-                              </span>
-
-                            )}
-
-                          </div>
-
-
-                          <p
-                            className="
-                              mt-0.5
-
-                              max-w-[300px]
-
-                              truncate
-
-                              text-[8px]
-
-                              text-slate-500
-                            "
-                          >
-                            {module.description}
-                          </p>
-
-                        </div>
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <SimpleBadge
-                          label={
-                            module.type ===
-                              'custom'
-
-                              ? 'Custom'
-
-                              : 'Standard'
-                          }
-                          tone={
-                            module.type ===
-                              'custom'
-
-                              ? 'amber'
-
-                              : 'violet'
-                          }
-                        />
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <AccessBadge
-                          enabled={
-                            access.planIncluded
-                          }
-                          enabledLabel="Included"
-                          disabledLabel="Not Included"
-                        />
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        {mandatory ? (
-
-                          <span
-                            className="
-                              text-[9px]
-                              font-medium
-
-                              text-slate-400
-                            "
-                          >
-                            Required
-                          </span>
-
-                        ) : (
-
-                          <select
-
-                            value={
-                              access.override
-                            }
-
-                            onChange={
-                              event =>
-                                onSetOverride(
-                                  module.id,
-                                  event.target.value as ModuleOverride
-                                )
-                            }
-
-                            className="
-                              h-7
-
-                              rounded-[7px]
-
-                              border
-                              border-slate-300
-
-                              bg-white
-
-                              px-2
-
-                              text-[9px]
-                              font-medium
-
-                              text-slate-700
-                            "
-                          >
-
-                            <option value="default">
-                              Plan Default
-                            </option>
-
-                            <option value="enabled">
-                              Force Enable
-                            </option>
-
-                            <option value="disabled">
-                              Force Disable
-                            </option>
-
-                          </select>
-
-                        )}
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <AccessBadge
-                          enabled={
-                            access.enabled
-                          }
-                          enabledLabel="Enabled"
-                          disabledLabel="Disabled"
-                        />
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <SimpleBadge
-                          label={
-                            capitalize(
-                              module.status
-                            )
-                          }
-                          tone={
-                            module.status ===
-                              'active'
-
-                              ? 'green'
-
-                              : module.status ===
-                                  'draft'
-
-                                ? 'amber'
-
-                                : 'red'
-                          }
-                        />
-
-                      </td>
-
-
-                      <td className="px-3 py-2">
-
-                        <SetupBadge
-                          status={
-                            module.setupStatus
-                          }
-                        />
-
-                      </td>
-
-                    </tr>
-
-                  );
-
-                }
-              )}
-
-            </tbody>
-
-          </table>
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+            xl:grid-cols-3
+          "
+        >
+
+          <ValueRow
+            label="Subscription ID"
+            value={
+              client.subscriptionId
+              ||
+              '—'
+            }
+            mono
+          />
+
+
+          <ValueRow
+            label="Plan"
+            value={
+              client.planName
+              ||
+              'No Plan'
+            }
+          />
+
+
+          <ValueRow
+            label="Plan ID"
+            value={
+              client.planId
+              ||
+              '—'
+            }
+            mono
+          />
+
+
+          <ValueRow
+            label="Subscription Status"
+            value={
+              formatLabelOrDash(
+                client.subscriptionStatus
+              )
+            }
+          />
+
+
+          <ValueRow
+            label="Plan Status"
+            value={
+              formatLabelOrDash(
+                client.planStatus
+              )
+            }
+          />
+
+
+          <ValueRow
+            label="Max Users"
+            value={
+              client.maxUsers ===
+                null
+
+                ? 'Unlimited'
+
+                : formatNumber(
+                    client.maxUsers
+                  )
+            }
+          />
 
         </div>
+
+      </section>
+
+
+      {/* =====================================================
+          ORDER LIMIT
+      ===================================================== */}
+
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
+
+          lg:grid-cols-2
+        "
+      >
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Order Allowance
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Plan Default"
+              value={
+                formatOrderLimit(
+                  client.planMonthlyOrderLimit,
+                  false
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Override Mode"
+              value={
+                formatLabelOrDash(
+                  client.orderLimitOverrideMode
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Custom Override"
+              value={
+                client.monthlyOrderLimitOverride ===
+                  null
+
+                  ? '—'
+
+                  : formatOrderLimit(
+                      client.monthlyOrderLimitOverride,
+                      false
+                    )
+              }
+            />
+
+
+            <ValueRow
+              label="Effective Limit"
+              value={
+                formatClientOrderLimit(
+                  client
+                )
+              }
+              strong
+            />
+
+          </div>
+
+        </section>
+
+
+        {/* ===================================================
+            ACCESS
+        =================================================== */}
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Access Summary
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Users"
+              value={
+                formatNumber(
+                  client.totalUsers
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Active Users"
+              value={
+                formatNumber(
+                  client.activeUsers
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Owners"
+              value={
+                formatNumber(
+                  client.owners
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Admins"
+              value={
+                formatNumber(
+                  client.admins
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Integrations"
+              value={
+                formatNumber(
+                  client.integrations
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Connected Integrations"
+              value={
+                formatNumber(
+                  client.connectedIntegrations
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+      </section>
+
+
+      {/* =====================================================
+          LIFECYCLE
+      ===================================================== */}
+
+      <section className="gos-panel !p-3.5">
+
+        <h3 className="gos-section-title">
+          Lifecycle
+        </h3>
+
+
+        <div
+          className="
+            mt-3
+
+            grid
+            grid-cols-1
+            gap-2
+
+            md:grid-cols-2
+          "
+        >
+
+          <ValueRow
+            label="Created"
+            value={
+              formatTimestamp(
+                client.createdAt
+              )
+              ||
+              '—'
+            }
+          />
+
+
+          <ValueRow
+            label="Updated"
+            value={
+              formatTimestamp(
+                client.updatedAt
+              )
+              ||
+              '—'
+            }
+          />
+
+        </div>
+
+      </section>
+
+
+      {/* =====================================================
+          OWNERSHIP
+      ===================================================== */}
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          p-3
+        "
+      >
+
+        <p
+          className="
+            text-[9px]
+            font-semibold
+
+            text-violet-800
+          "
+        >
+          Administrative ownership
+        </p>
+
+
+        <p
+          className="
+            mt-1
+
+            text-[8px]
+            leading-4
+
+            text-violet-600
+          "
+        >
+          This screen reflects real Growth OS control-plane state. Client creation, plan changes, status changes and entitlement overrides are intentionally disabled until dedicated authenticated Admin command APIs are introduced.
+        </p>
 
       </section>
 
@@ -2978,6 +2698,9 @@ function SummaryCard({
 
   value,
 
+  tone =
+    'default',
+
 }: {
 
   label:
@@ -2987,7 +2710,39 @@ function SummaryCard({
     string |
     number;
 
+  tone?:
+    | 'default'
+    | 'green'
+    | 'amber'
+    | 'red'
+    | 'violet';
+
 }) {
+
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'text-emerald-700'
+
+      : tone ===
+          'amber'
+
+        ? 'text-amber-700'
+
+        : tone ===
+            'red'
+
+          ? 'text-red-700'
+
+          : tone ===
+              'violet'
+
+            ? 'text-violet-700'
+
+            : 'text-slate-950';
+
 
   return (
 
@@ -3008,15 +2763,17 @@ function SummaryCard({
 
 
       <p
-        className="
+        className={`
           mt-1.5
+
+          truncate
 
           text-[18px]
           font-semibold
           tracking-[-0.03em]
 
-          text-slate-950
-        "
+          ${cls}
+        `}
       >
         {value}
       </p>
@@ -3034,291 +2791,104 @@ function SummaryCard({
 
 function ClientStatusBadge({
 
-  status,
+  client,
 
 }: {
 
-  status:
-    ClientStatus;
+  client:
+    AdminClient;
 
 }) {
 
-  const config =
 
+  const status =
+    getClientStatusGroup(
+      client
+    );
+
+
+  if (
     status ===
-      'active'
+    'active'
+  ) {
 
-      ? {
-          label:
-            'Active',
+    return (
 
-          cls:
-            'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
+      <span
+        className="
+          inline-flex
 
-      : status ===
-          'setup'
+          rounded-full
 
-        ? {
-            label:
-              'Setup Required',
+          border
+          border-emerald-200
 
-            cls:
-              'border-amber-200 bg-amber-50 text-amber-700',
-          }
+          bg-emerald-50
 
-        : {
-            label:
-              'Suspended',
+          px-2
+          py-0.5
 
-            cls:
-              'border-red-200 bg-red-50 text-red-700',
-          };
+          text-[8px]
+          font-semibold
 
+          text-emerald-700
+        "
+      >
+        Active
+      </span>
 
-  return (
+    );
 
-    <span
-      className={`
-        inline-flex
+  }
 
-        rounded-full
 
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${config.cls}
-      `}
-    >
-      {config.label}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// ACCESS BADGE
-// ============================================================
-
-function AccessBadge({
-
-  enabled,
-
-  enabledLabel,
-
-  disabledLabel,
-
-}: {
-
-  enabled:
-    boolean;
-
-  enabledLabel:
-    string;
-
-  disabledLabel:
-    string;
-
-}) {
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${
-          enabled
-
-            ? `
-              border-emerald-200
-              bg-emerald-50
-              text-emerald-700
-            `
-
-            : `
-              border-slate-200
-              bg-slate-100
-              text-slate-500
-            `
-        }
-      `}
-    >
-      {enabled
-        ? enabledLabel
-        : disabledLabel
-      }
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// GENERIC BADGE
-// ============================================================
-
-function SimpleBadge({
-
-  label,
-
-  tone,
-
-}: {
-
-  label:
-    string;
-
-  tone:
-    'green'
-    |
-    'amber'
-    |
-    'red'
-    |
-    'violet'
-    |
-    'slate';
-
-}) {
-
-  const classes =
-    tone ===
-      'green'
-
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-
-      : tone ===
-          'amber'
-
-        ? 'border-amber-200 bg-amber-50 text-amber-700'
-
-        : tone ===
-            'red'
-
-          ? 'border-red-200 bg-red-50 text-red-700'
-
-          : tone ===
-              'violet'
-
-            ? 'border-violet-200 bg-violet-50 text-violet-700'
-
-            : 'border-slate-200 bg-slate-100 text-slate-600';
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${classes}
-      `}
-    >
-      {label}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// SETUP BADGE
-// ============================================================
-
-function SetupBadge({
-
-  status,
-
-}: {
-
-  status:
-    SetupStatus;
-
-}) {
-
-  const config =
-
+  if (
     status ===
-      'ready'
+    'suspended'
+  ) {
 
-      ? {
-          label:
-            'Ready',
+    return (
 
-          cls:
-            'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
+      <span
+        className="
+          inline-flex
 
-      : status ===
-          'configuring'
+          rounded-full
 
-        ? {
-            label:
-              'Configuring',
+          border
+          border-red-200
 
-            cls:
-              'border-blue-200 bg-blue-50 text-blue-700',
-          }
+          bg-red-50
 
-        : status ===
-            'setup_required'
+          px-2
+          py-0.5
 
-          ? {
-              label:
-                'Setup Required',
+          text-[8px]
+          font-semibold
 
-              cls:
-                'border-amber-200 bg-amber-50 text-amber-700',
-            }
+          text-red-700
+        "
+      >
+        Suspended
+      </span>
 
-          : {
-              label:
-                'Not Started',
+    );
 
-              cls:
-                'border-slate-200 bg-slate-100 text-slate-600',
-            };
+  }
 
 
   return (
 
     <span
-      className={`
+      className="
         inline-flex
 
         rounded-full
 
         border
+        border-amber-200
+
+        bg-amber-50
 
         px-2
         py-0.5
@@ -3326,10 +2896,87 @@ function SetupBadge({
         text-[8px]
         font-semibold
 
-        ${config.cls}
-      `}
+        text-amber-700
+      "
     >
-      {config.label}
+      Setup
+    </span>
+
+  );
+
+}
+
+
+// ============================================================
+// SUBSCRIPTION BADGE
+// ============================================================
+
+function SubscriptionBadge({
+
+  client,
+
+}: {
+
+  client:
+    AdminClient;
+
+}) {
+
+  if (
+    !client.subscriptionId
+  ) {
+
+    return (
+
+      <span
+        className="
+          rounded-full
+
+          border
+          border-amber-200
+
+          bg-amber-50
+
+          px-2
+          py-0.5
+
+          text-[8px]
+          font-semibold
+
+          text-amber-700
+        "
+      >
+        No Subscription
+      </span>
+
+    );
+
+  }
+
+
+  return (
+
+    <span
+      className="
+        rounded-full
+
+        border
+        border-emerald-200
+
+        bg-emerald-50
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        text-emerald-700
+      "
+    >
+      {formatLabelOrDash(
+        client.subscriptionStatus
+      )}
     </span>
 
   );
@@ -3347,6 +2994,9 @@ function ValueRow({
 
   value,
 
+  mono =
+    false,
+
   strong =
     false,
 
@@ -3357,6 +3007,9 @@ function ValueRow({
 
   value:
     string;
+
+  mono?:
+    boolean;
 
   strong?:
     boolean;
@@ -3386,6 +3039,8 @@ function ValueRow({
 
       <span
         className="
+          shrink-0
+
           text-[9px]
 
           text-slate-500
@@ -3396,16 +3051,28 @@ function ValueRow({
 
 
       <span
+        title={
+          value
+        }
         className={`
+          max-w-[68%]
+
+          truncate
+
+          text-right
           text-[10px]
           font-semibold
 
           ${
             strong
-
               ? 'text-violet-700'
-
               : 'text-slate-800'
+          }
+
+          ${
+            mono
+              ? 'font-mono text-[8px]'
+              : ''
           }
         `}
       >
@@ -3413,56 +3080,6 @@ function ValueRow({
       </span>
 
     </div>
-
-  );
-
-}
-
-
-// ============================================================
-// FORM FIELD
-// ============================================================
-
-function FormField({
-
-  label,
-
-  children,
-
-}: {
-
-  label:
-    string;
-
-  children:
-    ReactNode;
-
-}) {
-
-  return (
-
-    <label className="block">
-
-      <span
-        className="
-          mb-1.5
-          block
-
-          text-[9px]
-          font-semibold
-          uppercase
-          tracking-[0.05em]
-
-          text-slate-500
-        "
-      >
-        {label}
-      </span>
-
-
-      {children}
-
-    </label>
 
   );
 
@@ -3500,7 +3117,7 @@ function TableHeader({
 
         px-3
 
-        text-[9px]
+        text-[8px]
         font-semibold
         uppercase
         tracking-[0.05em]
@@ -3526,205 +3143,93 @@ function TableHeader({
 
 
 // ============================================================
-// PLACEHOLDER
+// HELPERS
 // ============================================================
 
-function SectionPlaceholder({
+function getClientKey(
+  client:
+    AdminClient
+) {
 
-  icon:
-    Icon,
-
-  title,
-
-  description,
-
-  action,
-
-}: {
-
-  icon:
-    any;
-
-  title:
-    string;
-
-  description:
-    string;
-
-  action:
-    string;
-
-}) {
-
-  return (
-
-    <section className="gos-panel !p-3.5">
-
-      <div
-        className="
-          flex
-          flex-col
-          gap-3
-
-          sm:flex-row
-          sm:items-center
-          sm:justify-between
-        "
-      >
-
-        <div
-          className="
-            flex
-            items-center
-            gap-3
-          "
-        >
-
-          <div
-            className="
-              flex
-              h-9
-              w-9
-              shrink-0
-              items-center
-              justify-center
-
-              rounded-[9px]
-
-              bg-violet-50
-
-              text-violet-600
-            "
-          >
-
-            <Icon
-              size={16}
-            />
-
-          </div>
-
-
-          <div>
-
-            <h3
-              className="
-                text-[12px]
-                font-semibold
-
-                text-slate-900
-              "
-            >
-              {title}
-            </h3>
-
-
-            <p
-              className="
-                mt-0.5
-
-                max-w-2xl
-
-                text-[9px]
-                leading-4
-
-                text-slate-500
-              "
-            >
-              {description}
-            </p>
-
-          </div>
-
-        </div>
-
-
-        <button
-
-          type="button"
-
-          disabled
-
-          className="
-            h-8
-            shrink-0
-
-            rounded-[8px]
-
-            bg-slate-100
-
-            px-3
-
-            text-[9px]
-            font-semibold
-
-            text-slate-400
-          "
-        >
-          {action}
-        </button>
-
-      </div>
-
-    </section>
-
+  return [
+    client.workspaceId,
+    client.brandId,
+  ].join(
+    ':'
   );
 
 }
 
 
-// ============================================================
-// HELPERS
-// ============================================================
-
-function formatOrderLimit(
-  value:
-    number |
-    null
+function getClientName(
+  client:
+    AdminClient
 ) {
 
-  if (
-    value ===
-    null
-  ) {
-
-    return 'Unlimited';
-
-  }
-
-
-  return `${new Intl.NumberFormat(
-    'en-IN',
-    {
-      maximumFractionDigits:
-        0,
-    }
-  ).format(
-    value
-  )} orders`;
+  return (
+    client.brandName
+    ||
+    client.workspaceName
+    ||
+    client.brandId
+    ||
+    client.workspaceId
+  );
 
 }
 
 
-function formatClientOverride(
-  value:
-    number |
-    null |
-    undefined
-) {
+function getClientStatusGroup(
+  client:
+    AdminClient
+):
+  Exclude<
+    StatusFilter,
+    'all'
+  > {
+
+  const status =
+    String(
+      client.brandStatus
+      ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
 
   if (
-    value ===
-    undefined
+    status ===
+    'active'
   ) {
 
-    return 'Plan Default';
+    return 'active';
 
   }
 
 
   if (
-    value ===
-    null
+    status ===
+    'suspended'
+  ) {
+
+    return 'suspended';
+
+  }
+
+
+  return 'setup';
+
+}
+
+
+function formatClientOrderLimit(
+  client:
+    AdminClient
+) {
+
+  if (
+    client.unlimitedOrders
   ) {
 
     return 'Unlimited';
@@ -3733,89 +3238,164 @@ function formatClientOverride(
 
 
   return formatOrderLimit(
+    client.effectiveMonthlyOrderLimit,
+    true
+  );
+
+}
+
+
+function formatOrderLimit(
+
+  value:
+    number |
+    null,
+
+  allowUnlimited:
+    boolean
+
+) {
+
+  if (
+    value ===
+    null
+  ) {
+
+    return allowUnlimited
+      ? 'Unlimited'
+      : '—';
+
+  }
+
+
+  return `${formatNumber(
+    value
+  )} orders`;
+
+}
+
+
+function formatLabelOrDash(
+  value:
+    string |
+    null
+) {
+
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return formatLabel(
     value
   );
 
 }
 
 
-function parsePositiveNumber(
+function formatLabel(
   value:
     string
 ) {
 
-  const parsed =
-    Number(
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return value
+    .replace(
+      /[_-]+/g,
+      ' '
+    )
+    .split(
+      ' '
+    )
+    .filter(
+      Boolean
+    )
+    .map(
+      word =>
+        word
+          .charAt(
+            0
+          )
+          .toUpperCase()
+        +
+        word.slice(
+          1
+        )
+    )
+    .join(
+      ' '
+    );
+
+}
+
+
+function formatTimestamp(
+  value:
+    string |
+    null
+) {
+
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  const date =
+    new Date(
       value
     );
 
 
   if (
-    !Number.isFinite(
-      parsed
+    Number.isNaN(
+      date.getTime()
     )
-    ||
-    parsed <=
-      0
   ) {
 
-    return undefined;
+    return value;
 
   }
 
 
-  return Math.floor(
-    parsed
+  return date.toLocaleString(
+    'en-IN',
+    {
+
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+
+    }
   );
 
 }
 
 
-function formatClientStatus(
-  status:
-    ClientStatus
-) {
-
-  if (
-    status ===
-    'active'
-  ) {
-
-    return 'Active';
-
-  }
-
-
-  if (
-    status ===
-    'setup'
-  ) {
-
-    return 'Setup Required';
-
-  }
-
-
-  return 'Suspended';
-
-}
-
-
-function capitalize(
+function formatNumber(
   value:
-    string
+    number
 ) {
 
-  return (
+  return new Intl.NumberFormat(
+    'en-IN',
+    {
+      maximumFractionDigits:
+        0,
+    }
+  ).format(
     value
-      .charAt(
-        0
-      )
-      .toUpperCase()
-    +
-    value.slice(
-      1
-    )
   );
 
 }

@@ -47,6 +47,15 @@ const BACKFILL_STRATEGY =
 
 
 // ============================================================
+// ENTITY
+// ============================================================
+
+export type ShopifyBackfillEntity =
+  | 'orders'
+  | 'customers';
+
+
+// ============================================================
 // TYPES
 // ============================================================
 
@@ -126,6 +135,43 @@ function requireValue(
 
 
   return normalized;
+
+}
+
+
+// ============================================================
+// BACKFILL ENTITY
+// ============================================================
+
+function requireBackfillEntity(
+  value: unknown
+):
+
+  ShopifyBackfillEntity {
+
+  const entity =
+    requireValue(
+      value,
+      'SHOPIFY_BACKFILL_ENTITY_MISSING'
+    );
+
+
+  if (
+    entity !==
+      'orders'
+    &&
+    entity !==
+      'customers'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_ENTITY_UNSUPPORTED'
+    );
+
+  }
+
+
+  return entity;
 
 }
 
@@ -338,7 +384,7 @@ function createQuarterWindows(
 
 
 // ============================================================
-// READ-ONLY WINDOW PREVIEW
+// GENERIC READ-ONLY WINDOW PREVIEW
 //
 // No BigQuery writes.
 // No Pub/Sub.
@@ -349,8 +395,11 @@ function createQuarterWindows(
 // idempotency key.
 // ============================================================
 
-export function planShopifyOrdersBackfillWindows(
+export function planShopifyBackfillWindows(
   input: {
+
+    entity:
+      ShopifyBackfillEntity;
 
     from:
       string;
@@ -360,6 +409,12 @@ export function planShopifyOrdersBackfillWindows(
 
   }
 ) {
+
+  const entity =
+    requireBackfillEntity(
+      input.entity
+    );
+
 
   const from =
     parseDate(
@@ -408,6 +463,8 @@ export function planShopifyOrdersBackfillWindows(
 
   return {
 
+    entity,
+
     strategy:
       BACKFILL_STRATEGY,
 
@@ -428,10 +485,78 @@ export function planShopifyOrdersBackfillWindows(
 
 
 // ============================================================
-// CREATE SHOPIFY ORDERS BACKFILL
+// ORDERS WINDOW PLAN COMPATIBILITY
+//
+// Existing Orders callers remain unchanged.
+// ============================================================
+
+export function planShopifyOrdersBackfillWindows(
+  input: {
+
+    from:
+      string;
+
+    to:
+      string;
+
+  }
+) {
+
+  return planShopifyBackfillWindows({
+
+    entity:
+      'orders',
+
+    from:
+      input.from,
+
+    to:
+      input.to,
+
+  });
+
+}
+
+
+// ============================================================
+// CUSTOMERS WINDOW PLAN
+// ============================================================
+
+export function planShopifyCustomersBackfillWindows(
+  input: {
+
+    from:
+      string;
+
+    to:
+      string;
+
+  }
+) {
+
+  return planShopifyBackfillWindows({
+
+    entity:
+      'customers',
+
+    from:
+      input.from,
+
+    to:
+      input.to,
+
+  });
+
+}
+
+
+// ============================================================
+// CREATE GENERIC SHOPIFY BACKFILL
 //
 // RESPONSIBILITY:
 //
+// validate entity
+//      ↓
 // validate identity
 //      ↓
 // validate requested range
@@ -456,23 +581,24 @@ export function planShopifyOrdersBackfillWindows(
 //
 // IDEMPOTENCY:
 //
-// When idempotencyKey is supplied:
+// Existing Orders bootstrap IDs MUST NOT CHANGE.
 //
-// same logical request
-//      ↓
-// same deterministic run ID
-//      ↓
-// same deterministic window IDs
-//      ↓
-// BigQuery MERGE
+// Therefore:
 //
-// When idempotencyKey is absent:
+// orders
+//   existing idempotency key remains unchanged
 //
-// random run/window IDs preserve manual/test semantics.
+// customers
+//   customer namespace is added to deterministic key
+//
+// This prevents deterministic ID collision between entities.
 // ============================================================
 
-export async function createShopifyOrdersBackfill(
+export async function createShopifyBackfill(
   input: {
+
+    entity:
+      ShopifyBackfillEntity;
 
     workspaceId:
       string;
@@ -503,6 +629,16 @@ export async function createShopifyOrdersBackfill(
 
   }
 ) {
+
+  // ==========================================================
+  // ENTITY
+  // ==========================================================
+
+  const entity =
+    requireBackfillEntity(
+      input.entity
+    );
+
 
   // ==========================================================
   // IDENTIFIERS
@@ -552,6 +688,35 @@ export async function createShopifyOrdersBackfill(
 
 
   // ==========================================================
+  // ENTITY-SAFE IDEMPOTENCY
+  //
+  // IMPORTANT:
+  //
+  // Existing Orders deterministic IDs remain EXACTLY the same.
+  //
+  // customers:
+  //
+  // customers:<original-key>
+  //
+  // prevents collisions with Orders.
+  // ==========================================================
+
+  const effectiveIdempotencyKey =
+    idempotencyKey
+      ?
+        (
+          entity ===
+            'orders'
+            ?
+              idempotencyKey
+            :
+              `customers:${idempotencyKey}`
+        )
+      :
+        '';
+
+
+  // ==========================================================
   // RANGE
   // ==========================================================
 
@@ -598,9 +763,9 @@ export async function createShopifyOrdersBackfill(
 
       to,
 
-      idempotencyKey
+      effectiveIdempotencyKey
         ?
-          idempotencyKey
+          effectiveIdempotencyKey
         :
           null
 
@@ -647,11 +812,11 @@ export async function createShopifyOrdersBackfill(
   // ==========================================================
 
   const backfillRunId =
-    idempotencyKey
+    effectiveIdempotencyKey
       ?
         deterministicId(
           'bfr',
-          idempotencyKey
+          effectiveIdempotencyKey
         )
       :
         `bfr_${randomUUID()}`;
@@ -751,7 +916,7 @@ export async function createShopifyOrdersBackfill(
           @provider_account_id,
 
           'shopify',
-          'orders',
+          @entity,
           @strategy,
           'queued',
 
@@ -816,6 +981,8 @@ export async function createShopifyOrdersBackfill(
       provider_account_id:
         providerAccountId,
 
+      entity,
+
       strategy:
         BACKFILL_STRATEGY,
 
@@ -845,6 +1012,9 @@ export async function createShopifyOrdersBackfill(
     },
 
     types: {
+
+      entity:
+        'STRING',
 
       requested_by:
         'STRING',
@@ -1010,7 +1180,7 @@ export async function createShopifyOrdersBackfill(
           @integration_account_id,
           @provider_account_id,
 
-          'orders',
+          @entity,
 
           source.window_start,
           source.window_end,
@@ -1070,6 +1240,15 @@ export async function createShopifyOrdersBackfill(
       provider_account_id:
         providerAccountId,
 
+      entity,
+
+    },
+
+    types: {
+
+      entity:
+        'STRING',
+
     },
 
   });
@@ -1087,6 +1266,8 @@ export async function createShopifyOrdersBackfill(
 
     backfillRunId,
 
+    entity,
+
     strategy:
       BACKFILL_STRATEGY,
 
@@ -1103,6 +1284,20 @@ export async function createShopifyOrdersBackfill(
       Boolean(
         idempotencyKey
       ),
+
+    effectiveIdempotencyNamespace:
+      idempotencyKey
+        ?
+          (
+            entity ===
+              'orders'
+              ?
+                'legacy_orders'
+              :
+                'customers'
+          )
+        :
+          null,
 
     firstWindow: {
 
@@ -1145,6 +1340,120 @@ export async function createShopifyOrdersBackfill(
 
 
 // ============================================================
+// ORDERS BACKFILL COMPATIBILITY
+//
+// Existing production callers continue using this function.
+//
+// IMPORTANT:
+//
+// Orders deterministic IDs remain exactly as before because:
+//
+// effective key = original idempotency key
+//
+// No "orders:" prefix is introduced.
+// ============================================================
+
+export async function createShopifyOrdersBackfill(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+    integrationAccountId:
+      string;
+
+    providerAccountId:
+      string;
+
+    from:
+      string;
+
+    to:
+      string;
+
+    requestedBy?:
+      string | null;
+
+    idempotencyKey?:
+      string | null;
+
+  }
+) {
+
+  return createShopifyBackfill({
+
+    ...input,
+
+    entity:
+      'orders',
+
+  });
+
+}
+
+
+// ============================================================
+// CUSTOMERS BACKFILL
+//
+// Same orchestration/state model as Orders.
+//
+// Deterministic bootstrap IDs are customer-namespaced so they
+// can never collide with an Orders bootstrap using the same
+// logical idempotency key.
+// ============================================================
+
+export async function createShopifyCustomersBackfill(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+    integrationAccountId:
+      string;
+
+    providerAccountId:
+      string;
+
+    from:
+      string;
+
+    to:
+      string;
+
+    requestedBy?:
+      string | null;
+
+    idempotencyKey?:
+      string | null;
+
+  }
+) {
+
+  return createShopifyBackfill({
+
+    ...input,
+
+    entity:
+      'customers',
+
+  });
+
+}
+
+
+// ============================================================
 // DIAGNOSTIC CONFIG
 // ============================================================
 
@@ -1161,5 +1470,10 @@ export const SHOPIFY_BACKFILL_OPS = {
 
   strategy:
     BACKFILL_STRATEGY,
+
+  supportedEntities: [
+    'orders',
+    'customers',
+  ] as const,
 
 };

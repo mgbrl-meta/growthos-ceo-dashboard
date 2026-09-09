@@ -2,12 +2,12 @@
 
 import {
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
 
 import {
-  Activity,
   ArrowLeft,
   Boxes,
   ChevronRight,
@@ -15,21 +15,142 @@ import {
   GitBranch,
   Megaphone,
   PackageSearch,
-  Plus,
+  RefreshCw,
   Repeat2,
   Search,
   Sparkles,
-  X,
+  XCircle,
 } from 'lucide-react';
 
-import {
-  type GrowthModule,
-  type ModuleCategory,
-  type ModuleStatus,
-  type ModuleType,
-  type SetupStatus,
-  useAdminStore,
-} from './AdminStore';
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type AdminModule = {
+
+  moduleId:
+    string;
+
+  moduleName:
+    string;
+
+  description:
+    string | null;
+
+  moduleType:
+    string | null;
+
+  category:
+    string | null;
+
+  routeKey:
+    string | null;
+
+  status:
+    string;
+
+  setupRequired:
+    boolean;
+
+  createdAt:
+    string | null;
+
+  updatedAt:
+    string | null;
+
+  enabledPlans:
+    number;
+
+  totalPlanRows:
+    number;
+
+  clientOverrides:
+    number;
+
+  enabledOverrides:
+    number;
+
+  disabledOverrides:
+    number;
+
+};
+
+
+type AdminModulesResponse = {
+
+  ok:
+    boolean;
+
+  scope?:
+    string;
+
+  summary?: {
+
+    total:
+      number;
+
+    active:
+      number;
+
+    inactive:
+      number;
+
+    standard:
+      number;
+
+    custom:
+      number;
+
+    setupRequired:
+      number;
+
+    planAssignments:
+      number;
+
+    clientOverrides:
+      number;
+
+  };
+
+  modules?:
+    AdminModule[];
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+    source?:
+      string;
+
+    readOnly?:
+      boolean;
+
+  };
+
+  error?:
+    string;
+
+};
+
+
+type StatusFilter =
+  | 'all'
+  | 'active'
+  | 'inactive';
+
+
+type TypeFilter =
+  | 'all'
+  | 'standard'
+  | 'custom';
+
+
+type SetupFilter =
+  | 'all'
+  | 'required'
+  | 'not_required';
 
 
 // ============================================================
@@ -40,21 +161,44 @@ export default function AdminModules() {
 
 
   // ==========================================================
-  // SHARED ADMIN STORE
+  // SERVER DATA
   // ==========================================================
 
-  const {
-    modules,
-    setModules,
-    plans,
-    clients,
-    getClientModuleAccess,
-  } =
-    useAdminStore();
+  const [
+    data,
+    setData,
+  ] =
+    useState<
+      AdminModulesResponse |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
 
 
   // ==========================================================
-  // LOCAL UI STATE
+  // FILTERS
   // ==========================================================
 
   const [
@@ -63,6 +207,42 @@ export default function AdminModules() {
   ] =
     useState(
       ''
+    );
+
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>(
+      'all'
+    );
+
+
+  const [
+    typeFilter,
+    setTypeFilter,
+  ] =
+    useState<TypeFilter>(
+      'all'
+    );
+
+
+  const [
+    categoryFilter,
+    setCategoryFilter,
+  ] =
+    useState(
+      'all'
+    );
+
+
+  const [
+    setupFilter,
+    setSetupFilter,
+  ] =
+    useState<SetupFilter>(
+      'all'
     );
 
 
@@ -78,75 +258,150 @@ export default function AdminModules() {
     );
 
 
-  const [
-    addOpen,
-    setAddOpen,
-  ] =
-    useState(
-      false
-    );
-
-
   // ==========================================================
-  // NEW MODULE
+  // LOAD
   // ==========================================================
 
-  const [
-    newName,
-    setNewName,
-  ] =
-    useState(
-      ''
-    );
+  async function loadModules() {
 
-
-  const [
-    newDescription,
-    setNewDescription,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newType,
-    setNewType,
-  ] =
-    useState<ModuleType>(
-      'custom'
-    );
-
-
-  const [
-    newCategory,
-    setNewCategory,
-  ] =
-    useState<ModuleCategory>(
-      'custom'
-    );
-
-
-  const [
-    newRouteKey,
-    setNewRouteKey,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newSetupRequired,
-    setNewSetupRequired,
-  ] =
-    useState(
+    setLoading(
       true
     );
 
 
+    setError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/modules',
+          {
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+          }
+        );
+
+
+      const json:
+        AdminModulesResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load Admin Modules'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+    } catch (
+      error:
+        any
+    ) {
+
+      console.error(
+        'ADMIN_MODULES_UI_ERROR',
+        error
+      );
+
+
+      setData(
+        null
+      );
+
+
+      setError(
+        String(
+          error?.message
+          ||
+          'Unable to load Admin Modules'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadModules();
+
+    },
+    []
+  );
+
+
   // ==========================================================
-  // SEARCH
+  // MODULES
+  // ==========================================================
+
+  const modules =
+    data?.modules
+    ||
+    [];
+
+
+  // ==========================================================
+  // CATEGORIES
+  // ==========================================================
+
+  const categories =
+    useMemo(
+      () => {
+
+        return Array
+          .from(
+            new Set(
+              modules
+                .map(
+                  module =>
+                    module.category
+                )
+                .filter(
+                  Boolean
+                ) as string[]
+            )
+          )
+          .sort();
+
+      },
+      [
+        modules,
+      ]
+    );
+
+
+  // ==========================================================
+  // FILTERED MODULES
   // ==========================================================
 
   const filteredModules =
@@ -159,54 +414,246 @@ export default function AdminModules() {
             .toLowerCase();
 
 
-        if (!query) {
-
-          return modules;
-
-        }
-
-
         return modules.filter(
-          module =>
+          module => {
 
-            module.name
-              .toLowerCase()
-              .includes(
-                query
-              )
 
-            ||
+            // --------------------------------------------------
+            // STATUS
+            // --------------------------------------------------
 
-            module.description
-              .toLowerCase()
-              .includes(
-                query
-              )
+            if (
+              statusFilter !==
+                'all'
+            ) {
 
-            ||
+              const active =
+                normalize(
+                  module.status
+                ) ===
+                'active';
 
-            module.type
-              .toLowerCase()
-              .includes(
-                query
-              )
 
-            ||
+              if (
+                statusFilter ===
+                  'active'
+                &&
+                !active
+              ) {
 
-            module.category
-              .toLowerCase()
-              .includes(
-                query
-              )
+                return false;
 
+              }
+
+
+              if (
+                statusFilter ===
+                  'inactive'
+                &&
+                active
+              ) {
+
+                return false;
+
+              }
+
+            }
+
+
+            // --------------------------------------------------
+            // TYPE
+            // --------------------------------------------------
+
+            if (
+              typeFilter !==
+                'all'
+              &&
+              normalize(
+                module.moduleType
+              ) !==
+                typeFilter
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // CATEGORY
+            // --------------------------------------------------
+
+            if (
+              categoryFilter !==
+                'all'
+              &&
+              module.category !==
+                categoryFilter
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SETUP
+            // --------------------------------------------------
+
+            if (
+              setupFilter ===
+                'required'
+              &&
+              !module.setupRequired
+            ) {
+
+              return false;
+
+            }
+
+
+            if (
+              setupFilter ===
+                'not_required'
+              &&
+              module.setupRequired
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SEARCH
+            // --------------------------------------------------
+
+            if (!query) {
+
+              return true;
+
+            }
+
+
+            const haystack =
+              [
+
+                module.moduleId,
+                module.moduleName,
+                module.description,
+                module.moduleType,
+                module.category,
+                module.routeKey,
+                module.status,
+
+              ]
+                .filter(
+                  Boolean
+                )
+                .join(
+                  ' '
+                )
+                .toLowerCase();
+
+
+            return haystack.includes(
+              query
+            );
+
+          }
         );
 
       },
       [
         modules,
         search,
+        statusFilter,
+        typeFilter,
+        categoryFilter,
+        setupFilter,
       ]
     );
+
+
+  // ==========================================================
+  // SUMMARY
+  // ==========================================================
+
+  const summary =
+    data?.summary
+    ||
+    {
+
+      total:
+        modules.length,
+
+      active:
+        modules.filter(
+          module =>
+            normalize(
+              module.status
+            ) ===
+            'active'
+        ).length,
+
+      inactive:
+        modules.filter(
+          module =>
+            normalize(
+              module.status
+            ) !==
+            'active'
+        ).length,
+
+      standard:
+        modules.filter(
+          module =>
+            normalize(
+              module.moduleType
+            ) ===
+            'standard'
+        ).length,
+
+      custom:
+        modules.filter(
+          module =>
+            normalize(
+              module.moduleType
+            ) ===
+            'custom'
+        ).length,
+
+      setupRequired:
+        modules.filter(
+          module =>
+            module.setupRequired
+        ).length,
+
+      planAssignments:
+        modules.reduce(
+          (
+            total,
+            module
+          ) =>
+            total
+            +
+            module.enabledPlans,
+          0
+        ),
+
+      clientOverrides:
+        modules.reduce(
+          (
+            total,
+            module
+          ) =>
+            total
+            +
+            module.clientOverrides,
+          0
+        ),
+
+    };
 
 
   // ==========================================================
@@ -216,7 +663,7 @@ export default function AdminModules() {
   const selectedModule =
     modules.find(
       module =>
-        module.id ===
+        module.moduleId ===
         selectedModuleId
     )
     ||
@@ -224,183 +671,134 @@ export default function AdminModules() {
 
 
   // ==========================================================
-  // COUNTS
+  // LOADING
   // ==========================================================
 
-  function getPlanCount(
-    moduleId:
-      string
+  if (
+    loading
+    &&
+    !data
   ) {
 
-    return plans.filter(
-      plan =>
-        plan.modules.includes(
-          moduleId
-        )
-    ).length;
+    return (
 
-  }
+      <section className="gos-panel !p-4">
 
+        <p className="text-[10px] text-slate-500">
+          Loading Modules...
+        </p>
 
-  function getClientCount(
-    moduleId:
-      string
-  ) {
+      </section>
 
-    return clients.filter(
-      client =>
-        getClientModuleAccess(
-          client,
-          moduleId
-        ).enabled
-    ).length;
+    );
 
   }
 
 
   // ==========================================================
-  // CREATE MODULE
+  // ERROR
   // ==========================================================
 
-  function createModule() {
+  if (
+    error
+    &&
+    !data
+  ) {
 
-    const name =
-      newName.trim();
+    return (
+
+      <section
+        className="
+          rounded-[10px]
+          border
+          border-red-200
+          bg-red-50
+          p-4
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-start
+            justify-between
+            gap-3
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              gap-2
+            "
+          >
+
+            <XCircle
+              size={15}
+              className="
+                mt-0.5
+                shrink-0
+                text-red-600
+              "
+            />
 
 
-    if (!name) {
+            <div>
 
-      return;
-
-    }
-
-
-    const slug =
-      name
-        .toLowerCase()
-        .replace(
-          /[^a-z0-9]+/g,
-          '-'
-        )
-        .replace(
-          /^-|-$/g,
-          ''
-        );
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
+                  text-red-800
+                "
+              >
+                Unable to load Modules
+              </p>
 
 
-    const id =
-      `${slug}-${Date.now()}`;
+              <p
+                className="
+                  mt-1
+                  text-[9px]
+                  text-red-700
+                "
+              >
+                {error}
+              </p>
+
+            </div>
+
+          </div>
 
 
-    const module:
-      GrowthModule = {
+          <button
 
-      id,
+            type="button"
 
-      name,
-
-      description:
-        newDescription.trim(),
-
-      type:
-        newType,
-
-      category:
-        newCategory,
-
-      routeKey:
-        newRouteKey.trim()
-        ||
-        name,
-
-      status:
-        'draft',
-
-      setupStatus:
-        newSetupRequired
-
-          ? 'not_started'
-
-          : 'ready',
-
-      setupRequired:
-        newSetupRequired,
-
-      createdAt:
-        new Date()
-          .toLocaleDateString(
-            'en-IN',
-            {
-              day:
-                '2-digit',
-
-              month:
-                'short',
-
-              year:
-                'numeric',
+            onClick={
+              loadModules
             }
-          ),
 
-    };
+            className="
+              h-7
+              rounded-[7px]
+              border
+              border-red-200
+              bg-white
+              px-2.5
+              text-[9px]
+              font-semibold
+              text-red-700
+            "
+          >
+            Retry
+          </button>
 
+        </div>
 
-    setModules(
-      previous => [
-        ...previous,
-        module,
-      ]
-    );
+      </section>
 
-
-    resetNewModuleForm();
-
-
-    setAddOpen(
-      false
-    );
-
-
-    setSelectedModuleId(
-      id
-    );
-
-  }
-
-
-  // ==========================================================
-  // RESET FORM
-  // ==========================================================
-
-  function resetNewModuleForm() {
-
-    setNewName(
-      ''
-    );
-
-
-    setNewDescription(
-      ''
-    );
-
-
-    setNewType(
-      'custom'
-    );
-
-
-    setNewCategory(
-      'custom'
-    );
-
-
-    setNewRouteKey(
-      ''
-    );
-
-
-    setNewSetupRequired(
-      true
     );
 
   }
@@ -422,42 +820,10 @@ export default function AdminModules() {
           selectedModule
         }
 
-        planCount={
-          getPlanCount(
-            selectedModule.id
-          )
-        }
-
-        clientCount={
-          getClientCount(
-            selectedModule.id
-          )
-        }
-
         onBack={() =>
           setSelectedModuleId(
             null
           )
-        }
-
-        onChange={
-          updatedModule => {
-
-            setModules(
-              previous =>
-                previous.map(
-                  module =>
-
-                    module.id ===
-                      updatedModule.id
-
-                      ? updatedModule
-
-                      : module
-                )
-            );
-
-          }
         }
 
       />
@@ -477,22 +843,20 @@ export default function AdminModules() {
 
 
       {/* =====================================================
-          TOOLBAR
+          HEADER
       ===================================================== */}
 
       <section
         className="
           gos-card
-
           flex
           flex-col
           gap-3
-
           p-3
 
-          md:flex-row
-          md:items-center
-          md:justify-between
+          xl:flex-row
+          xl:items-center
+          xl:justify-between
         "
       >
 
@@ -503,7 +867,6 @@ export default function AdminModules() {
               text-[14px]
               font-semibold
               tracking-[-0.025em]
-
               text-slate-950
             "
           >
@@ -514,136 +877,62 @@ export default function AdminModules() {
           <p
             className="
               mt-0.5
-
               text-[10px]
-
               text-slate-500
             "
           >
-            Master registry for standard and custom Growth OS modules.
+            Canonical registry of Growth OS capabilities and their entitlement usage.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
+        <button
 
-            sm:flex-row
+          type="button"
+
+          onClick={
+            loadModules
+          }
+
+          disabled={
+            loading
+          }
+
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-1.5
+            rounded-[8px]
+            border
+            border-slate-200
+            bg-white
+            px-3
+            text-[9px]
+            font-semibold
+            text-slate-700
+
+            hover:bg-slate-50
+            disabled:opacity-60
           "
         >
 
-          <div
-            className="
-              relative
+          <RefreshCw
 
-              w-full
+            size={12}
 
-              sm:w-[250px]
-            "
-          >
-
-            <Search
-              size={14}
-              className="
-                absolute
-                left-2.5
-                top-1/2
-
-                -translate-y-1/2
-
-                text-slate-400
-              "
-            />
-
-
-            <input
-
-              value={
-                search
-              }
-
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
-
-              placeholder="Search modules"
-
-              className="
-                h-8
-                w-full
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                pl-8
-                pr-3
-
-                text-[11px]
-
-                outline-none
-
-                focus:border-violet-400
-                focus:ring-2
-                focus:ring-violet-100
-              "
-
-            />
-
-          </div>
-
-
-          <button
-
-            type="button"
-
-            onClick={() =>
-              setAddOpen(
-                true
-              )
+            className={
+              loading
+                ? 'animate-spin'
+                : ''
             }
 
-            className="
-              inline-flex
-              h-8
-              items-center
-              justify-center
-              gap-1.5
+          />
 
-              rounded-[8px]
+          Refresh
 
-              bg-slate-950
-
-              px-3
-
-              text-[10px]
-              font-semibold
-
-              text-white
-
-              hover:bg-slate-800
-            "
-          >
-
-            <Plus
-              size={14}
-            />
-
-            Add Module
-
-          </button>
-
-        </div>
+        </button>
 
       </section>
 
@@ -659,49 +948,75 @@ export default function AdminModules() {
           gap-2
 
           md:grid-cols-4
+          xl:grid-cols-8
         "
       >
 
         <SummaryCard
-          label="Total Modules"
+          label="Modules"
           value={
-            modules.length
+            summary.total
           }
+        />
+
+
+        <SummaryCard
+          label="Active"
+          value={
+            summary.active
+          }
+          tone="green"
+        />
+
+
+        <SummaryCard
+          label="Inactive"
+          value={
+            summary.inactive
+          }
+          tone="slate"
         />
 
 
         <SummaryCard
           label="Standard"
           value={
-            modules.filter(
-              module =>
-                module.type ===
-                'standard'
-            ).length
+            summary.standard
           }
+          tone="violet"
         />
 
 
         <SummaryCard
           label="Custom"
           value={
-            modules.filter(
-              module =>
-                module.type ===
-                'custom'
-            ).length
+            summary.custom
+          }
+          tone="amber"
+        />
+
+
+        <SummaryCard
+          label="Setup Required"
+          value={
+            summary.setupRequired
+          }
+          tone="amber"
+        />
+
+
+        <SummaryCard
+          label="Plan Assignments"
+          value={
+            summary.planAssignments
           }
         />
 
 
         <SummaryCard
-          label="Ready"
+          label="Client Overrides"
           value={
-            modules.filter(
-              module =>
-                module.setupStatus ===
-                'ready'
-            ).length
+            summary.clientOverrides
           }
         />
 
@@ -709,37 +1024,325 @@ export default function AdminModules() {
 
 
       {/* =====================================================
-          REGISTRY TABLE
+          FILTERS
+      ===================================================== */}
+
+      <section
+        className="
+          gos-panel
+          flex
+          flex-col
+          gap-2
+          !p-3
+
+          xl:flex-row
+          xl:items-center
+        "
+      >
+
+        <div
+          className="
+            relative
+            w-full
+            xl:max-w-[340px]
+          "
+        >
+
+          <Search
+            size={14}
+
+            className="
+              absolute
+              left-2.5
+              top-1/2
+              -translate-y-1/2
+              text-slate-400
+            "
+          />
+
+
+          <input
+
+            value={
+              search
+            }
+
+            onChange={
+              event =>
+                setSearch(
+                  event.target.value
+                )
+            }
+
+            placeholder="Search module, route, category..."
+
+            className="
+              h-8
+              w-full
+              rounded-[8px]
+              border
+              border-slate-300
+              bg-white
+              pl-8
+              pr-3
+              text-[10px]
+              outline-none
+
+              focus:border-violet-400
+              focus:ring-2
+              focus:ring-violet-100
+            "
+
+          />
+
+        </div>
+
+
+        <select
+
+          value={
+            statusFilter
+          }
+
+          onChange={
+            event =>
+              setStatusFilter(
+                event.target.value as StatusFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Status
+          </option>
+
+          <option value="active">
+            Active
+          </option>
+
+          <option value="inactive">
+            Inactive
+          </option>
+
+        </select>
+
+
+        <select
+
+          value={
+            typeFilter
+          }
+
+          onChange={
+            event =>
+              setTypeFilter(
+                event.target.value as TypeFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Types
+          </option>
+
+          <option value="standard">
+            Standard
+          </option>
+
+          <option value="custom">
+            Custom
+          </option>
+
+        </select>
+
+
+        <select
+
+          value={
+            categoryFilter
+          }
+
+          onChange={
+            event =>
+              setCategoryFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Categories
+          </option>
+
+
+          {categories.map(
+            category => (
+
+              <option
+                key={
+                  category
+                }
+                value={
+                  category
+                }
+              >
+                {formatLabel(
+                  category
+                )}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            setupFilter
+          }
+
+          onChange={
+            event =>
+              setSetupFilter(
+                event.target.value as SetupFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Setup
+          </option>
+
+          <option value="required">
+            Setup Required
+          </option>
+
+          <option value="not_required">
+            No Setup Required
+          </option>
+
+        </select>
+
+
+        <div
+          className="
+            ml-auto
+            whitespace-nowrap
+            text-[9px]
+            text-slate-500
+          "
+        >
+          {filteredModules.length}
+          {' / '}
+          {modules.length}
+          {' modules'}
+        </div>
+
+      </section>
+
+
+      {/* =====================================================
+          TABLE
       ===================================================== */}
 
       <section className="gos-panel !p-0">
 
         <div
           className="
+            flex
+            items-center
+            justify-between
             border-b
             border-slate-200
-
             px-3
             py-2.5
           "
         >
 
-          <h3 className="gos-section-title">
-            Modules
-          </h3>
+          <div>
+
+            <h3 className="gos-section-title">
+              Modules
+            </h3>
 
 
-          <p
-            className="
-              mt-0.5
+            <p
+              className="
+                mt-0.5
+                text-[9px]
+                text-slate-500
+              "
+            >
+              Registry definitions only. Client and user entitlement are separate downstream layers.
+            </p>
 
-              text-[9px]
+          </div>
 
-              text-slate-500
-            "
-          >
-            {filteredModules.length} module{filteredModules.length === 1 ? '' : 's'}
-          </p>
+
+          {(
+            search
+            ||
+            statusFilter !==
+              'all'
+            ||
+            typeFilter !==
+              'all'
+            ||
+            categoryFilter !==
+              'all'
+            ||
+            setupFilter !==
+              'all'
+          ) && (
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setSearch(
+                  ''
+                );
+
+                setStatusFilter(
+                  'all'
+                );
+
+                setTypeFilter(
+                  'all'
+                );
+
+                setCategoryFilter(
+                  'all'
+                );
+
+                setSetupFilter(
+                  'all'
+                );
+
+              }}
+
+              className="
+                text-[9px]
+                font-semibold
+                text-violet-600
+              "
+            >
+              Clear filters
+            </button>
+
+          )}
 
         </div>
 
@@ -748,9 +1351,8 @@ export default function AdminModules() {
 
           <table
             className="
-              min-w-[980px]
               w-full
-
+              min-w-[1250px]
               border-collapse
             "
           >
@@ -761,7 +1363,6 @@ export default function AdminModules() {
                 className="
                   border-b
                   border-slate-200
-
                   bg-slate-50
                 "
               >
@@ -791,7 +1392,11 @@ export default function AdminModules() {
                 </TableHeader>
 
                 <TableHeader>
-                  Clients
+                  Overrides
+                </TableHeader>
+
+                <TableHeader>
+                  Route
                 </TableHeader>
 
                 <TableHeader align="right">
@@ -809,21 +1414,23 @@ export default function AdminModules() {
                 module => (
 
                   <tr
+
                     key={
-                      module.id
+                      module.moduleId
                     }
 
                     className="
                       border-b
                       border-slate-100
-
                       last:border-0
-
                       hover:bg-slate-50/70
                     "
                   >
 
-                    <td className="px-3 py-2">
+
+                    {/* MODULE */}
+
+                    <td className="px-3 py-2.5">
 
                       <div
                         className="
@@ -834,15 +1441,12 @@ export default function AdminModules() {
                       >
 
                         <ModuleIcon
-
                           moduleId={
-                            module.id
+                            module.moduleId
                           }
-
                           type={
-                            module.type
+                            module.moduleType
                           }
-
                         />
 
 
@@ -850,13 +1454,12 @@ export default function AdminModules() {
 
                           <div
                             className="
-                              text-[11px]
+                              text-[10px]
                               font-semibold
-
                               text-slate-900
                             "
                           >
-                            {module.name}
+                            {module.moduleName}
                           </div>
 
 
@@ -864,15 +1467,19 @@ export default function AdminModules() {
                             className="
                               mt-0.5
                               max-w-[320px]
-
                               truncate
-
-                              text-[9px]
-
+                              text-[8px]
                               text-slate-500
                             "
+                            title={
+                              module.description
+                              ||
+                              ''
+                            }
                           >
-                            {module.description}
+                            {module.description
+                              ||
+                              module.moduleId}
                           </div>
 
                         </div>
@@ -882,37 +1489,41 @@ export default function AdminModules() {
                     </td>
 
 
-                    <td className="px-3 py-2">
+                    {/* TYPE */}
+
+                    <td className="px-3 py-2.5">
 
                       <TypeBadge
                         type={
-                          module.type
+                          module.moduleType
                         }
                       />
 
                     </td>
 
 
+                    {/* CATEGORY */}
+
                     <td
                       className="
                         px-3
-                        py-2
-
-                        text-[10px]
+                        py-2.5
+                        text-[9px]
                         font-medium
-
                         text-slate-600
                       "
                     >
-                      {formatCategory(
+                      {formatLabelOrDash(
                         module.category
                       )}
                     </td>
 
 
-                    <td className="px-3 py-2">
+                    {/* STATUS */}
 
-                      <ModuleStatusBadge
+                    <td className="px-3 py-2.5">
+
+                      <StatusBadge
                         status={
                           module.status
                         }
@@ -921,52 +1532,78 @@ export default function AdminModules() {
                     </td>
 
 
-                    <td className="px-3 py-2">
+                    {/* SETUP */}
 
-                      <SetupBadge
-                        status={
-                          module.setupStatus
+                    <td className="px-3 py-2.5">
+
+                      <SimpleBadge
+                        label={
+                          module.setupRequired
+                            ? 'Required'
+                            : 'No Setup'
+                        }
+                        tone={
+                          module.setupRequired
+                            ? 'amber'
+                            : 'slate'
                         }
                       />
 
                     </td>
 
 
-                    <td
-                      className="
-                        px-3
-                        py-2
-
-                        text-[10px]
-                        font-semibold
-
-                        text-slate-800
-                      "
-                    >
-                      {getPlanCount(
-                        module.id
-                      )}
-                    </td>
-
+                    {/* PLANS */}
 
                     <td
                       className="
                         px-3
-                        py-2
-
+                        py-2.5
                         text-[10px]
                         font-semibold
-
                         text-slate-800
                       "
                     >
-                      {getClientCount(
-                        module.id
-                      )}
+                      {module.enabledPlans}
+                      {' / '}
+                      {module.totalPlanRows}
                     </td>
 
 
-                    <td className="px-3 py-2 text-right">
+                    {/* OVERRIDES */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+                        text-[10px]
+                        font-semibold
+                        text-slate-800
+                      "
+                    >
+                      {module.clientOverrides}
+                    </td>
+
+
+                    {/* ROUTE */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+                        font-mono
+                        text-[8px]
+                        text-slate-500
+                      "
+                    >
+                      {module.routeKey
+                        ||
+                        '—'}
+                    </td>
+
+
+                    {/* ACTION */}
+
+                    <td className="px-3 py-2.5 text-right">
 
                       <button
 
@@ -974,7 +1611,7 @@ export default function AdminModules() {
 
                         onClick={() =>
                           setSelectedModuleId(
-                            module.id
+                            module.moduleId
                           )
                         }
 
@@ -983,26 +1620,20 @@ export default function AdminModules() {
                           h-7
                           items-center
                           gap-1
-
                           rounded-[7px]
-
                           border
                           border-slate-200
-
                           bg-white
-
                           px-2.5
-
                           text-[9px]
                           font-semibold
-
                           text-slate-700
 
                           hover:bg-slate-50
                         "
                       >
 
-                        Manage
+                        Inspect
 
                         <ChevronRight
                           size={12}
@@ -1017,6 +1648,31 @@ export default function AdminModules() {
                 )
               )}
 
+
+              {filteredModules.length ===
+                0 && (
+
+                <tr>
+
+                  <td
+                    colSpan={
+                      9
+                    }
+                    className="
+                      px-4
+                      py-14
+                      text-center
+                      text-[10px]
+                      text-slate-500
+                    "
+                  >
+                    No modules match the selected filters.
+                  </td>
+
+                </tr>
+
+              )}
+
             </tbody>
 
           </table>
@@ -1027,462 +1683,49 @@ export default function AdminModules() {
 
 
       {/* =====================================================
-          ADD MODULE
+          SOURCE
       ===================================================== */}
 
-      {addOpen && (
+      <section
+        className="
+          rounded-[9px]
+          border
+          border-violet-200
+          bg-violet-50
+          px-3
+          py-2.5
+        "
+      >
 
-        <div
+        <p
           className="
-            fixed
-            inset-0
-            z-[100]
-
-            flex
-            items-center
-            justify-center
-
-            bg-slate-950/40
-
-            p-4
-
-            backdrop-blur-[2px]
+            text-[8px]
+            leading-4
+            text-violet-700
           "
         >
+          Source of truth: growthos_control.modules, plan_modules and brand_module_overrides. Admin Modules is read-only during this architecture phase.
+        </p>
 
-          <div
+
+        {data?.meta?.durationMs !==
+          undefined && (
+
+          <p
             className="
-              w-full
-              max-w-[600px]
-
-              rounded-[14px]
-
-              border
-              border-slate-200
-
-              bg-white
-
-              shadow-xl
+              mt-1
+              text-[8px]
+              text-violet-500
             "
           >
+            API runtime: {formatNumber(
+              data.meta.durationMs
+            )} ms
+          </p>
 
-            <div
-              className="
-                flex
-                items-center
-                justify-between
+        )}
 
-                border-b
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <div>
-
-                <h3
-                  className="
-                    text-[14px]
-                    font-semibold
-
-                    text-slate-950
-                  "
-                >
-                  Add Module
-                </h3>
-
-
-                <p
-                  className="
-                    mt-0.5
-
-                    text-[9px]
-
-                    text-slate-500
-                  "
-                >
-                  Register a standard or custom Growth OS module.
-                </p>
-
-              </div>
-
-
-              <button
-
-                type="button"
-
-                onClick={() => {
-
-                  setAddOpen(
-                    false
-                  );
-
-
-                  resetNewModuleForm();
-
-                }}
-
-                className="
-                  flex
-                  h-7
-                  w-7
-                  items-center
-                  justify-center
-
-                  rounded-[7px]
-
-                  text-slate-400
-
-                  hover:bg-slate-100
-                "
-              >
-
-                <X
-                  size={15}
-                />
-
-              </button>
-
-            </div>
-
-
-            <div className="space-y-3 p-4">
-
-
-              <FormField
-                label="Module Name"
-              >
-
-                <input
-
-                  value={
-                    newName
-                  }
-
-                  onChange={
-                    event =>
-                      setNewName(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Example: Salon OS"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <FormField
-                label="Description"
-              >
-
-                <input
-
-                  value={
-                    newDescription
-                  }
-
-                  onChange={
-                    event =>
-                      setNewDescription(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="What does this module do?"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <div
-                className="
-                  grid
-                  grid-cols-1
-                  gap-3
-
-                  md:grid-cols-2
-                "
-              >
-
-                <FormField
-                  label="Module Type"
-                >
-
-                  <select
-
-                    value={
-                      newType
-                    }
-
-                    onChange={
-                      event =>
-                        setNewType(
-                          event.target.value as ModuleType
-                        )
-                    }
-
-                    className="gos-input w-full"
-
-                  >
-
-                    <option value="standard">
-                      Standard
-                    </option>
-
-                    <option value="custom">
-                      Custom
-                    </option>
-
-                  </select>
-
-                </FormField>
-
-
-                <FormField
-                  label="Sidebar Category"
-                >
-
-                  <select
-
-                    value={
-                      newCategory
-                    }
-
-                    onChange={
-                      event =>
-                        setNewCategory(
-                          event.target.value as ModuleCategory
-                        )
-                    }
-
-                    className="gos-input w-full"
-
-                  >
-
-                    <option value="workspace">
-                      Workspace
-                    </option>
-
-                    <option value="growth">
-                      Growth
-                    </option>
-
-                    <option value="customers">
-                      Customers
-                    </option>
-
-                    <option value="commerce">
-                      Commerce
-                    </option>
-
-                    <option value="data">
-                      Data
-                    </option>
-
-                    <option value="system">
-                      System
-                    </option>
-
-                    <option value="custom">
-                      Custom
-                    </option>
-
-                  </select>
-
-                </FormField>
-
-              </div>
-
-
-              <FormField
-                label="Route Key"
-                hint="Internal identity"
-              >
-
-                <input
-
-                  value={
-                    newRouteKey
-                  }
-
-                  onChange={
-                    event =>
-                      setNewRouteKey(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Example: Salon OS"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <div
-                className="
-                  flex
-                  items-center
-                  justify-between
-                  gap-4
-
-                  rounded-[9px]
-
-                  border
-                  border-slate-200
-
-                  bg-slate-50
-
-                  px-3
-                  py-2.5
-                "
-              >
-
-                <div>
-
-                  <p
-                    className="
-                      text-[10px]
-                      font-semibold
-
-                      text-slate-800
-                    "
-                  >
-                    Setup Required
-                  </p>
-
-
-                  <p
-                    className="
-                      mt-0.5
-
-                      text-[9px]
-
-                      text-slate-500
-                    "
-                  >
-                    Require initialization before the module becomes usable.
-                  </p>
-
-                </div>
-
-
-                <Toggle
-
-                  checked={
-                    newSetupRequired
-                  }
-
-                  onChange={
-                    setNewSetupRequired
-                  }
-
-                />
-
-              </div>
-
-            </div>
-
-
-            <div
-              className="
-                flex
-                justify-end
-                gap-2
-
-                border-t
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <button
-
-                type="button"
-
-                onClick={() => {
-
-                  setAddOpen(
-                    false
-                  );
-
-
-                  resetNewModuleForm();
-
-                }}
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  border
-                  border-slate-200
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-slate-600
-                "
-              >
-                Cancel
-              </button>
-
-
-              <button
-
-                type="button"
-
-                disabled={
-                  !newName.trim()
-                }
-
-                onClick={
-                  createModule
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-
-                  disabled:opacity-40
-                "
-              >
-                Create Module
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      </section>
 
     </div>
 
@@ -1499,103 +1742,17 @@ function ModuleDetail({
 
   module,
 
-  planCount,
-
-  clientCount,
-
   onBack,
-
-  onChange,
 
 }: {
 
   module:
-    GrowthModule;
-
-  planCount:
-    number;
-
-  clientCount:
-    number;
+    AdminModule;
 
   onBack:
     () => void;
 
-  onChange:
-    (
-      module:
-        GrowthModule
-    ) => void;
-
 }) {
-
-
-  // ==========================================================
-  // SETUP ACTION
-  // ==========================================================
-
-  function advanceSetup() {
-
-    if (
-      !module.setupRequired
-    ) {
-
-      onChange({
-
-        ...module,
-
-        setupStatus:
-          'ready',
-
-      });
-
-
-      return;
-
-    }
-
-
-    if (
-      module.setupStatus ===
-        'not_started'
-      ||
-      module.setupStatus ===
-        'setup_required'
-    ) {
-
-      onChange({
-
-        ...module,
-
-        setupStatus:
-          'configuring',
-
-      });
-
-
-      return;
-
-    }
-
-
-    if (
-      module.setupStatus ===
-        'configuring'
-    ) {
-
-      onChange({
-
-        ...module,
-
-        setupStatus:
-          'ready',
-
-      });
-
-    }
-
-  }
-
 
   return (
 
@@ -1614,9 +1771,9 @@ function ModuleDetail({
             flex-col
             gap-3
 
-            lg:flex-row
-            lg:items-center
-            lg:justify-between
+            md:flex-row
+            md:items-center
+            md:justify-between
           "
         >
 
@@ -1643,15 +1800,10 @@ function ModuleDetail({
                 shrink-0
                 items-center
                 justify-center
-
                 rounded-[8px]
-
                 border
                 border-slate-200
-
                 bg-white
-
-                text-slate-500
 
                 hover:bg-slate-50
               "
@@ -1665,17 +1817,13 @@ function ModuleDetail({
 
 
             <ModuleIcon
-
               moduleId={
-                module.id
+                module.moduleId
               }
-
               type={
-                module.type
+                module.moduleType
               }
-
               large
-
             />
 
 
@@ -1694,22 +1842,21 @@ function ModuleDetail({
                   className="
                     text-[15px]
                     font-semibold
-
                     text-slate-950
                   "
                 >
-                  {module.name}
+                  {module.moduleName}
                 </h2>
 
 
                 <TypeBadge
                   type={
-                    module.type
+                    module.moduleType
                   }
                 />
 
 
-                <ModuleStatusBadge
+                <StatusBadge
                   status={
                     module.status
                   }
@@ -1721,13 +1868,14 @@ function ModuleDetail({
               <p
                 className="
                   mt-0.5
-
+                  max-w-3xl
                   text-[9px]
-
                   text-slate-500
                 "
               >
-                {module.description}
+                {module.description
+                  ||
+                  module.moduleId}
               </p>
 
             </div>
@@ -1735,110 +1883,21 @@ function ModuleDetail({
           </div>
 
 
-          <div
+          <span
             className="
-              flex
-              flex-wrap
-              gap-2
+              rounded-full
+              border
+              border-slate-200
+              bg-slate-50
+              px-2.5
+              py-1
+              text-[8px]
+              font-semibold
+              text-slate-500
             "
           >
-
-            <select
-
-              value={
-                module.status
-              }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...module,
-
-                    status:
-                      event.target.value as ModuleStatus,
-
-                  })
-              }
-
-              className="
-                h-8
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                px-2.5
-
-                text-[10px]
-              "
-            >
-
-              <option value="active">
-                Active
-              </option>
-
-              <option value="draft">
-                Draft
-              </option>
-
-              <option value="suspended">
-                Suspended
-              </option>
-
-            </select>
-
-
-            {module.setupStatus !==
-              'ready' && (
-
-              <button
-
-                type="button"
-
-                onClick={
-                  advanceSetup
-                }
-
-                className="
-                  inline-flex
-                  h-8
-                  items-center
-                  gap-1.5
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-                "
-              >
-
-                <Activity
-                  size={13}
-                />
-
-                {module.setupStatus ===
-                  'configuring'
-
-                  ? 'Mark Ready'
-
-                  : 'Initiate Setup'
-                }
-
-              </button>
-
-            )}
-
-          </div>
+            Read Only
+          </span>
 
         </div>
 
@@ -1860,37 +1919,47 @@ function ModuleDetail({
       >
 
         <SummaryCard
+          label="Plans Enabled"
+          value={
+            module.enabledPlans
+          }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="Plan Rows"
+          value={
+            module.totalPlanRows
+          }
+        />
+
+
+        <SummaryCard
+          label="Client Overrides"
+          value={
+            module.clientOverrides
+          }
+          tone={
+            module.clientOverrides >
+              0
+              ? 'amber'
+              : 'slate'
+          }
+        />
+
+
+        <SummaryCard
           label="Setup"
           value={
-            formatSetupStatus(
-              module.setupStatus
-            )
+            module.setupRequired
+              ? 'Required'
+              : 'Not Required'
           }
-        />
-
-
-        <SummaryCard
-          label="Plans"
-          value={
-            planCount
-          }
-        />
-
-
-        <SummaryCard
-          label="Clients"
-          value={
-            clientCount
-          }
-        />
-
-
-        <SummaryCard
-          label="Category"
-          value={
-            formatCategory(
-              module.category
-            )
+          tone={
+            module.setupRequired
+              ? 'amber'
+              : 'green'
           }
         />
 
@@ -1898,372 +1967,271 @@ function ModuleDetail({
 
 
       {/* =====================================================
-          CONFIGURATION
+          IDENTITY
       ===================================================== */}
 
-      <section className="gos-panel !p-3.5">
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
 
-        <h3 className="gos-section-title">
-          Module Configuration
-        </h3>
+          lg:grid-cols-2
+        "
+      >
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Module Identity
+          </h3>
 
 
-        <div
-          className="
-            mt-3
+          <div className="mt-3 space-y-2">
 
-            grid
-            grid-cols-1
-            gap-3
-
-            md:grid-cols-2
-          "
-        >
-
-          <FormField label="Module Name">
-
-            <input
-
+            <ValueRow
+              label="Module ID"
               value={
-                module.name
+                module.moduleId
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...module,
-
-                    name:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
+              mono
             />
 
-          </FormField>
+
+            <ValueRow
+              label="Module Name"
+              value={
+                module.moduleName
+              }
+            />
 
 
-          <FormField label="Route Key">
+            <ValueRow
+              label="Type"
+              value={
+                formatLabelOrDash(
+                  module.moduleType
+                )
+              }
+            />
 
-            <input
 
+            <ValueRow
+              label="Status"
+              value={
+                formatLabel(
+                  module.status
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Navigation
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Category"
+              value={
+                formatLabelOrDash(
+                  module.category
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Route Key"
               value={
                 module.routeKey
+                ||
+                '—'
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...module,
-
-                    routeKey:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
+              mono
             />
 
-          </FormField>
 
-
-          <FormField label="Type">
-
-            <select
-
+            <ValueRow
+              label="Setup Required"
               value={
-                module.type
+                module.setupRequired
+                  ? 'Yes'
+                  : 'No'
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...module,
-
-                    type:
-                      event.target.value as ModuleType,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
-            >
-
-              <option value="standard">
-                Standard
-              </option>
-
-              <option value="custom">
-                Custom
-              </option>
-
-            </select>
-
-          </FormField>
-
-
-          <FormField label="Sidebar Category">
-
-            <select
-
-              value={
-                module.category
-              }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...module,
-
-                    category:
-                      event.target.value as ModuleCategory,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
-            >
-
-              <option value="workspace">
-                Workspace
-              </option>
-
-              <option value="growth">
-                Growth
-              </option>
-
-              <option value="customers">
-                Customers
-              </option>
-
-              <option value="commerce">
-                Commerce
-              </option>
-
-              <option value="data">
-                Data
-              </option>
-
-              <option value="system">
-                System
-              </option>
-
-              <option value="custom">
-                Custom
-              </option>
-
-            </select>
-
-          </FormField>
-
-
-          <div className="md:col-span-2">
-
-            <FormField label="Description">
-
-              <input
-
-                value={
-                  module.description
-                }
-
-                onChange={
-                  event =>
-                    onChange({
-
-                      ...module,
-
-                      description:
-                        event.target.value,
-
-                    })
-                }
-
-                className="gos-input w-full"
-
-              />
-
-            </FormField>
+            />
 
           </div>
 
-        </div>
+        </section>
 
       </section>
 
 
       {/* =====================================================
-          SETUP LIFECYCLE
-      ===================================================== */}
-
-      <section className="gos-panel !p-3.5">
-
-        <div
-          className="
-            flex
-            items-start
-            justify-between
-            gap-3
-          "
-        >
-
-          <div>
-
-            <h3 className="gos-section-title">
-              Setup Lifecycle
-            </h3>
-
-
-            <p
-              className="
-                mt-0.5
-
-                text-[9px]
-
-                text-slate-500
-              "
-            >
-              Determines whether module initialization is required.
-            </p>
-
-          </div>
-
-
-          <SetupBadge
-            status={
-              module.setupStatus
-            }
-          />
-
-        </div>
-
-
-        <div
-          className="
-            mt-3
-
-            flex
-            items-center
-            justify-between
-            gap-4
-
-            rounded-[9px]
-
-            border
-            border-slate-200
-
-            bg-slate-50
-
-            px-3
-            py-2.5
-          "
-        >
-
-          <div>
-
-            <p
-              className="
-                text-[10px]
-                font-semibold
-
-                text-slate-800
-              "
-            >
-              Setup Required
-            </p>
-
-
-            <p
-              className="
-                mt-0.5
-
-                text-[9px]
-
-                text-slate-500
-              "
-            >
-              Require initialization before client use.
-            </p>
-
-          </div>
-
-
-          <Toggle
-
-            checked={
-              module.setupRequired
-            }
-
-            onChange={
-              checked =>
-                onChange({
-
-                  ...module,
-
-                  setupRequired:
-                    checked,
-
-                  setupStatus:
-                    checked
-
-                      ? module.setupStatus ===
-                          'ready'
-
-                        ? 'setup_required'
-
-                        : module.setupStatus
-
-                      : 'ready',
-
-                })
-            }
-
-          />
-
-        </div>
-
-      </section>
-
-
-      {/* =====================================================
-          ASSIGNMENT
+          DESCRIPTION
       ===================================================== */}
 
       <section className="gos-panel !p-3.5">
 
         <h3 className="gos-section-title">
-          Assignment
+          Description
         </h3>
 
 
         <p
           className="
-            mt-0.5
-
-            text-[9px]
-
-            text-slate-500
+            mt-2
+            text-[10px]
+            leading-5
+            text-slate-600
           "
         >
-          Counts are calculated live from Plans and Client entitlement.
+          {module.description
+            ||
+            'No module description configured.'}
         </p>
+
+      </section>
+
+
+      {/* =====================================================
+          ENTITLEMENT USAGE
+      ===================================================== */}
+
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
+
+          lg:grid-cols-2
+        "
+      >
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Plan Entitlement
+          </h3>
+
+
+          <p
+            className="
+              mt-0.5
+              text-[9px]
+              text-slate-500
+            "
+          >
+            How this module is currently represented across canonical plans.
+          </p>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Enabled Plans"
+              value={
+                formatNumber(
+                  module.enabledPlans
+                )
+              }
+              strong
+            />
+
+
+            <ValueRow
+              label="Total Plan Rows"
+              value={
+                formatNumber(
+                  module.totalPlanRows
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Client Overrides
+          </h3>
+
+
+          <p
+            className="
+              mt-0.5
+              text-[9px]
+              text-slate-500
+            "
+          >
+            Explicit brand-level deviations from normal plan entitlement.
+          </p>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Total Overrides"
+              value={
+                formatNumber(
+                  module.clientOverrides
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Enabled Overrides"
+              value={
+                formatNumber(
+                  module.enabledOverrides
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Disabled Overrides"
+              value={
+                formatNumber(
+                  module.disabledOverrides
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+      </section>
+
+
+      {/* =====================================================
+          LIFECYCLE
+      ===================================================== */}
+
+      <section className="gos-panel !p-3.5">
+
+        <h3 className="gos-section-title">
+          Lifecycle
+        </h3>
 
 
         <div
           className="
             mt-3
-
             grid
             grid-cols-1
             gap-2
@@ -2273,25 +2241,68 @@ function ModuleDetail({
         >
 
           <ValueRow
-            label="Plans Including Module"
+            label="Created"
             value={
-              String(
-                planCount
+              formatTimestamp(
+                module.createdAt
               )
+              ||
+              '—'
             }
           />
 
 
           <ValueRow
-            label="Clients With Access"
+            label="Updated"
             value={
-              String(
-                clientCount
+              formatTimestamp(
+                module.updatedAt
               )
+              ||
+              '—'
             }
           />
 
         </div>
+
+      </section>
+
+
+      {/* =====================================================
+          OWNERSHIP
+      ===================================================== */}
+
+      <section
+        className="
+          rounded-[10px]
+          border
+          border-violet-200
+          bg-violet-50
+          p-3
+        "
+      >
+
+        <p
+          className="
+            text-[9px]
+            font-semibold
+            text-violet-800
+          "
+        >
+          Module registry ownership
+        </p>
+
+
+        <p
+          className="
+            mt-1
+            text-[8px]
+            leading-4
+            text-violet-600
+          "
+        >
+          Modules define which capabilities exist in Growth OS. Plans determine commercial entitlement, client overrides adjust brand-level access, and user-level permissions will be implemented separately when we return to the client access system.
+        </p>
 
       </section>
 
@@ -2321,7 +2332,8 @@ function ModuleIcon({
     string;
 
   type:
-    ModuleType;
+    string |
+    null;
 
   large?:
     boolean;
@@ -2399,14 +2411,23 @@ function ModuleIcon({
 
 
   if (
-    type ===
-      'custom'
+    normalize(
+      type
+    ) ===
+    'custom'
   ) {
 
     Icon =
       Sparkles;
 
   }
+
+
+  const custom =
+    normalize(
+      type
+    ) ===
+    'custom';
 
 
   return (
@@ -2417,36 +2438,18 @@ function ModuleIcon({
         shrink-0
         items-center
         justify-center
-
         rounded-[9px]
 
         ${
-          type ===
-            'custom'
-
-            ? `
-              bg-amber-50
-              text-amber-600
-            `
-
-            : `
-              bg-violet-50
-              text-violet-600
-            `
+          custom
+            ? 'bg-amber-50 text-amber-600'
+            : 'bg-violet-50 text-violet-600'
         }
 
         ${
           large
-
-            ? `
-              h-9
-              w-9
-            `
-
-            : `
-              h-8
-              w-8
-            `
+            ? 'h-9 w-9'
+            : 'h-8 w-8'
         }
       `}
     >
@@ -2477,29 +2480,32 @@ function TypeBadge({
 }: {
 
   type:
-    ModuleType;
+    string |
+    null;
 
 }) {
+
+  const custom =
+    normalize(
+      type
+    ) ===
+    'custom';
+
 
   return (
 
     <span
       className={`
         inline-flex
-
         rounded-full
-
         border
-
         px-2
         py-0.5
-
         text-[8px]
         font-semibold
 
         ${
-          type ===
-            'custom'
+          custom
 
             ? `
               border-amber-200
@@ -2515,13 +2521,9 @@ function TypeBadge({
         }
       `}
     >
-      {type ===
-        'standard'
-
-        ? 'Standard'
-
-        : 'Custom'
-      }
+      {formatLabelOrDash(
+        type
+      )}
     </span>
 
   );
@@ -2530,51 +2532,25 @@ function TypeBadge({
 
 
 // ============================================================
-// MODULE STATUS BADGE
+// STATUS BADGE
 // ============================================================
 
-function ModuleStatusBadge({
+function StatusBadge({
 
   status,
 
 }: {
 
   status:
-    ModuleStatus;
+    string;
 
 }) {
 
-  const config =
-
-    status ===
-      'active'
-
-      ? {
-          label:
-            'Active',
-
-          cls:
-            'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
-
-      : status ===
-          'draft'
-
-        ? {
-            label:
-              'Draft',
-
-            cls:
-              'border-amber-200 bg-amber-50 text-amber-700',
-          }
-
-        : {
-            label:
-              'Suspended',
-
-            cls:
-              'border-red-200 bg-red-50 text-red-700',
-          };
+  const active =
+    normalize(
+      status
+    ) ===
+    'active';
 
 
   return (
@@ -2582,204 +2558,92 @@ function ModuleStatusBadge({
     <span
       className={`
         inline-flex
-
         rounded-full
-
         border
-
         px-2
         py-0.5
-
         text-[8px]
         font-semibold
-
-        ${config.cls}
-      `}
-    >
-      {config.label}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// SETUP BADGE
-// ============================================================
-
-function SetupBadge({
-
-  status,
-
-}: {
-
-  status:
-    SetupStatus;
-
-}) {
-
-  const config =
-
-    status ===
-      'ready'
-
-      ? {
-          label:
-            'Ready',
-
-          cls:
-            'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
-
-      : status ===
-          'configuring'
-
-        ? {
-            label:
-              'Configuring',
-
-            cls:
-              'border-blue-200 bg-blue-50 text-blue-700',
-          }
-
-        : status ===
-            'setup_required'
-
-          ? {
-              label:
-                'Setup Required',
-
-              cls:
-                'border-amber-200 bg-amber-50 text-amber-700',
-            }
-
-          : {
-              label:
-                'Not Started',
-
-              cls:
-                'border-slate-200 bg-slate-100 text-slate-600',
-            };
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${config.cls}
-      `}
-    >
-      {config.label}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// TOGGLE
-// ============================================================
-
-function Toggle({
-
-  checked,
-
-  onChange,
-
-}: {
-
-  checked:
-    boolean;
-
-  onChange:
-    (
-      checked:
-        boolean
-    ) => void;
-
-}) {
-
-  return (
-
-    <button
-
-      type="button"
-
-      role="switch"
-
-      aria-checked={
-        checked
-      }
-
-      onClick={() =>
-        onChange(
-          !checked
-        )
-      }
-
-      className={`
-        relative
-
-        h-5
-        w-9
-        shrink-0
-
-        rounded-full
-
-        p-[2px]
-
-        transition
 
         ${
-          checked
+          active
 
-            ? 'bg-violet-500'
+            ? `
+              border-emerald-200
+              bg-emerald-50
+              text-emerald-700
+            `
 
-            : 'bg-slate-300'
+            : `
+              border-slate-200
+              bg-slate-100
+              text-slate-600
+            `
         }
       `}
     >
+      {formatLabel(
+        status
+      )}
+    </span>
 
-      <span
-        className={`
-          block
+  );
 
-          h-4
-          w-4
+}
 
-          rounded-full
 
-          bg-white
+// ============================================================
+// SIMPLE BADGE
+// ============================================================
 
-          shadow-sm
+function SimpleBadge({
 
-          transition-transform
+  label,
 
-          ${
-            checked
+  tone,
 
-              ? 'translate-x-4'
+}: {
 
-              : 'translate-x-0'
-          }
-        `}
-      />
+  label:
+    string;
 
-    </button>
+  tone:
+    | 'green'
+    | 'amber'
+    | 'slate';
+
+}) {
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+
+      : tone ===
+          'amber'
+
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+
+        : 'border-slate-200 bg-slate-100 text-slate-600';
+
+
+  return (
+
+    <span
+      className={`
+        inline-flex
+        rounded-full
+        border
+        px-2
+        py-0.5
+        text-[8px]
+        font-semibold
+        ${cls}
+      `}
+    >
+      {label}
+    </span>
 
   );
 
@@ -2796,6 +2660,9 @@ function SummaryCard({
 
   value,
 
+  tone =
+    'default',
+
 }: {
 
   label:
@@ -2805,16 +2672,45 @@ function SummaryCard({
     string |
     number;
 
+  tone?:
+    | 'default'
+    | 'green'
+    | 'amber'
+    | 'violet'
+    | 'slate';
+
 }) {
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'text-emerald-700'
+
+      : tone ===
+          'amber'
+
+        ? 'text-amber-700'
+
+        : tone ===
+            'violet'
+
+          ? 'text-violet-700'
+
+          : tone ===
+              'slate'
+
+            ? 'text-slate-500'
+
+            : 'text-slate-950';
+
 
   return (
 
     <div
       className="
         gos-card
-
         min-h-[66px]
-
         px-3
         py-2.5
       "
@@ -2826,15 +2722,14 @@ function SummaryCard({
 
 
       <p
-        className="
+        className={`
           mt-1.5
-
+          truncate
           text-[18px]
           font-semibold
           tracking-[-0.03em]
-
-          text-slate-950
-        "
+          ${cls}
+        `}
       >
         {value}
       </p>
@@ -2856,6 +2751,12 @@ function ValueRow({
 
   value,
 
+  mono =
+    false,
+
+  strong =
+    false,
+
 }: {
 
   label:
@@ -2863,6 +2764,12 @@ function ValueRow({
 
   value:
     string;
+
+  mono?:
+    boolean;
+
+  strong?:
+    boolean;
 
 }) {
 
@@ -2875,22 +2782,18 @@ function ValueRow({
         items-center
         justify-between
         gap-3
-
         rounded-[8px]
-
         border
         border-slate-200
-
         bg-slate-50
-
         px-3
       "
     >
 
       <span
         className="
+          shrink-0
           text-[9px]
-
           text-slate-500
         "
       >
@@ -2899,12 +2802,28 @@ function ValueRow({
 
 
       <span
-        className="
+        title={
+          value
+        }
+        className={`
+          max-w-[68%]
+          truncate
+          text-right
           text-[10px]
           font-semibold
 
-          text-slate-800
-        "
+          ${
+            strong
+              ? 'text-violet-700'
+              : 'text-slate-800'
+          }
+
+          ${
+            mono
+              ? 'font-mono text-[8px]'
+              : ''
+          }
+        `}
       >
         {value}
       </span>
@@ -2944,22 +2863,17 @@ function TableHeader({
     <th
       className={`
         h-8
-
         px-3
-
-        text-[9px]
+        text-[8px]
         font-semibold
         uppercase
         tracking-[0.05em]
-
         text-slate-500
 
         ${
           align ===
             'right'
-
             ? 'text-right'
-
             : 'text-left'
         }
       `}
@@ -2973,159 +2887,147 @@ function TableHeader({
 
 
 // ============================================================
-// FORM FIELD
+// HELPERS
 // ============================================================
 
-function FormField({
+function normalize(
+  value:
+    string |
+    null
+) {
 
-  label,
+  return String(
+    value
+    ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
 
-  hint,
-
-  children,
-
-}: {
-
-  label:
-    string;
-
-  hint?:
-    string;
-
-  children:
-    ReactNode;
-
-}) {
-
-  return (
-
-    <label className="block">
-
-      <div
-        className="
-          mb-1.5
-
-          flex
-          items-center
-          justify-between
-          gap-2
-        "
-      >
-
-        <span
-          className="
-            text-[9px]
-            font-semibold
-            uppercase
-            tracking-[0.05em]
-
-            text-slate-500
-          "
-        >
-          {label}
-        </span>
+}
 
 
-        {hint && (
+function formatLabelOrDash(
+  value:
+    string |
+    null
+) {
 
-          <span
-            className="
-              text-[8px]
+  if (!value) {
 
-              text-slate-400
-            "
-          >
-            {hint}
-          </span>
+    return '—';
 
-        )}
-
-      </div>
+  }
 
 
-      {children}
-
-    </label>
-
+  return formatLabel(
+    value
   );
 
 }
 
 
-// ============================================================
-// HELPERS
-// ============================================================
-
-function formatCategory(
-  category:
-    ModuleCategory
+function formatLabel(
+  value:
+    string
 ) {
 
-  const labels:
-    Record<
-      ModuleCategory,
-      string
-    > = {
+  if (!value) {
 
-    workspace:
-      'Workspace',
+    return '—';
 
-    growth:
-      'Growth',
-
-    customers:
-      'Customers',
-
-    commerce:
-      'Commerce',
-
-    data:
-      'Data',
-
-    system:
-      'System',
-
-    custom:
-      'Custom',
-
-  };
+  }
 
 
-  return labels[
-    category
-  ];
+  return value
+    .replace(
+      /[_-]+/g,
+      ' '
+    )
+    .split(
+      ' '
+    )
+    .filter(
+      Boolean
+    )
+    .map(
+      word =>
+        word
+          .charAt(
+            0
+          )
+          .toUpperCase()
+        +
+        word.slice(
+          1
+        )
+    )
+    .join(
+      ' '
+    );
 
 }
 
 
-function formatSetupStatus(
-  status:
-    SetupStatus
+function formatTimestamp(
+  value:
+    string |
+    null
 ) {
 
-  const labels:
-    Record<
-      SetupStatus,
-      string
-    > = {
+  if (!value) {
 
-    ready:
-      'Ready',
+    return null;
 
-    setup_required:
-      'Setup Required',
-
-    configuring:
-      'Configuring',
-
-    not_started:
-      'Not Started',
-
-  };
+  }
 
 
-  return labels[
-    status
-  ];
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return value;
+
+  }
+
+
+  return date.toLocaleString(
+    'en-IN',
+    {
+
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+
+    }
+  );
+
+}
+
+
+function formatNumber(
+  value:
+    number
+) {
+
+  return new Intl.NumberFormat(
+    'en-IN',
+    {
+      maximumFractionDigits:
+        0,
+    }
+  ).format(
+    value
+  );
 
 }

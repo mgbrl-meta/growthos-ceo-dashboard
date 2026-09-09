@@ -21,6 +21,7 @@ import {
 
 import {
   startOrdersBulkOperation,
+  startCustomersBulkOperation,
   getBulkOperation,
 } from './shopify-bulk.js';
 
@@ -1500,19 +1501,129 @@ if (
         }
 
 
-        const runtime =
-          await resolveShopifyRuntimeContext(
-            job
-          );
+                let operation;
 
 
-        let operation;
+        let backfillEntity =
+          null;
 
 
         try {
 
+          // ====================================================
+          // AUTHORITATIVE PERSISTED WINDOW
+          //
+          // Pub/Sub carries routing information, but the
+          // persisted Growth OS backfill window is authoritative.
+          // ====================================================
+
+          const persistedWindow =
+            await getBackfillWindow({
+
+              workspaceId:
+                job.workspaceId,
+
+              brandId:
+                job.brandId,
+
+              backfillRunId:
+                job.backfillRunId,
+
+              backfillWindowId:
+                job.backfillWindowId,
+
+            });
+
+
+          if (!persistedWindow) {
+
+            throw new Error(
+              'SHOPIFY_BACKFILL_WINDOW_NOT_FOUND_AFTER_CLAIM'
+            );
+
+          }
+
+
+          backfillEntity =
+            requireString(
+              persistedWindow.entity,
+              'SHOPIFY_BACKFILL_ENTITY_MISSING'
+            );
+
+
+          // ====================================================
+          // MESSAGE ↔ PERSISTED STATE INTEGRITY
+          // ====================================================
+
+          if (
+            job.entity !==
+              backfillEntity
+          ) {
+
+            throw new Error(
+              'SHOPIFY_BACKFILL_ENTITY_MISMATCH'
+            );
+
+          }
+
+
+          // ====================================================
+          // ENTITY BULK STARTER
+          // ====================================================
+
+          let startBulkOperation =
+            null;
+
+
+          if (
+            backfillEntity ===
+              'orders'
+          ) {
+
+            startBulkOperation =
+              startOrdersBulkOperation;
+
+          }
+
+
+          if (
+            backfillEntity ===
+              'customers'
+          ) {
+
+            startBulkOperation =
+              startCustomersBulkOperation;
+
+          }
+
+
+          if (
+            !startBulkOperation
+          ) {
+
+            throw new Error(
+              'SHOPIFY_BACKFILL_ENTITY_UNSUPPORTED'
+            );
+
+          }
+
+
+          // ====================================================
+          // RUNTIME
+          // ====================================================
+
+          const runtime =
+            await resolveShopifyRuntimeContext(
+              job
+            );
+
+
+          // ====================================================
+          // START SHOPIFY BULK OPERATION
+          // ====================================================
+
           operation =
-            await startOrdersBulkOperation(
+            await startBulkOperation(
 
               runtime,
 
@@ -1528,9 +1639,23 @@ if (
 
             );
 
+
         } catch (
           error
         ) {
+
+          // ====================================================
+          // RELEASE CLAIM
+          //
+          // Includes:
+          //
+          // persisted-state mismatch
+          // unsupported entity
+          // runtime/credential failure
+          // Shopify Bulk start failure
+          //
+          // Window may therefore retry safely.
+          // ====================================================
 
           await releaseBackfillWindowClaim({
 
@@ -1557,7 +1682,6 @@ if (
           throw error;
 
         }
-
 
         await markBackfillBulkStarted({
 
@@ -1599,6 +1723,9 @@ if (
 
             brandId:
               job.brandId,
+
+            entity:
+              backfillEntity,  
 
             backfillRunId:
               job.backfillRunId,

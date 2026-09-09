@@ -11,6 +11,7 @@ import type {
 
 import {
   queryEarliestShopifyOrder,
+  queryEarliestShopifyCustomer,
 } from '@/lib/auth/shopify';
 
 import type {
@@ -1253,6 +1254,355 @@ export async function queryEarliestOrderWithStoredShopifyCredential(
     return {
 
       order,
+
+      tokenRefreshed,
+
+    };
+
+  }
+
+}
+
+// ============================================================
+// EARLIEST CUSTOMER USING STORED SHOPIFY CREDENTIAL
+//
+// Secret material remains inside this server-only module.
+//
+// Caller receives:
+//
+// earliest Customer
+// token refresh information
+//
+// Caller NEVER receives:
+//
+// access_token
+// refresh_token
+// ============================================================
+
+export async function queryEarliestCustomerWithStoredShopifyCredential(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    secretName:
+      string;
+
+    expectedShopId:
+      string;
+
+    expectedShopDomain:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // 1. VERIFY EXISTING STORED IDENTITY
+  // ==========================================================
+
+  const verified =
+    await verifyStoredShopifyCredential({
+
+      secretName:
+        input.secretName,
+
+      expectedShopId:
+        input.expectedShopId,
+
+      expectedShopDomain:
+        input.expectedShopDomain,
+
+    });
+
+
+  // ==========================================================
+  // 2. REFRESH IF TOKEN IS EXPIRING
+  //
+  // Same five-minute safety margin as Orders.
+  // ==========================================================
+
+  let tokenRefreshed =
+    false;
+
+
+  const expiresAt =
+    verified.accessTokenExpiresAt
+      ?
+        Date.parse(
+          verified.accessTokenExpiresAt
+        )
+      :
+        null;
+
+
+  if (
+    expiresAt !==
+      null
+    &&
+    Number.isFinite(
+      expiresAt
+    )
+    &&
+    expiresAt <=
+      Date.now()
+      +
+      5 * 60 * 1000
+  ) {
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+  }
+
+
+  // ==========================================================
+  // 3. READ CURRENT SECRET VERSION
+  // ==========================================================
+
+  let stored =
+    await readIntegrationSecret<
+      StoredShopifyCredentialV1
+    >(
+      input.secretName
+    );
+
+
+  // ==========================================================
+  // 4. DEFENCE-IN-DEPTH CREDENTIAL VALIDATION
+  // ==========================================================
+
+  if (
+    stored.schema_version !==
+      1
+    ||
+    stored.credential_type !==
+      'shopify_offline_expiring'
+    ||
+    stored.provider !==
+      'shopify'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_CUSTOMER_CREDENTIAL_INVALID'
+    );
+
+  }
+
+
+  if (
+    stored.shop_id !==
+      input.expectedShopId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_CUSTOMER_SHOP_ID_MISMATCH'
+    );
+
+  }
+
+
+  if (
+    stored
+      .shop_domain
+      .toLowerCase()
+    !==
+    input
+      .expectedShopDomain
+      .toLowerCase()
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_CUSTOMER_SHOP_DOMAIN_MISMATCH'
+    );
+
+  }
+
+
+  if (!stored.access_token) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_CUSTOMER_ACCESS_TOKEN_MISSING'
+    );
+
+  }
+
+
+  // ==========================================================
+  // 5. QUERY SHOPIFY
+  //
+  // If Shopify unexpectedly rejects the token with 401:
+  //
+  // refresh once
+  // reread Secret Manager
+  // retry once
+  // ==========================================================
+
+  try {
+
+    const customer =
+      await queryEarliestShopifyCustomer(
+
+        stored.shop_domain,
+
+        stored.access_token
+
+      );
+
+
+    return {
+
+      customer,
+
+      tokenRefreshed,
+
+    };
+
+
+  } catch (
+    error: any
+  ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        ''
+      );
+
+
+    if (
+      message !==
+        'SHOPIFY_EARLIEST_CUSTOMER_HTTP_401'
+    ) {
+
+      throw error;
+
+    }
+
+
+    // ========================================================
+    // FORCED RECOVERY
+    // ========================================================
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+
+    stored =
+      await readIntegrationSecret<
+        StoredShopifyCredentialV1
+      >(
+        input.secretName
+      );
+
+
+    // ========================================================
+    // VERIFY REFRESHED CREDENTIAL AGAIN
+    // ========================================================
+
+    if (
+      stored.schema_version !==
+        1
+      ||
+      stored.credential_type !==
+        'shopify_offline_expiring'
+      ||
+      stored.provider !==
+        'shopify'
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_CUSTOMER_REFRESHED_CREDENTIAL_INVALID'
+      );
+
+    }
+
+
+    if (
+      stored.shop_id !==
+        input.expectedShopId
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_CUSTOMER_REFRESHED_SHOP_ID_MISMATCH'
+      );
+
+    }
+
+
+    if (
+      stored
+        .shop_domain
+        .toLowerCase()
+      !==
+      input
+        .expectedShopDomain
+        .toLowerCase()
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_CUSTOMER_REFRESHED_SHOP_DOMAIN_MISMATCH'
+      );
+
+    }
+
+
+    if (
+      !stored.access_token
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_CUSTOMER_REFRESHED_ACCESS_TOKEN_MISSING'
+      );
+
+    }
+
+
+    const customer =
+      await queryEarliestShopifyCustomer(
+
+        stored.shop_domain,
+
+        stored.access_token
+
+      );
+
+
+    return {
+
+      customer,
 
       tokenRefreshed,
 

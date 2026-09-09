@@ -122,6 +122,50 @@ function requireString(
 
 
 // ============================================================
+// SUPPORTED BACKFILL ENTITY
+//
+// Current production support:
+//
+// orders
+// customers
+//
+// Products and transactions may later use the same supervisor,
+// but they must not enter this execution path until their Bulk
+// source + warehouse adapters are complete.
+// ============================================================
+
+function requireBackfillEntity(
+  value
+) {
+
+  const entity =
+    requireString(
+      value,
+      'SHOPIFY_BACKFILL_SUPERVISOR_ENTITY_MISSING'
+    );
+
+
+  if (
+    entity !==
+      'orders'
+    &&
+    entity !==
+      'customers'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_SUPERVISOR_ENTITY_UNSUPPORTED'
+    );
+
+  }
+
+
+  return entity;
+
+}
+
+
+// ============================================================
 // PUB/SUB TOPIC
 //
 // Accept either:
@@ -265,6 +309,9 @@ function timestampToIso(
 //        ↓
 // retry_wait
 //
+// Applies to every entity whose complete historical pipeline
+// is currently supported.
+//
 // Pub/Sub/worker state claiming remains idempotent.
 // ============================================================
 
@@ -293,8 +340,11 @@ async function recoverStaleDispatches() {
 
       WHERE
 
-        entity =
-          'orders'
+        entity IN
+          (
+            'orders',
+            'customers'
+          )
 
         AND status =
           'dispatching'
@@ -325,9 +375,11 @@ async function recoverStaleDispatches() {
 // status check
 // GCS
 // BigQuery stage
-// canonical warehouse
+// entity warehouse adapter
 // completion
 // retry handling
+//
+// Persisted window.entity remains authoritative.
 // ============================================================
 
 async function findProcessCandidates() {
@@ -348,6 +400,8 @@ async function findProcessCandidates() {
           w.brand_id,
 
           w.integration_account_id,
+
+          w.entity,
 
           w.status,
           w.bulk_operation_id,
@@ -373,10 +427,16 @@ async function findProcessCandidates() {
           AND r.brand_id =
             w.brand_id
 
+          AND r.entity =
+            w.entity
+
         WHERE
 
-          w.entity =
-            'orders'
+          w.entity IN
+            (
+              'orders',
+              'customers'
+            )
 
           AND w.status IN
             (
@@ -431,13 +491,31 @@ async function findProcessCandidates() {
 // ============================================================
 // NEXT DISPATCH CANDIDATE
 //
-// Same rules as the existing Next orchestrator:
+// Eligible:
+//
+// orders OR customers
+//
+// Same rules as existing orchestrator:
 //
 // - queued/retry_wait
 // - no Bulk Operation yet
 // - retry time reached
-// - run still active
-// - global lock per Shopify integration account
+// - parent run still active
+//
+// CRITICAL:
+//
+// Account lock is intentionally NOT entity-specific.
+//
+// Shopify integration account:
+//
+// orders historical Bulk
+// OR
+// customers historical Bulk
+//
+// never both simultaneously.
+//
+// This protects Shopify Bulk limits and gives one deterministic
+// historical pipeline per connected store.
 // ============================================================
 
 async function findDispatchCandidate() {
@@ -460,6 +538,8 @@ async function findDispatchCandidate() {
           w.connection_id,
           w.integration_account_id,
           w.provider_account_id,
+
+          w.entity,
 
           w.window_start,
           w.window_end,
@@ -485,10 +565,16 @@ async function findDispatchCandidate() {
           AND r.brand_id =
             w.brand_id
 
+          AND r.entity =
+            w.entity
+
         WHERE
 
-          w.entity =
-            'orders'
+          w.entity IN
+            (
+              'orders',
+              'customers'
+            )
 
           AND w.status IN
             (
@@ -597,11 +683,21 @@ async function findDispatchCandidate() {
 // queued/retry_wait
 //        ↓
 // dispatching
+//
+// Entity is included in the reservation identity so an
+// incorrectly routed candidate cannot reserve another entity's
+// window.
 // ============================================================
 
 async function reserveDispatchCandidate(
   candidate
 ) {
+
+  const entity =
+    requireBackfillEntity(
+      candidate.entity
+    );
+
 
   const affected =
     await runDml({
@@ -642,6 +738,9 @@ async function reserveDispatchCandidate(
 
           AND w.integration_account_id =
             @integration_account_id
+
+          AND w.entity =
+            @entity
 
           AND w.status IN
             (
@@ -732,6 +831,8 @@ async function reserveDispatchCandidate(
         integration_account_id:
           candidate.integration_account_id,
 
+        entity,
+
       },
 
       types: {
@@ -749,6 +850,9 @@ async function reserveDispatchCandidate(
           'STRING',
 
         integration_account_id:
+          'STRING',
+
+        entity:
           'STRING',
 
       },
@@ -770,6 +874,12 @@ async function releaseDispatchCandidate(
   candidate,
   error
 ) {
+
+  const entity =
+    requireBackfillEntity(
+      candidate.entity
+    );
+
 
   return runDml({
 
@@ -809,6 +919,9 @@ async function releaseDispatchCandidate(
         AND backfill_window_id =
           @backfill_window_id
 
+        AND entity =
+          @entity
+
         AND status =
           'dispatching'
 
@@ -830,6 +943,8 @@ async function releaseDispatchCandidate(
 
       backfill_window_id:
         candidate.backfill_window_id,
+
+      entity,
 
       error:
         String(
@@ -854,6 +969,9 @@ async function releaseDispatchCandidate(
       backfill_window_id:
         'STRING',
 
+      entity:
+        'STRING',
+
       error:
         'STRING',
 
@@ -867,18 +985,23 @@ async function releaseDispatchCandidate(
 // ============================================================
 // PUBLISH EXISTING SHOPIFY JOB CONTRACT
 //
-// This intentionally matches shopify-jobs.ts.
+// Uses the same Pub/Sub contract as Orders.
 //
-// The existing Pub/Sub push subscription continues to call:
+// Persisted candidate.entity becomes the job entity.
 //
-// POST /pubsub/shopify-sync
-//
-// No new execution contract is introduced.
+// No new execution contract.
+// No credentials enter Pub/Sub.
 // ============================================================
 
 async function publishBackfillCandidate(
   candidate
 ) {
+
+  const entity =
+    requireBackfillEntity(
+      candidate.entity
+    );
+
 
   const from =
     timestampToIso(
@@ -936,8 +1059,7 @@ async function publishBackfillCandidate(
         'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
       ),
 
-    entity:
-      'orders',
+    entity,
 
     syncType:
       'backfill',
@@ -977,9 +1099,13 @@ async function publishBackfillCandidate(
     );
 
 
+  const topicId =
+    getTopicId();
+
+
   const topic =
     pubsub.topic(
-      getTopicId()
+      topicId
     );
 
 
@@ -1021,10 +1147,12 @@ async function publishBackfillCandidate(
     messageId,
 
     topic:
-      getTopicId(),
+      topicId,
 
     jobId:
       job.jobId,
+
+    entity,
 
     from,
 
@@ -1053,6 +1181,12 @@ async function processActiveWindows() {
     of candidates
   ) {
 
+    const entity =
+      requireBackfillEntity(
+        candidate.entity
+      );
+
+
     try {
 
       const result =
@@ -1077,6 +1211,8 @@ async function processActiveWindows() {
 
         ok:
           true,
+
+        entity,
 
         backfillRunId:
           candidate.backfill_run_id,
@@ -1107,6 +1243,8 @@ async function processActiveWindows() {
 
         ok:
           false,
+
+        entity,
 
         backfillRunId:
           candidate.backfill_run_id,
@@ -1142,8 +1280,8 @@ async function processActiveWindows() {
 // Repeats candidate lookup because after reserving one account,
 // another Shopify account may still be eligible.
 //
-// The global lock prevents more than one active historical
-// pipeline per integration account.
+// Global lock remains per integration account across ALL
+// supported historical entities.
 // ============================================================
 
 async function dispatchEligibleWindows() {
@@ -1166,6 +1304,12 @@ async function dispatchEligibleWindows() {
       break;
 
     }
+
+
+    const entity =
+      requireBackfillEntity(
+        candidate.entity
+      );
 
 
     const reserved =
@@ -1196,6 +1340,8 @@ async function dispatchEligibleWindows() {
 
         dispatched:
           true,
+
+        entity,
 
         backfillRunId:
           candidate.backfill_run_id,
@@ -1251,6 +1397,8 @@ async function dispatchEligibleWindows() {
           'SHOPIFY_BACKFILL_SUPERVISOR_RELEASE_FAILED',
           {
 
+            entity,
+
             backfillRunId:
               candidate.backfill_run_id,
 
@@ -1277,6 +1425,8 @@ async function dispatchEligibleWindows() {
 
         dispatched:
           false,
+
+        entity,
 
         backfillRunId:
           candidate.backfill_run_id,
@@ -1305,7 +1455,7 @@ async function dispatchEligibleWindows() {
 // One invocation:
 //
 // 1. recover abandoned dispatch reservations
-// 2. progress active Bulk/load windows
+// 2. progress active Orders/Customer Bulk/load windows
 // 3. dispatch eligible queued work
 //
 // Calling repeatedly is safe.
@@ -1333,6 +1483,11 @@ export async function superviseShopifyBackfills() {
 
     ok:
       true,
+
+    supportedEntities: [
+      'orders',
+      'customers',
+    ],
 
     staleDispatchesRecovered,
 

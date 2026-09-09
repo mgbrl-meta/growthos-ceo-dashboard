@@ -2,6 +2,7 @@
 
 import {
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -10,101 +11,167 @@ import {
   ArrowLeft,
   Building2,
   ChevronRight,
-  Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   UserRound,
-  Users,
-  X,
+  XCircle,
 } from 'lucide-react';
 
-import {
-  type AdminUser,
-  type UserModulePermission,
-  type UserRole,
-  type UserScope,
-  type UserStatus,
-  useAdminStore,
-} from './AdminStore';
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type UserStatus =
+  | 'active'
+  | 'inactive'
+  | 'suspended';
+
+
+type MembershipStatus =
+  | 'active'
+  | 'inactive';
+
+
+type MembershipRole =
+  | 'owner'
+  | 'admin'
+  | 'analyst'
+  | 'viewer';
+
+
+type AdminUserMembership = {
+
+  membershipId:
+    string;
+
+  workspaceId:
+    string;
+
+  workspaceName:
+    string | null;
+
+  brandId:
+    string;
+
+  brandName:
+    string | null;
+
+  role:
+    MembershipRole;
+
+  status:
+    MembershipStatus;
+
+  isDefault:
+    boolean;
+
+  createdAt:
+    string | null;
+
+  updatedAt:
+    string | null;
+
+};
+
+
+type AdminUser = {
+
+  userId:
+    string;
+
+  email:
+    string | null;
+
+  fullName:
+    string | null;
+
+  status:
+    UserStatus | null;
+
+  createdAt:
+    string | null;
+
+  updatedAt:
+    string | null;
+
+  lastLoginAt:
+    string | null;
+
+  memberships:
+    AdminUserMembership[];
+
+};
+
+
+type AdminUsersResponse = {
+
+  ok:
+    boolean;
+
+  scope?:
+    string;
+
+  summary?: {
+
+    totalUsers:
+      number;
+
+    activeUsers:
+      number;
+
+    inactiveUsers:
+      number;
+
+    suspendedUsers:
+      number;
+
+    memberships:
+      number;
+
+    activeMemberships:
+      number;
+
+    clients:
+      number;
+
+  };
+
+  users?:
+    AdminUser[];
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+    source?:
+      string;
+
+    readOnly?:
+      boolean;
+
+  };
+
+  error?:
+    string;
+
+};
 
 
 // ============================================================
-// ROLE CONFIG
+// FILTER TYPES
 // ============================================================
 
-const CLIENT_ROLES: {
-  value: UserRole;
-  label: string;
-  description: string;
-}[] = [
+type UserStatusFilter =
+  | 'all'
+  | UserStatus;
 
-  {
-    value:
-      'client_owner',
 
-    label:
-      'Owner',
-
-    description:
-      'Primary workspace owner with administrative responsibility.',
-  },
-
-  {
-    value:
-      'client_admin',
-
-    label:
-      'Admin',
-
-    description:
-      'Manages workspace users, configuration and operational access.',
-  },
-
-  {
-    value:
-      'manager',
-
-    label:
-      'Manager',
-
-    description:
-      'Manages day-to-day Growth OS workflows and assigned modules.',
-  },
-
-  {
-    value:
-      'analyst',
-
-    label:
-      'Analyst',
-
-    description:
-      'Analysis-focused access across assigned intelligence modules.',
-  },
-
-  {
-    value:
-      'operator',
-
-    label:
-      'Operator',
-
-    description:
-      'Operational access for execution-focused workflows.',
-  },
-
-  {
-    value:
-      'viewer',
-
-    label:
-      'Viewer',
-
-    description:
-      'Read-oriented access with limited operational control.',
-  },
-
-];
+type RoleFilter =
+  | 'all'
+  | MembershipRole;
 
 
 // ============================================================
@@ -115,25 +182,44 @@ export default function AdminUsers() {
 
 
   // ==========================================================
-  // SHARED STORE
+  // SERVER DATA
   // ==========================================================
 
-  const {
-    users,
-    setUsers,
-    clients,
-    plans,
-    modules,
-    getClient,
-    getPlan,
-    getClientUserCount,
-    getUserModuleAccess,
-  } =
-    useAdminStore();
+  const [
+    data,
+    setData,
+  ] =
+    useState<
+      AdminUsersResponse |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
 
 
   // ==========================================================
-  // LOCAL UI
+  // FILTERS
   // ==========================================================
 
   const [
@@ -146,14 +232,10 @@ export default function AdminUsers() {
 
 
   const [
-    scopeFilter,
-    setScopeFilter,
+    statusFilter,
+    setStatusFilter,
   ] =
-    useState<
-      'all'
-      |
-      UserScope
-    >(
+    useState<UserStatusFilter>(
       'all'
     );
 
@@ -163,6 +245,15 @@ export default function AdminUsers() {
     setClientFilter,
   ] =
     useState(
+      'all'
+    );
+
+
+  const [
+    roleFilter,
+    setRoleFilter,
+  ] =
+    useState<RoleFilter>(
       'all'
     );
 
@@ -179,71 +270,194 @@ export default function AdminUsers() {
     );
 
 
-  const [
-    addOpen,
-    setAddOpen,
-  ] =
-    useState(
-      false
+  // ==========================================================
+  // LOAD
+  // ==========================================================
+
+  async function loadUsers() {
+
+    setLoading(
+      true
     );
+
+
+    setError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/users',
+          {
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+          }
+        );
+
+
+      const json:
+        AdminUsersResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load Admin Users'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+    } catch (
+      error: any
+    ) {
+
+      console.error(
+        'ADMIN_USERS_UI_ERROR',
+        error
+      );
+
+
+      setData(
+        null
+      );
+
+
+      setError(
+        String(
+          error?.message
+          ||
+          'Unable to load Admin Users'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadUsers();
+
+    },
+    []
+  );
 
 
   // ==========================================================
-  // ADD USER FORM
+  // USERS
   // ==========================================================
 
-  const [
-    newName,
-    setNewName,
-  ] =
-    useState(
-      ''
-    );
+  const users =
+    data?.users
+    ||
+    [];
 
 
-  const [
-    newEmail,
-    setNewEmail,
-  ] =
-    useState(
-      ''
-    );
+  // ==========================================================
+  // CLIENT OPTIONS
+  // ==========================================================
+
+  const clients =
+    useMemo(
+      () => {
+
+        const map =
+          new Map<
+            string,
+            string
+          >();
 
 
-  const [
-    newScope,
-    setNewScope,
-  ] =
-    useState<UserScope>(
-      'client'
-    );
+        users.forEach(
+          user => {
+
+            user.memberships.forEach(
+              membership => {
+
+                const key =
+                  getMembershipClientKey(
+                    membership
+                  );
 
 
-  const [
-    newClientId,
-    setNewClientId,
-  ] =
-    useState(
-      clients[0]?.id ||
-      ''
-    );
+                const label =
+                  getMembershipClientName(
+                    membership
+                  );
 
 
-  const [
-    newRole,
-    setNewRole,
-  ] =
-    useState<UserRole>(
-      'viewer'
-    );
+                map.set(
+                  key,
+                  label
+                );
+
+              }
+            );
+
+          }
+        );
 
 
-  const [
-    newStatus,
-    setNewStatus,
-  ] =
-    useState<UserStatus>(
-      'invited'
+        return Array
+          .from(
+            map.entries()
+          )
+          .map(
+            (
+              [
+                value,
+                label,
+              ]
+            ) => ({
+
+              value,
+
+              label,
+
+            })
+          )
+          .sort(
+            (
+              a,
+              b
+            ) =>
+              a.label.localeCompare(
+                b.label
+              )
+          );
+
+      },
+      [
+        users,
+      ]
     );
 
 
@@ -264,31 +478,69 @@ export default function AdminUsers() {
         return users.filter(
           user => {
 
+
+            // --------------------------------------------------
+            // USER STATUS
+            // --------------------------------------------------
+
             if (
-              scopeFilter !==
+              statusFilter !==
                 'all'
               &&
-              user.scope !==
-                scopeFilter
+              user.status !==
+                statusFilter
             ) {
 
               return false;
 
             }
 
+
+            // --------------------------------------------------
+            // CLIENT
+            // --------------------------------------------------
 
             if (
               clientFilter !==
                 'all'
               &&
-              user.clientId !==
-                clientFilter
+              !user.memberships.some(
+                membership =>
+                  getMembershipClientKey(
+                    membership
+                  ) ===
+                  clientFilter
+              )
             ) {
 
               return false;
 
             }
 
+
+            // --------------------------------------------------
+            // ROLE
+            // --------------------------------------------------
+
+            if (
+              roleFilter !==
+                'all'
+              &&
+              !user.memberships.some(
+                membership =>
+                  membership.role ===
+                  roleFilter
+              )
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SEARCH
+            // --------------------------------------------------
 
             if (!query) {
 
@@ -297,51 +549,53 @@ export default function AdminUsers() {
             }
 
 
-            const client =
-              user.clientId
-                ? getClient(
-                    user.clientId
-                  )
-                : undefined;
+            const membershipText =
+              user.memberships
+                .map(
+                  membership =>
+                    [
 
+                      membership.workspaceId,
+                      membership.workspaceName,
+                      membership.brandId,
+                      membership.brandName,
+                      membership.role,
+                      membership.status,
 
-            return (
-
-              user.name
-                .toLowerCase()
-                .includes(
-                  query
+                    ]
+                      .filter(
+                        Boolean
+                      )
+                      .join(
+                        ' '
+                      )
                 )
+                .join(
+                  ' '
+                );
 
-              ||
 
-              user.email
-                .toLowerCase()
-                .includes(
-                  query
+            const haystack =
+              [
+
+                user.userId,
+                user.email,
+                user.fullName,
+                user.status,
+                membershipText,
+
+              ]
+                .filter(
+                  Boolean
                 )
-
-              ||
-
-              formatRole(
-                user.role
-              )
-                .toLowerCase()
-                .includes(
-                  query
+                .join(
+                  ' '
                 )
+                .toLowerCase();
 
-              ||
 
-              (
-                client?.name ||
-                ''
-              )
-                .toLowerCase()
-                .includes(
-                  query
-                )
-
+            return haystack.includes(
+              query
             );
 
           }
@@ -351,11 +605,78 @@ export default function AdminUsers() {
       [
         users,
         search,
-        scopeFilter,
+        statusFilter,
         clientFilter,
-        clients,
+        roleFilter,
       ]
     );
+
+
+  // ==========================================================
+  // SUMMARY
+  // ==========================================================
+
+  const summary =
+    data?.summary
+    ||
+    {
+
+      totalUsers:
+        users.length,
+
+      activeUsers:
+        users.filter(
+          user =>
+            user.status ===
+            'active'
+        ).length,
+
+      inactiveUsers:
+        users.filter(
+          user =>
+            user.status ===
+            'inactive'
+        ).length,
+
+      suspendedUsers:
+        users.filter(
+          user =>
+            user.status ===
+            'suspended'
+        ).length,
+
+      memberships:
+        users.reduce(
+          (
+            total,
+            user
+          ) =>
+            total
+            +
+            user.memberships.length,
+          0
+        ),
+
+      activeMemberships:
+        users.reduce(
+          (
+            total,
+            user
+          ) =>
+            total
+            +
+            user.memberships.filter(
+              membership =>
+                membership.status ===
+                'active'
+            ).length,
+          0
+        ),
+
+      clients:
+        clients.length,
+
+    };
 
 
   // ==========================================================
@@ -365,7 +686,7 @@ export default function AdminUsers() {
   const selectedUser =
     users.find(
       user =>
-        user.id ===
+        user.userId ===
         selectedUserId
     )
     ||
@@ -373,246 +694,153 @@ export default function AdminUsers() {
 
 
   // ==========================================================
-  // ADD USER LIMIT
+  // LOADING
   // ==========================================================
 
-  const selectedNewClient =
-    newScope ===
-      'client'
-
-      ? getClient(
-          newClientId
-        )
-
-      : undefined;
-
-
-  const selectedNewPlan =
-    selectedNewClient
-      ? getPlan(
-          selectedNewClient.planId
-        )
-      : undefined;
-
-
-  const selectedNewClientUserCount =
-    selectedNewClient
-      ? getClientUserCount(
-          selectedNewClient.id
-        )
-      : 0;
-
-
-  const userLimit =
-    selectedNewPlan
-      ?.maxUsers
-    ??
-    null;
-
-
-  const clientAtUserLimit =
-    newScope ===
-      'client'
+  if (
+    loading
     &&
-    userLimit !==
-      null
-    &&
-    selectedNewClientUserCount >=
-      userLimit;
-
-
-  // ==========================================================
-  // CREATE USER
-  // ==========================================================
-
-  function createUser() {
-
-    const name =
-      newName.trim();
-
-
-    const email =
-      newEmail
-        .trim()
-        .toLowerCase();
-
-
-    if (
-      !name
-      ||
-      !email
-    ) {
-
-      return;
-
-    }
-
-
-    if (
-      newScope ===
-        'client'
-      &&
-      (
-        !newClientId
-        ||
-        clientAtUserLimit
-      )
-    ) {
-
-      return;
-
-    }
-
-
-    const idBase =
-      email
-        .replace(
-          /[^a-z0-9]+/g,
-          '-'
-        )
-        .replace(
-          /^-|-$/g,
-          ''
-        );
-
-
-    const user:
-      AdminUser = {
-
-      id:
-        `${idBase}-${Date.now()}`,
-
-      name,
-
-      email,
-
-      scope:
-        newScope,
-
-      clientId:
-        newScope ===
-          'client'
-
-          ? newClientId
-
-          : null,
-
-      role:
-        newScope ===
-          'platform'
-
-          ? 'platform_admin'
-
-          : newRole,
-
-      status:
-        newStatus,
-
-      modulePermissions:
-        {},
-
-      createdAt:
-        new Date()
-          .toLocaleDateString(
-            'en-IN',
-            {
-              day:
-                '2-digit',
-
-              month:
-                'short',
-
-              year:
-                'numeric',
-            }
-          ),
-
-    };
-
-
-    setUsers(
-      previous => [
-        user,
-        ...previous,
-      ]
-    );
-
-
-    resetForm();
-
-
-    setAddOpen(
-      false
-    );
-
-
-    setSelectedUserId(
-      user.id
-    );
-
-  }
-
-
-  // ==========================================================
-  // RESET
-  // ==========================================================
-
-  function resetForm() {
-
-    setNewName(
-      ''
-    );
-
-
-    setNewEmail(
-      ''
-    );
-
-
-    setNewScope(
-      'client'
-    );
-
-
-    setNewClientId(
-      clients[0]?.id ||
-      ''
-    );
-
-
-    setNewRole(
-      'viewer'
-    );
-
-
-    setNewStatus(
-      'invited'
-    );
-
-  }
-
-
-  // ==========================================================
-  // UPDATE USER
-  // ==========================================================
-
-  function updateUser(
-    updatedUser:
-      AdminUser
+    !data
   ) {
 
-    setUsers(
-      previous =>
-        previous.map(
-          user =>
+    return (
 
-            user.id ===
-              updatedUser.id
+      <section className="gos-panel !p-4">
 
-              ? updatedUser
+        <p
+          className="
+            text-[10px]
 
-              : user
-        )
+            text-slate-500
+          "
+        >
+          Loading Users...
+        </p>
+
+      </section>
+
+    );
+
+  }
+
+
+  // ==========================================================
+  // ERROR
+  // ==========================================================
+
+  if (
+    error
+    &&
+    !data
+  ) {
+
+    return (
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-red-200
+
+          bg-red-50
+
+          p-4
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-start
+            justify-between
+            gap-3
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              gap-2
+            "
+          >
+
+            <XCircle
+              size={15}
+              className="
+                mt-0.5
+                shrink-0
+
+                text-red-600
+              "
+            />
+
+
+            <div>
+
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
+
+                  text-red-800
+                "
+              >
+                Unable to load Users
+              </p>
+
+
+              <p
+                className="
+                  mt-1
+
+                  text-[9px]
+
+                  text-red-700
+                "
+              >
+                {error}
+              </p>
+
+            </div>
+
+          </div>
+
+
+          <button
+
+            type="button"
+
+            onClick={
+              loadUsers
+            }
+
+            className="
+              h-7
+
+              rounded-[7px]
+
+              border
+              border-red-200
+
+              bg-white
+
+              px-2.5
+
+              text-[9px]
+              font-semibold
+
+              text-red-700
+            "
+          >
+            Retry
+          </button>
+
+        </div>
+
+      </section>
+
     );
 
   }
@@ -640,10 +868,6 @@ export default function AdminUsers() {
           )
         }
 
-        onChange={
-          updateUser
-        }
-
       />
 
     );
@@ -661,7 +885,7 @@ export default function AdminUsers() {
 
 
       {/* =====================================================
-          TOOLBAR
+          HEADER
       ===================================================== */}
 
       <section
@@ -704,246 +928,63 @@ export default function AdminUsers() {
               text-slate-500
             "
           >
-            Manage platform administrators, client users, roles and module-level access.
+            Global Growth OS user registry with workspace, brand, role and membership access.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
+        <button
 
-            sm:flex-row
-            sm:flex-wrap
+          type="button"
+
+          onClick={
+            loadUsers
+          }
+
+          disabled={
+            loading
+          }
+
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-1.5
+
+            rounded-[8px]
+
+            border
+            border-slate-200
+
+            bg-white
+
+            px-3
+
+            text-[9px]
+            font-semibold
+
+            text-slate-700
+
+            hover:bg-slate-50
+
+            disabled:opacity-60
           "
         >
 
-          <div
-            className="
-              relative
+          <RefreshCw
+            size={12}
 
-              w-full
-
-              sm:w-[230px]
-            "
-          >
-
-            <Search
-              size={14}
-              className="
-                absolute
-                left-2.5
-                top-1/2
-
-                -translate-y-1/2
-
-                text-slate-400
-              "
-            />
-
-
-            <input
-
-              value={
-                search
-              }
-
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
-
-              placeholder="Search users"
-
-              className="
-                h-8
-                w-full
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                pl-8
-                pr-3
-
-                text-[11px]
-
-                outline-none
-
-                focus:border-violet-400
-                focus:ring-2
-                focus:ring-violet-100
-              "
-
-            />
-
-          </div>
-
-
-          <select
-
-            value={
-              scopeFilter
+            className={
+              loading
+                ? 'animate-spin'
+                : ''
             }
+          />
 
-            onChange={
-              event =>
-                setScopeFilter(
-                  event.target.value as
-                    'all'
-                    |
-                    UserScope
-                )
-            }
+          Refresh
 
-            className="
-              h-8
-
-              rounded-[8px]
-
-              border
-              border-slate-300
-
-              bg-white
-
-              px-2.5
-
-              text-[10px]
-              font-medium
-
-              text-slate-700
-            "
-          >
-
-            <option value="all">
-              All Scopes
-            </option>
-
-            <option value="platform">
-              Platform
-            </option>
-
-            <option value="client">
-              Client
-            </option>
-
-          </select>
-
-
-          <select
-
-            value={
-              clientFilter
-            }
-
-            onChange={
-              event =>
-                setClientFilter(
-                  event.target.value
-                )
-            }
-
-            className="
-              h-8
-
-              rounded-[8px]
-
-              border
-              border-slate-300
-
-              bg-white
-
-              px-2.5
-
-              text-[10px]
-              font-medium
-
-              text-slate-700
-            "
-          >
-
-            <option value="all">
-              All Clients
-            </option>
-
-
-            {clients.map(
-              client => (
-
-                <option
-                  key={
-                    client.id
-                  }
-                  value={
-                    client.id
-                  }
-                >
-                  {client.name}
-                </option>
-
-              )
-            )}
-
-          </select>
-
-
-          <button
-
-            type="button"
-
-            onClick={() => {
-
-              setNewClientId(
-                clients[0]?.id ||
-                ''
-              );
-
-
-              setAddOpen(
-                true
-              );
-
-            }}
-
-            className="
-              inline-flex
-              h-8
-              items-center
-              justify-center
-              gap-1.5
-
-              rounded-[8px]
-
-              bg-slate-950
-
-              px-3
-
-              text-[10px]
-              font-semibold
-
-              text-white
-
-              hover:bg-slate-800
-            "
-          >
-
-            <Plus
-              size={14}
-            />
-
-            Add User
-
-          </button>
-
-        </div>
+        </button>
 
       </section>
 
@@ -959,37 +1000,14 @@ export default function AdminUsers() {
           gap-2
 
           md:grid-cols-4
+          xl:grid-cols-7
         "
       >
 
         <SummaryCard
-          label="Total Users"
+          label="Users"
           value={
-            users.length
-          }
-        />
-
-
-        <SummaryCard
-          label="Platform Admins"
-          value={
-            users.filter(
-              user =>
-                user.scope ===
-                'platform'
-            ).length
-          }
-        />
-
-
-        <SummaryCard
-          label="Client Users"
-          value={
-            users.filter(
-              user =>
-                user.scope ===
-                'client'
-            ).length
+            summary.totalUsers
           }
         />
 
@@ -997,13 +1015,279 @@ export default function AdminUsers() {
         <SummaryCard
           label="Active"
           value={
-            users.filter(
-              user =>
-                user.status ===
-                'active'
-            ).length
+            summary.activeUsers
+          }
+          tone="green"
+        />
+
+
+        <SummaryCard
+          label="Inactive"
+          value={
+            summary.inactiveUsers
+          }
+          tone="slate"
+        />
+
+
+        <SummaryCard
+          label="Suspended"
+          value={
+            summary.suspendedUsers
+          }
+          tone="red"
+        />
+
+
+        <SummaryCard
+          label="Memberships"
+          value={
+            summary.memberships
+          }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="Active Access"
+          value={
+            summary.activeMemberships
+          }
+          tone="green"
+        />
+
+
+        <SummaryCard
+          label="Clients"
+          value={
+            summary.clients
           }
         />
+
+      </section>
+
+
+      {/* =====================================================
+          FILTERS
+      ===================================================== */}
+
+      <section
+        className="
+          gos-panel
+
+          flex
+          flex-col
+          gap-2
+
+          !p-3
+
+          xl:flex-row
+          xl:items-center
+        "
+      >
+
+        <div
+          className="
+            relative
+
+            w-full
+
+            xl:max-w-[340px]
+          "
+        >
+
+          <Search
+            size={14}
+
+            className="
+              absolute
+              left-2.5
+              top-1/2
+
+              -translate-y-1/2
+
+              text-slate-400
+            "
+          />
+
+
+          <input
+
+            value={
+              search
+            }
+
+            onChange={
+              event =>
+                setSearch(
+                  event.target.value
+                )
+            }
+
+            placeholder="Search name, email, client, role..."
+
+            className="
+              h-8
+              w-full
+
+              rounded-[8px]
+
+              border
+              border-slate-300
+
+              bg-white
+
+              pl-8
+              pr-3
+
+              text-[10px]
+
+              outline-none
+
+              focus:border-violet-400
+              focus:ring-2
+              focus:ring-violet-100
+            "
+
+          />
+
+        </div>
+
+
+        <select
+
+          value={
+            statusFilter
+          }
+
+          onChange={
+            event =>
+              setStatusFilter(
+                event.target.value as UserStatusFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All User Status
+          </option>
+
+          <option value="active">
+            Active
+          </option>
+
+          <option value="inactive">
+            Inactive
+          </option>
+
+          <option value="suspended">
+            Suspended
+          </option>
+
+        </select>
+
+
+        <select
+
+          value={
+            clientFilter
+          }
+
+          onChange={
+            event =>
+              setClientFilter(
+                event.target.value
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Clients
+          </option>
+
+
+          {clients.map(
+            client => (
+
+              <option
+
+                key={
+                  client.value
+                }
+
+                value={
+                  client.value
+                }
+
+              >
+                {client.label}
+              </option>
+
+            )
+          )}
+
+        </select>
+
+
+        <select
+
+          value={
+            roleFilter
+          }
+
+          onChange={
+            event =>
+              setRoleFilter(
+                event.target.value as RoleFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Roles
+          </option>
+
+          <option value="owner">
+            Owner
+          </option>
+
+          <option value="admin">
+            Admin
+          </option>
+
+          <option value="analyst">
+            Analyst
+          </option>
+
+          <option value="viewer">
+            Viewer
+          </option>
+
+        </select>
+
+
+        <div
+          className="
+            ml-auto
+
+            whitespace-nowrap
+
+            text-[9px]
+
+            text-slate-500
+          "
+        >
+          {filteredUsers.length}
+          {' / '}
+          {users.length}
+          {' users'}
+        </div>
 
       </section>
 
@@ -1016,6 +1300,10 @@ export default function AdminUsers() {
 
         <div
           className="
+            flex
+            items-center
+            justify-between
+
             border-b
             border-slate-200
 
@@ -1024,22 +1312,76 @@ export default function AdminUsers() {
           "
         >
 
-          <h3 className="gos-section-title">
-            Users
-          </h3>
+          <div>
+
+            <h3 className="gos-section-title">
+              Growth OS Users
+            </h3>
 
 
-          <p
-            className="
-              mt-0.5
+            <p
+              className="
+                mt-0.5
 
-              text-[9px]
+                text-[9px]
 
-              text-slate-500
-            "
-          >
-            {filteredUsers.length} user{filteredUsers.length === 1 ? '' : 's'}
-          </p>
+                text-slate-500
+              "
+            >
+              One row per Growth OS identity. Brand access is represented through memberships.
+            </p>
+
+          </div>
+
+
+          {(
+            search
+            ||
+            statusFilter !==
+              'all'
+            ||
+            clientFilter !==
+              'all'
+            ||
+            roleFilter !==
+              'all'
+          ) && (
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setSearch(
+                  ''
+                );
+
+                setStatusFilter(
+                  'all'
+                );
+
+                setClientFilter(
+                  'all'
+                );
+
+                setRoleFilter(
+                  'all'
+                );
+
+              }}
+
+              className="
+                text-[9px]
+                font-semibold
+
+                text-violet-600
+              "
+            >
+              Clear filters
+            </button>
+
+          )}
 
         </div>
 
@@ -1048,8 +1390,8 @@ export default function AdminUsers() {
 
           <table
             className="
-              min-w-[1000px]
               w-full
+              min-w-[1200px]
 
               border-collapse
             "
@@ -1071,23 +1413,27 @@ export default function AdminUsers() {
                 </TableHeader>
 
                 <TableHeader>
-                  Scope
-                </TableHeader>
-
-                <TableHeader>
-                  Client
-                </TableHeader>
-
-                <TableHeader>
-                  Role
-                </TableHeader>
-
-                <TableHeader>
                   Status
                 </TableHeader>
 
                 <TableHeader>
-                  Module Access
+                  Memberships
+                </TableHeader>
+
+                <TableHeader>
+                  Clients
+                </TableHeader>
+
+                <TableHeader>
+                  Roles
+                </TableHeader>
+
+                <TableHeader>
+                  Default
+                </TableHeader>
+
+                <TableHeader>
+                  Last Login
                 </TableHeader>
 
                 <TableHeader>
@@ -1108,22 +1454,30 @@ export default function AdminUsers() {
               {filteredUsers.map(
                 user => {
 
-                  const client =
-                    user.clientId
-                      ? getClient(
-                          user.clientId
+                  const activeMemberships =
+                    user.memberships.filter(
+                      membership =>
+                        membership.status ===
+                        'active'
+                    );
+
+
+                  const roles =
+                    Array.from(
+                      new Set(
+                        activeMemberships.map(
+                          membership =>
+                            membership.role
                         )
-                      : undefined;
+                      )
+                    );
 
 
-                  const enabledModules =
-                    modules.filter(
-                      module =>
-                        getUserModuleAccess(
-                          user,
-                          module.id
-                        ).enabled
-                    ).length;
+                  const defaultMembership =
+                    user.memberships.find(
+                      membership =>
+                        membership.isDefault
+                    );
 
 
                   return (
@@ -1131,7 +1485,7 @@ export default function AdminUsers() {
                     <tr
 
                       key={
-                        user.id
+                        user.userId
                       }
 
                       className="
@@ -1144,7 +1498,10 @@ export default function AdminUsers() {
                       "
                     >
 
-                      <td className="px-3 py-2">
+
+                      {/* USER */}
+
+                      <td className="px-3 py-2.5">
 
                         <div
                           className="
@@ -1154,31 +1511,51 @@ export default function AdminUsers() {
                           "
                         >
 
-                          <UserIcon
-                            scope={
-                              user.scope
-                            }
-                          />
+                          <div
+                            className="
+                              flex
+                              h-8
+                              w-8
+                              shrink-0
+                              items-center
+                              justify-center
+
+                              rounded-[8px]
+
+                              bg-violet-50
+
+                              text-violet-600
+                            "
+                          >
+                            <UserRound
+                              size={15}
+                            />
+                          </div>
 
 
                           <div className="min-w-0">
 
                             <div
                               className="
-                                text-[11px]
+                                max-w-[240px]
+
+                                truncate
+
+                                text-[10px]
                                 font-semibold
 
                                 text-slate-900
                               "
                             >
-                              {user.name}
+                              {getUserDisplayName(
+                                user
+                              )}
                             </div>
 
 
                             <div
                               className="
                                 mt-0.5
-
                                 max-w-[260px]
 
                                 truncate
@@ -1188,7 +1565,9 @@ export default function AdminUsers() {
                                 text-slate-500
                               "
                             >
-                              {user.email}
+                              {user.email
+                                ||
+                                user.userId}
                             </div>
 
                           </div>
@@ -1198,51 +1577,9 @@ export default function AdminUsers() {
                       </td>
 
 
-                      <td className="px-3 py-2">
+                      {/* STATUS */}
 
-                        <ScopeBadge
-                          scope={
-                            user.scope
-                          }
-                        />
-
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[10px]
-                          font-medium
-
-                          text-slate-600
-                        "
-                      >
-                        {client?.name ||
-                          'Platform'}
-                      </td>
-
-
-                      <td
-                        className="
-                          px-3
-                          py-2
-
-                          text-[10px]
-                          font-medium
-
-                          text-slate-700
-                        "
-                      >
-                        {formatRole(
-                          user.role
-                        )}
-                      </td>
-
-
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">
 
                         <UserStatusBadge
                           status={
@@ -1253,10 +1590,12 @@ export default function AdminUsers() {
                       </td>
 
 
+                      {/* MEMBERSHIPS */}
+
                       <td
                         className="
                           px-3
-                          py-2
+                          py-2.5
 
                           text-[10px]
                           font-semibold
@@ -1264,25 +1603,148 @@ export default function AdminUsers() {
                           text-slate-800
                         "
                       >
-                        {enabledModules}
+                        {user.memberships.length}
                       </td>
 
+
+                      {/* CLIENTS */}
+
+                      <td className="px-3 py-2.5">
+
+                        <div
+                          className="
+                            max-w-[260px]
+
+                            text-[9px]
+
+                            text-slate-600
+                          "
+                        >
+                          {formatMembershipClients(
+                            user.memberships
+                          )}
+                        </div>
+
+                      </td>
+
+
+                      {/* ROLES */}
+
+                      <td className="px-3 py-2.5">
+
+                        <div
+                          className="
+                            flex
+                            flex-wrap
+                            gap-1
+                          "
+                        >
+
+                          {roles.length >
+                            0 ? (
+
+                            roles.map(
+                              role => (
+
+                                <RoleBadge
+
+                                  key={
+                                    role
+                                  }
+
+                                  role={
+                                    role
+                                  }
+
+                                />
+
+                              )
+                            )
+
+                          ) : (
+
+                            <span
+                              className="
+                                text-[9px]
+
+                                text-slate-400
+                              "
+                            >
+                              —
+                            </span>
+
+                          )}
+
+                        </div>
+
+                      </td>
+
+
+                      {/* DEFAULT */}
 
                       <td
                         className="
                           px-3
-                          py-2
+                          py-2.5
+
+                          text-[9px]
+
+                          text-slate-600
+                        "
+                      >
+                        {defaultMembership
+
+                          ? getMembershipClientName(
+                              defaultMembership
+                            )
+
+                          : '—'}
+                      </td>
+
+
+                      {/* LAST LOGIN */}
+
+                      <td
+                        className="
+                          px-3
+                          py-2.5
 
                           text-[9px]
 
                           text-slate-500
                         "
                       >
-                        {user.createdAt}
+                        {formatTimestamp(
+                          user.lastLoginAt
+                        )
+                        ||
+                        'Never'}
                       </td>
 
 
-                      <td className="px-3 py-2 text-right">
+                      {/* CREATED */}
+
+                      <td
+                        className="
+                          px-3
+                          py-2.5
+
+                          text-[9px]
+
+                          text-slate-500
+                        "
+                      >
+                        {formatTimestamp(
+                          user.createdAt
+                        )
+                        ||
+                        '—'}
+                      </td>
+
+
+                      {/* ACTION */}
+
+                      <td className="px-3 py-2.5 text-right">
 
                         <button
 
@@ -1290,7 +1752,7 @@ export default function AdminUsers() {
 
                           onClick={() =>
                             setSelectedUserId(
-                              user.id
+                              user.userId
                             )
                           }
 
@@ -1318,7 +1780,7 @@ export default function AdminUsers() {
                           "
                         >
 
-                          Manage
+                          Inspect
 
                           <ChevronRight
                             size={12}
@@ -1335,6 +1797,36 @@ export default function AdminUsers() {
                 }
               )}
 
+
+              {filteredUsers.length ===
+                0 && (
+
+                <tr>
+
+                  <td
+
+                    colSpan={
+                      9
+                    }
+
+                    className="
+                      px-4
+                      py-14
+
+                      text-center
+
+                      text-[10px]
+
+                      text-slate-500
+                    "
+                  >
+                    No users match the selected filters.
+                  </td>
+
+                </tr>
+
+              )}
+
             </tbody>
 
           </table>
@@ -1345,638 +1837,55 @@ export default function AdminUsers() {
 
 
       {/* =====================================================
-          ADD USER MODAL
+          SOURCE
       ===================================================== */}
 
-      {addOpen && (
+      <section
+        className="
+          rounded-[9px]
 
-        <div
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          px-3
+          py-2.5
+        "
+      >
+
+        <p
           className="
-            fixed
-            inset-0
-            z-[100]
+            text-[8px]
+            leading-4
 
-            flex
-            items-center
-            justify-center
-
-            bg-slate-950/40
-
-            p-4
-
-            backdrop-blur-[2px]
+            text-violet-700
           "
         >
+          Source of truth: growthos_control.users and growthos_control.brand_memberships. Admin Users is read-only; workspace access management remains under the relevant client's Settings → Users & Access.
+        </p>
 
-          <div
+
+        {data?.meta?.durationMs !==
+          undefined && (
+
+          <p
             className="
-              w-full
-              max-w-[580px]
+              mt-1
 
-              rounded-[14px]
+              text-[8px]
 
-              border
-              border-slate-200
-
-              bg-white
-
-              shadow-xl
+              text-violet-500
             "
           >
+            API runtime: {formatNumber(
+              data.meta.durationMs
+            )} ms
+          </p>
 
-            <div
-              className="
-                flex
-                items-center
-                justify-between
+        )}
 
-                border-b
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <div>
-
-                <h3
-                  className="
-                    text-[14px]
-                    font-semibold
-
-                    text-slate-950
-                  "
-                >
-                  Add User
-                </h3>
-
-
-                <p
-                  className="
-                    mt-0.5
-
-                    text-[9px]
-
-                    text-slate-500
-                  "
-                >
-                  Create platform or client-level Growth OS access.
-                </p>
-
-              </div>
-
-
-              <button
-
-                type="button"
-
-                onClick={() => {
-
-                  setAddOpen(
-                    false
-                  );
-
-
-                  resetForm();
-
-                }}
-
-                className="
-                  flex
-                  h-7
-                  w-7
-                  items-center
-                  justify-center
-
-                  rounded-[7px]
-
-                  text-slate-400
-
-                  hover:bg-slate-100
-                "
-              >
-
-                <X
-                  size={15}
-                />
-
-              </button>
-
-            </div>
-
-
-            <div className="space-y-3 p-4">
-
-
-              <div
-                className="
-                  grid
-                  grid-cols-1
-                  gap-3
-
-                  md:grid-cols-2
-                "
-              >
-
-                <FormField
-                  label="Name"
-                >
-
-                  <input
-
-                    value={
-                      newName
-                    }
-
-                    onChange={
-                      event =>
-                        setNewName(
-                          event.target.value
-                        )
-                    }
-
-                    placeholder="User name"
-
-                    className="gos-input w-full"
-
-                  />
-
-                </FormField>
-
-
-                <FormField
-                  label="Email"
-                >
-
-                  <input
-
-                    type="email"
-
-                    value={
-                      newEmail
-                    }
-
-                    onChange={
-                      event =>
-                        setNewEmail(
-                          event.target.value
-                        )
-                    }
-
-                    placeholder="name@company.com"
-
-                    className="gos-input w-full"
-
-                  />
-
-                </FormField>
-
-              </div>
-
-
-              <FormField
-                label="Access Scope"
-              >
-
-                <select
-
-                  value={
-                    newScope
-                  }
-
-                  onChange={
-                    event => {
-
-                      const scope =
-                        event.target.value as UserScope;
-
-
-                      setNewScope(
-                        scope
-                      );
-
-
-                      if (
-                        scope ===
-                        'platform'
-                      ) {
-
-                        setNewRole(
-                          'platform_admin'
-                        );
-
-                      } else {
-
-                        setNewRole(
-                          'viewer'
-                        );
-
-                      }
-
-                    }
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  <option value="client">
-                    Client Workspace
-                  </option>
-
-                  <option value="platform">
-                    Platform Admin
-                  </option>
-
-                </select>
-
-              </FormField>
-
-
-              {newScope ===
-                'client' && (
-
-                <>
-
-                  <FormField
-                    label="Client"
-                  >
-
-                    <select
-
-                      value={
-                        newClientId
-                      }
-
-                      onChange={
-                        event =>
-                          setNewClientId(
-                            event.target.value
-                          )
-                      }
-
-                      className="gos-input w-full"
-
-                    >
-
-                      {clients.map(
-                        client => {
-
-                          const plan =
-                            getPlan(
-                              client.planId
-                            );
-
-
-                          const count =
-                            getClientUserCount(
-                              client.id
-                            );
-
-
-                          const limit =
-                            plan
-                              ?.maxUsers
-                            ??
-                            null;
-
-
-                          return (
-
-                            <option
-                              key={
-                                client.id
-                              }
-                              value={
-                                client.id
-                              }
-                            >
-                              {client.name}
-                              {' · '}
-                              {count}/
-                              {limit ===
-                                null
-                                ? '∞'
-                                : limit}
-                              {' users'}
-                            </option>
-
-                          );
-
-                        }
-                      )}
-
-                    </select>
-
-                  </FormField>
-
-
-                  <FormField
-                    label="Role"
-                  >
-
-                    <select
-
-                      value={
-                        newRole
-                      }
-
-                      onChange={
-                        event =>
-                          setNewRole(
-                            event.target.value as UserRole
-                          )
-                      }
-
-                      className="gos-input w-full"
-
-                    >
-
-                      {CLIENT_ROLES.map(
-                        role => (
-
-                          <option
-                            key={
-                              role.value
-                            }
-                            value={
-                              role.value
-                            }
-                          >
-                            {role.label}
-                          </option>
-
-                        )
-                      )}
-
-                    </select>
-
-                  </FormField>
-
-                </>
-
-              )}
-
-
-              <FormField
-                label="Initial Status"
-              >
-
-                <select
-
-                  value={
-                    newStatus
-                  }
-
-                  onChange={
-                    event =>
-                      setNewStatus(
-                        event.target.value as UserStatus
-                      )
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  <option value="invited">
-                    Invited
-                  </option>
-
-                  <option value="active">
-                    Active
-                  </option>
-
-                  <option value="suspended">
-                    Suspended
-                  </option>
-
-                </select>
-
-              </FormField>
-
-
-              {newScope ===
-                'client'
-                &&
-                selectedNewClient && (
-
-                <div
-                  className={`
-                    rounded-[9px]
-
-                    border
-
-                    px-3
-                    py-2.5
-
-                    ${
-                      clientAtUserLimit
-
-                        ? `
-                          border-red-200
-                          bg-red-50
-                        `
-
-                        : `
-                          border-slate-200
-                          bg-slate-50
-                        `
-                    }
-                  `}
-                >
-
-                  <div
-                    className="
-                      flex
-                      items-center
-                      justify-between
-                      gap-3
-                    "
-                  >
-
-                    <div>
-
-                      <p
-                        className="
-                          text-[10px]
-                          font-semibold
-
-                          text-slate-800
-                        "
-                      >
-                        User allowance
-                      </p>
-
-
-                      <p
-                        className="
-                          mt-0.5
-
-                          text-[9px]
-
-                          text-slate-500
-                        "
-                      >
-                        {selectedNewPlan?.name ||
-                          'No Plan'}
-                      </p>
-
-                    </div>
-
-
-                    <span
-                      className={`
-                        text-[11px]
-                        font-semibold
-
-                        ${
-                          clientAtUserLimit
-
-                            ? 'text-red-700'
-
-                            : 'text-slate-800'
-                        }
-                      `}
-                    >
-                      {selectedNewClientUserCount}
-                      {' / '}
-                      {userLimit ===
-                        null
-                        ? 'Unlimited'
-                        : userLimit}
-                    </span>
-
-                  </div>
-
-
-                  {clientAtUserLimit && (
-
-                    <p
-                      className="
-                        mt-2
-
-                        text-[9px]
-                        font-medium
-
-                        text-red-700
-                      "
-                    >
-                      This client has reached the user limit for its assigned plan.
-                    </p>
-
-                  )}
-
-                </div>
-
-              )}
-
-            </div>
-
-
-            <div
-              className="
-                flex
-                justify-end
-                gap-2
-
-                border-t
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <button
-
-                type="button"
-
-                onClick={() => {
-
-                  setAddOpen(
-                    false
-                  );
-
-
-                  resetForm();
-
-                }}
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  border
-                  border-slate-200
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-slate-600
-                "
-              >
-                Cancel
-              </button>
-
-
-              <button
-
-                type="button"
-
-                disabled={
-                  !newName.trim()
-                  ||
-                  !newEmail.trim()
-                  ||
-                  (
-                    newScope ===
-                      'client'
-                    &&
-                    (
-                      !newClientId
-                      ||
-                      clientAtUserLimit
-                    )
-                  )
-                }
-
-                onClick={
-                  createUser
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-
-                  disabled:cursor-not-allowed
-                  disabled:opacity-40
-                "
-              >
-                Add User
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      </section>
 
     </div>
 
@@ -1995,8 +1904,6 @@ function UserDetail({
 
   onBack,
 
-  onChange,
-
 }: {
 
   user:
@@ -2005,130 +1912,25 @@ function UserDetail({
   onBack:
     () => void;
 
-  onChange:
-    (
-      user:
-        AdminUser
-    ) => void;
-
 }) {
 
 
-  const {
-    clients,
-    modules,
-    getClient,
-    getPlan,
-    getClientModuleAccess,
-    getUserModuleAccess,
-  } =
-    useAdminStore();
+  const defaultMembership =
+    user.memberships.find(
+      membership =>
+        membership.isDefault
+    )
+    ||
+    null;
 
 
-  const client =
-    user.clientId
-      ? getClient(
-          user.clientId
-        )
-      : undefined;
-
-
-  const plan =
-    client
-      ? getPlan(
-          client.planId
-        )
-      : undefined;
-
-
-  const finalModuleCount =
-    modules.filter(
-      module =>
-        getUserModuleAccess(
-          user,
-          module.id
-        ).enabled
+  const activeMemberships =
+    user.memberships.filter(
+      membership =>
+        membership.status ===
+        'active'
     ).length;
 
-
-  const explicitPermissionCount =
-    Object
-      .values(
-        user.modulePermissions
-      )
-      .filter(
-        value =>
-          value !==
-          'inherit'
-      )
-      .length;
-
-
-  // ==========================================================
-  // SET MODULE PERMISSION
-  // ==========================================================
-
-  function setModulePermission(
-
-    moduleId:
-      string,
-
-    permission:
-      UserModulePermission
-
-  ) {
-
-    if (
-      permission ===
-      'inherit'
-    ) {
-
-      const nextPermissions = {
-        ...user.modulePermissions,
-      };
-
-
-      delete nextPermissions[
-        moduleId
-      ];
-
-
-      onChange({
-
-        ...user,
-
-        modulePermissions:
-          nextPermissions,
-
-      });
-
-
-      return;
-
-    }
-
-
-    onChange({
-
-      ...user,
-
-      modulePermissions: {
-
-        ...user.modulePermissions,
-
-        [moduleId]:
-          permission,
-
-      },
-
-    });
-
-  }
-
-
-  // ==========================================================
-  // UI
-  // ==========================================================
 
   return (
 
@@ -2147,9 +1949,9 @@ function UserDetail({
             flex-col
             gap-3
 
-            lg:flex-row
-            lg:items-center
-            lg:justify-between
+            md:flex-row
+            md:items-center
+            md:justify-between
           "
         >
 
@@ -2184,25 +1986,35 @@ function UserDetail({
 
                 bg-white
 
-                text-slate-500
-
                 hover:bg-slate-50
               "
             >
-
               <ArrowLeft
                 size={14}
               />
-
             </button>
 
 
-            <UserIcon
-              scope={
-                user.scope
-              }
-              large
-            />
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                shrink-0
+                items-center
+                justify-center
+
+                rounded-[9px]
+
+                bg-violet-50
+
+                text-violet-600
+              "
+            >
+              <ShieldCheck
+                size={17}
+              />
+            </div>
 
 
             <div className="min-w-0">
@@ -2224,15 +2036,10 @@ function UserDetail({
                     text-slate-950
                   "
                 >
-                  {user.name}
+                  {getUserDisplayName(
+                    user
+                  )}
                 </h2>
-
-
-                <ScopeBadge
-                  scope={
-                    user.scope
-                  }
-                />
 
 
                 <UserStatusBadge
@@ -2253,11 +2060,9 @@ function UserDetail({
                   text-slate-500
                 "
               >
-                {user.email}
-                {' · '}
-                {formatRole(
-                  user.role
-                )}
+                {user.email
+                  ||
+                  user.userId}
               </p>
 
             </div>
@@ -2265,56 +2070,26 @@ function UserDetail({
           </div>
 
 
-          <select
-
-            value={
-              user.status
-            }
-
-            onChange={
-              event =>
-                onChange({
-
-                  ...user,
-
-                  status:
-                    event.target.value as UserStatus,
-
-                })
-            }
-
+          <span
             className="
-              h-8
-
-              rounded-[8px]
+              rounded-full
 
               border
-              border-slate-300
+              border-slate-200
 
-              bg-white
+              bg-slate-50
 
               px-2.5
+              py-1
 
-              text-[10px]
-              font-medium
+              text-[8px]
+              font-semibold
 
-              text-slate-700
+              text-slate-500
             "
           >
-
-            <option value="active">
-              Active
-            </option>
-
-            <option value="invited">
-              Invited
-            </option>
-
-            <option value="suspended">
-              Suspended
-            </option>
-
-          </select>
+            Read Only
+          </span>
 
         </div>
 
@@ -2336,40 +2111,43 @@ function UserDetail({
       >
 
         <SummaryCard
-          label="Scope"
+          label="Status"
           value={
-            user.scope ===
-              'platform'
-
-              ? 'Platform'
-
-              : 'Client'
-          }
-        />
-
-
-        <SummaryCard
-          label="Role"
-          value={
-            formatRole(
-              user.role
+            formatUserStatus(
+              user.status
             )
           }
         />
 
 
         <SummaryCard
-          label="Module Access"
+          label="Memberships"
           value={
-            finalModuleCount
+            user.memberships.length
           }
+          tone="violet"
         />
 
 
         <SummaryCard
-          label="Overrides"
+          label="Active Access"
           value={
-            explicitPermissionCount
+            activeMemberships
+          }
+          tone="green"
+        />
+
+
+        <SummaryCard
+          label="Default Brand"
+          value={
+            defaultMembership
+
+              ? getMembershipClientName(
+                  defaultMembership
+                )
+
+              : 'None'
           }
         />
 
@@ -2377,320 +2155,124 @@ function UserDetail({
 
 
       {/* =====================================================
-          IDENTITY & ROLE
+          IDENTITY
       ===================================================== */}
 
-      <section className="gos-panel !p-3.5">
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
 
-        <h3 className="gos-section-title">
-          Identity & Role
-        </h3>
+          lg:grid-cols-2
+        "
+      >
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Identity
+          </h3>
 
 
-        <div
-          className="
-            mt-3
+          <div className="mt-3 space-y-2">
 
-            grid
-            grid-cols-1
-            gap-3
-
-            md:grid-cols-2
-          "
-        >
-
-          <FormField
-            label="Name"
-          >
-
-            <input
-
+            <ValueRow
+              label="User ID"
               value={
-                user.name
+                user.userId
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...user,
-
-                    name:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
+              mono
             />
 
-          </FormField>
+
+            <ValueRow
+              label="Full Name"
+              value={
+                user.fullName
+                ||
+                '—'
+              }
+            />
 
 
-          <FormField
-            label="Email"
-          >
-
-            <input
-
-              type="email"
-
+            <ValueRow
+              label="Email"
               value={
                 user.email
+                ||
+                '—'
               }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...user,
-
-                    email:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
             />
 
-          </FormField>
+
+            <ValueRow
+              label="User Status"
+              value={
+                formatUserStatus(
+                  user.status
+                )
+              }
+            />
+
+          </div>
+
+        </section>
 
 
-          {user.scope ===
-            'client' && (
+        <section className="gos-panel !p-3.5">
 
-            <>
-
-              <FormField
-                label="Client"
-              >
-
-                <select
-
-                  value={
-                    user.clientId ||
-                    ''
-                  }
-
-                  onChange={
-                    event =>
-                      onChange({
-
-                        ...user,
-
-                        clientId:
-                          event.target.value,
-
-                        modulePermissions:
-                          {},
-
-                      })
-                  }
-
-                  className="gos-input w-full"
-
-                >
-
-                  {clients.map(
-                    item => (
-
-                      <option
-                        key={
-                          item.id
-                        }
-                        value={
-                          item.id
-                        }
-                      >
-                        {item.name}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </FormField>
+          <h3 className="gos-section-title">
+            Lifecycle
+          </h3>
 
 
-              <FormField
-                label="Role"
-              >
+          <div className="mt-3 space-y-2">
 
-                <select
+            <ValueRow
+              label="Created"
+              value={
+                formatTimestamp(
+                  user.createdAt
+                )
+                ||
+                '—'
+              }
+            />
 
-                  value={
-                    user.role
-                  }
 
-                  onChange={
-                    event =>
-                      onChange({
+            <ValueRow
+              label="Updated"
+              value={
+                formatTimestamp(
+                  user.updatedAt
+                )
+                ||
+                '—'
+              }
+            />
 
-                        ...user,
 
-                        role:
-                          event.target.value as UserRole,
+            <ValueRow
+              label="Last Login"
+              value={
+                formatTimestamp(
+                  user.lastLoginAt
+                )
+                ||
+                'Never'
+              }
+            />
 
-                      })
-                  }
+          </div>
 
-                  className="gos-input w-full"
-
-                >
-
-                  {CLIENT_ROLES.map(
-                    role => (
-
-                      <option
-                        key={
-                          role.value
-                        }
-                        value={
-                          role.value
-                        }
-                      >
-                        {role.label}
-                      </option>
-
-                    )
-                  )}
-
-                </select>
-
-              </FormField>
-
-            </>
-
-          )}
-
-        </div>
+        </section>
 
       </section>
 
 
       {/* =====================================================
-          CLIENT CONTEXT
-      ===================================================== */}
-
-      {user.scope ===
-        'client' && (
-
-        <section
-          className="
-            grid
-            grid-cols-1
-            gap-3
-
-            lg:grid-cols-2
-          "
-        >
-
-          <section className="gos-panel !p-3.5">
-
-            <h3 className="gos-section-title">
-              Client Context
-            </h3>
-
-
-            <div className="mt-3 space-y-2">
-
-              <ValueRow
-                label="Client"
-                value={
-                  client?.name ||
-                  'Not Assigned'
-                }
-              />
-
-
-              <ValueRow
-                label="Plan"
-                value={
-                  plan?.name ||
-                  'No Plan'
-                }
-              />
-
-
-              <ValueRow
-                label="Client Status"
-                value={
-                  client
-                    ? formatClientStatus(
-                        client.status
-                      )
-                    : 'Unknown'
-                }
-              />
-
-            </div>
-
-          </section>
-
-
-          <section className="gos-panel !p-3.5">
-
-            <h3 className="gos-section-title">
-              Access Rule
-            </h3>
-
-
-            <p
-              className="
-                mt-2
-
-                text-[9px]
-                leading-4
-
-                text-slate-500
-              "
-            >
-              A user can restrict access below the client entitlement, but cannot unlock a module the client does not have.
-            </p>
-
-
-            <div
-              className="
-                mt-3
-
-                rounded-[9px]
-
-                border
-                border-violet-200
-
-                bg-violet-50
-
-                px-3
-                py-2.5
-              "
-            >
-
-              <p
-                className="
-                  text-[9px]
-                  font-semibold
-
-                  text-violet-800
-                "
-              >
-                Client entitlement → User permission → Final access
-              </p>
-
-            </div>
-
-          </section>
-
-        </section>
-
-      )}
-
-
-      {/* =====================================================
-          MODULE ACCESS
+          MEMBERSHIPS
       ===================================================== */}
 
       <section className="gos-panel !p-0">
@@ -2706,7 +2288,7 @@ function UserDetail({
         >
 
           <h3 className="gos-section-title">
-            Module Access
+            Brand Memberships
           </h3>
 
 
@@ -2719,7 +2301,7 @@ function UserDetail({
               text-slate-500
             "
           >
-            Review client entitlement, user permission and final module access.
+            All workspace and brand access assigned to this Growth OS identity.
           </p>
 
         </div>
@@ -2729,8 +2311,8 @@ function UserDetail({
 
           <table
             className="
-              min-w-[900px]
               w-full
+              min-w-[1000px]
 
               border-collapse
             "
@@ -2748,23 +2330,31 @@ function UserDetail({
               >
 
                 <TableHeader>
-                  Module
+                  Brand
                 </TableHeader>
 
                 <TableHeader>
-                  Client Access
+                  Workspace
                 </TableHeader>
 
                 <TableHeader>
-                  User Permission
+                  Role
                 </TableHeader>
 
                 <TableHeader>
-                  Final Access
+                  Status
                 </TableHeader>
 
                 <TableHeader>
-                  Module Status
+                  Default
+                </TableHeader>
+
+                <TableHeader>
+                  Created
+                </TableHeader>
+
+                <TableHeader>
+                  Updated
                 </TableHeader>
 
               </tr>
@@ -2774,48 +2364,55 @@ function UserDetail({
 
             <tbody>
 
-              {modules.map(
-                module => {
+              {user.memberships.map(
+                membership => (
 
-                  const finalAccess =
-                    getUserModuleAccess(
-                      user,
-                      module.id
-                    );
+                  <tr
 
+                    key={
+                      membership.membershipId
+                    }
 
-                  const clientAccess =
-                    user.scope ===
-                      'client'
-                    &&
-                    client
+                    className="
+                      border-b
+                      border-slate-100
 
-                      ? getClientModuleAccess(
-                          client,
-                          module.id
-                        )
-
-                      : null;
+                      last:border-0
+                    "
+                  >
 
 
-                  return (
+                    <td className="px-3 py-2.5">
 
-                    <tr
-                      key={
-                        module.id
-                      }
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-2
+                        "
+                      >
 
-                      className="
-                        border-b
-                        border-slate-100
+                        <div
+                          className="
+                            flex
+                            h-7
+                            w-7
+                            shrink-0
+                            items-center
+                            justify-center
 
-                        last:border-0
+                            rounded-[7px]
 
-                        hover:bg-slate-50/70
-                      "
-                    >
+                            bg-blue-50
 
-                      <td className="px-3 py-2">
+                            text-blue-600
+                          "
+                        >
+                          <Building2
+                            size={13}
+                          />
+                        </div>
+
 
                         <div>
 
@@ -2827,7 +2424,9 @@ function UserDetail({
                               text-slate-900
                             "
                           >
-                            {module.name}
+                            {getMembershipClientName(
+                              membership
+                            )}
                           </div>
 
 
@@ -2835,162 +2434,144 @@ function UserDetail({
                             className="
                               mt-0.5
 
-                              max-w-[300px]
-
-                              truncate
-
+                              font-mono
                               text-[8px]
 
                               text-slate-500
                             "
                           >
-                            {module.description}
+                            {membership.brandId}
                           </div>
 
                         </div>
 
-                      </td>
+                      </div>
+
+                    </td>
 
 
-                      <td className="px-3 py-2">
+                    <td
+                      className="
+                        px-3
+                        py-2.5
 
-                        {user.scope ===
-                          'platform' ? (
+                        font-mono
+                        text-[8px]
 
-                          <AccessBadge
-                            enabled
-                            enabledLabel="Platform"
-                            disabledLabel="Disabled"
-                          />
-
-                        ) : (
-
-                          <AccessBadge
-
-                            enabled={
-                              Boolean(
-                                clientAccess?.enabled
-                              )
-                            }
-
-                            enabledLabel="Enabled"
-
-                            disabledLabel="Disabled"
-
-                          />
-
-                        )}
-
-                      </td>
+                        text-slate-500
+                      "
+                    >
+                      {membership.workspaceId}
+                    </td>
 
 
-                      <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
 
-                        {user.scope ===
-                          'platform' ? (
+                      <RoleBadge
+                        role={
+                          membership.role
+                        }
+                      />
 
-                          <span
-                            className="
-                              text-[9px]
-                              font-medium
-
-                              text-slate-400
-                            "
-                          >
-                            Platform Admin
-                          </span>
-
-                        ) : (
-
-                          <select
-
-                            value={
-                              finalAccess.permission
-                            }
-
-                            onChange={
-                              event =>
-                                setModulePermission(
-                                  module.id,
-                                  event.target.value as UserModulePermission
-                                )
-                            }
-
-                            className="
-                              h-7
-
-                              rounded-[7px]
-
-                              border
-                              border-slate-300
-
-                              bg-white
-
-                              px-2
-
-                              text-[9px]
-                              font-medium
-
-                              text-slate-700
-                            "
-                          >
-
-                            <option value="inherit">
-                              Inherit Client
-                            </option>
-
-                            <option
-                              value="enabled"
-                              disabled={
-                                !finalAccess.clientEnabled
-                              }
-                            >
-                              Allow
-                            </option>
-
-                            <option value="disabled">
-                              Deny
-                            </option>
-
-                          </select>
-
-                        )}
-
-                      </td>
+                    </td>
 
 
-                      <td className="px-3 py-2">
+                    <td className="px-3 py-2.5">
 
-                        <AccessBadge
+                      <MembershipStatusBadge
+                        status={
+                          membership.status
+                        }
+                      />
 
-                          enabled={
-                            finalAccess.enabled
-                          }
-
-                          enabledLabel="Enabled"
-
-                          disabledLabel="Disabled"
-
-                        />
-
-                      </td>
+                    </td>
 
 
-                      <td className="px-3 py-2">
+                    <td
+                      className="
+                        px-3
+                        py-2.5
 
-                        <ModuleStatusBadge
-                          status={
-                            module.status
-                          }
-                        />
+                        text-[9px]
+                        font-semibold
 
-                      </td>
+                        text-slate-600
+                      "
+                    >
+                      {membership.isDefault
+                        ? 'Yes'
+                        : '—'}
+                    </td>
 
-                    </tr>
 
-                  );
+                    <td
+                      className="
+                        px-3
+                        py-2.5
 
-                }
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        membership.createdAt
+                      )
+                      ||
+                      '—'}
+                    </td>
+
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[9px]
+
+                        text-slate-500
+                      "
+                    >
+                      {formatTimestamp(
+                        membership.updatedAt
+                      )
+                      ||
+                      '—'}
+                    </td>
+
+                  </tr>
+
+                )
+              )}
+
+
+              {user.memberships.length ===
+                0 && (
+
+                <tr>
+
+                  <td
+
+                    colSpan={
+                      7
+                    }
+
+                    className="
+                      px-4
+                      py-12
+
+                      text-center
+
+                      text-[10px]
+
+                      text-slate-500
+                    "
+                  >
+                    This user currently has no brand memberships.
+                  </td>
+
+                </tr>
+
               )}
 
             </tbody>
@@ -2998,6 +2579,51 @@ function UserDetail({
           </table>
 
         </div>
+
+      </section>
+
+
+      {/* =====================================================
+          OWNERSHIP
+      ===================================================== */}
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          p-3
+        "
+      >
+
+        <p
+          className="
+            text-[9px]
+            font-semibold
+
+            text-violet-800
+          "
+        >
+          Access ownership
+        </p>
+
+
+        <p
+          className="
+            mt-1
+
+            text-[8px]
+            leading-4
+
+            text-violet-600
+          "
+        >
+          Admin Users provides global visibility into Growth OS identities and brand memberships. User creation and membership changes should use a dedicated authenticated access-management flow rather than local frontend state.
+        </p>
 
       </section>
 
@@ -3009,377 +2635,7 @@ function UserDetail({
 
 
 // ============================================================
-// USER ICON
-// ============================================================
-
-function UserIcon({
-
-  scope,
-
-  large =
-    false,
-
-}: {
-
-  scope:
-    UserScope;
-
-  large?:
-    boolean;
-
-}) {
-
-  const Icon =
-    scope ===
-      'platform'
-
-      ? ShieldCheck
-
-      : UserRound;
-
-
-  return (
-
-    <div
-      className={`
-        flex
-        shrink-0
-        items-center
-        justify-center
-
-        rounded-[9px]
-
-        ${
-          scope ===
-            'platform'
-
-            ? `
-              bg-violet-50
-              text-violet-600
-            `
-
-            : `
-              bg-blue-50
-              text-blue-600
-            `
-        }
-
-        ${
-          large
-
-            ? `
-              h-9
-              w-9
-            `
-
-            : `
-              h-8
-              w-8
-            `
-        }
-      `}
-    >
-
-      <Icon
-        size={
-          large
-            ? 17
-            : 15
-        }
-      />
-
-    </div>
-
-  );
-
-}
-
-
-// ============================================================
-// SCOPE BADGE
-// ============================================================
-
-function ScopeBadge({
-
-  scope,
-
-}: {
-
-  scope:
-    UserScope;
-
-}) {
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${
-          scope ===
-            'platform'
-
-            ? `
-              border-violet-200
-              bg-violet-50
-              text-violet-700
-            `
-
-            : `
-              border-blue-200
-              bg-blue-50
-              text-blue-700
-            `
-        }
-      `}
-    >
-      {scope ===
-        'platform'
-
-        ? 'Platform'
-
-        : 'Client'
-      }
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// USER STATUS
-// ============================================================
-
-function UserStatusBadge({
-
-  status,
-
-}: {
-
-  status:
-    UserStatus;
-
-}) {
-
-  const config =
-
-    status ===
-      'active'
-
-      ? {
-          label:
-            'Active',
-
-          cls:
-            'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
-
-      : status ===
-          'invited'
-
-        ? {
-            label:
-              'Invited',
-
-            cls:
-              'border-blue-200 bg-blue-50 text-blue-700',
-          }
-
-        : {
-            label:
-              'Suspended',
-
-            cls:
-              'border-red-200 bg-red-50 text-red-700',
-          };
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${config.cls}
-      `}
-    >
-      {config.label}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// ACCESS BADGE
-// ============================================================
-
-function AccessBadge({
-
-  enabled,
-
-  enabledLabel,
-
-  disabledLabel,
-
-}: {
-
-  enabled:
-    boolean;
-
-  enabledLabel:
-    string;
-
-  disabledLabel:
-    string;
-
-}) {
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${
-          enabled
-
-            ? `
-              border-emerald-200
-              bg-emerald-50
-              text-emerald-700
-            `
-
-            : `
-              border-slate-200
-              bg-slate-100
-              text-slate-500
-            `
-        }
-      `}
-    >
-      {enabled
-        ? enabledLabel
-        : disabledLabel
-      }
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// MODULE STATUS
-// ============================================================
-
-function ModuleStatusBadge({
-
-  status,
-
-}: {
-
-  status:
-    string;
-
-}) {
-
-  const active =
-    status ===
-      'active';
-
-
-  const draft =
-    status ===
-      'draft';
-
-
-  return (
-
-    <span
-      className={`
-        inline-flex
-
-        rounded-full
-
-        border
-
-        px-2
-        py-0.5
-
-        text-[8px]
-        font-semibold
-
-        ${
-          active
-
-            ? `
-              border-emerald-200
-              bg-emerald-50
-              text-emerald-700
-            `
-
-            : draft
-
-              ? `
-                border-amber-200
-                bg-amber-50
-                text-amber-700
-              `
-
-              : `
-                border-red-200
-                bg-red-50
-                text-red-700
-              `
-        }
-      `}
-    >
-      {capitalize(
-        status
-      )}
-    </span>
-
-  );
-
-}
-
-
-// ============================================================
-// SUMMARY
+// SUMMARY CARD
 // ============================================================
 
 function SummaryCard({
@@ -3387,6 +2643,9 @@ function SummaryCard({
   label,
 
   value,
+
+  tone =
+    'default',
 
 }: {
 
@@ -3397,7 +2656,39 @@ function SummaryCard({
     string |
     number;
 
+  tone?:
+    | 'default'
+    | 'green'
+    | 'red'
+    | 'violet'
+    | 'slate';
+
 }) {
+
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'text-emerald-700'
+
+      : tone ===
+          'red'
+
+        ? 'text-red-700'
+
+        : tone ===
+            'violet'
+
+          ? 'text-violet-700'
+
+          : tone ===
+              'slate'
+
+            ? 'text-slate-500'
+
+            : 'text-slate-950';
+
 
   return (
 
@@ -3418,20 +2709,265 @@ function SummaryCard({
 
 
       <p
-        className="
+        className={`
           mt-1.5
+
+          truncate
 
           text-[18px]
           font-semibold
           tracking-[-0.03em]
 
-          text-slate-950
-        "
+          ${cls}
+        `}
       >
         {value}
       </p>
 
     </div>
+
+  );
+
+}
+
+
+// ============================================================
+// USER STATUS BADGE
+// ============================================================
+
+function UserStatusBadge({
+
+  status,
+
+}: {
+
+  status:
+    UserStatus |
+    null;
+
+}) {
+
+
+  if (
+    status ===
+    'active'
+  ) {
+
+    return (
+
+      <span
+        className="
+          inline-flex
+
+          rounded-full
+
+          border
+          border-emerald-200
+
+          bg-emerald-50
+
+          px-2
+          py-0.5
+
+          text-[8px]
+          font-semibold
+
+          text-emerald-700
+        "
+      >
+        Active
+      </span>
+
+    );
+
+  }
+
+
+  if (
+    status ===
+    'suspended'
+  ) {
+
+    return (
+
+      <span
+        className="
+          inline-flex
+
+          rounded-full
+
+          border
+          border-red-200
+
+          bg-red-50
+
+          px-2
+          py-0.5
+
+          text-[8px]
+          font-semibold
+
+          text-red-700
+        "
+      >
+        Suspended
+      </span>
+
+    );
+
+  }
+
+
+  return (
+
+    <span
+      className="
+        inline-flex
+
+        rounded-full
+
+        border
+        border-slate-200
+
+        bg-slate-100
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        text-slate-600
+      "
+    >
+      {status ===
+        'inactive'
+
+        ? 'Inactive'
+
+        : 'Unknown'}
+    </span>
+
+  );
+
+}
+
+
+// ============================================================
+// MEMBERSHIP STATUS BADGE
+// ============================================================
+
+function MembershipStatusBadge({
+
+  status,
+
+}: {
+
+  status:
+    MembershipStatus;
+
+}) {
+
+  return (
+
+    <span
+      className={`
+        inline-flex
+
+        rounded-full
+
+        border
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        ${
+          status ===
+            'active'
+
+            ? `
+              border-emerald-200
+              bg-emerald-50
+              text-emerald-700
+            `
+
+            : `
+              border-slate-200
+              bg-slate-100
+              text-slate-600
+            `
+        }
+      `}
+    >
+      {status ===
+        'active'
+
+        ? 'Active'
+
+        : 'Inactive'}
+    </span>
+
+  );
+
+}
+
+
+// ============================================================
+// ROLE BADGE
+// ============================================================
+
+function RoleBadge({
+
+  role,
+
+}: {
+
+  role:
+    MembershipRole;
+
+}) {
+
+
+  const cls =
+    role ===
+      'owner'
+
+      ? 'border-violet-200 bg-violet-50 text-violet-700'
+
+      : role ===
+          'admin'
+
+        ? 'border-blue-200 bg-blue-50 text-blue-700'
+
+        : 'border-slate-200 bg-slate-50 text-slate-600';
+
+
+  return (
+
+    <span
+      className={`
+        inline-flex
+
+        rounded-full
+
+        border
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        ${cls}
+      `}
+    >
+      {formatRole(
+        role
+      )}
+    </span>
 
   );
 
@@ -3448,6 +2984,9 @@ function ValueRow({
 
   value,
 
+  mono =
+    false,
+
 }: {
 
   label:
@@ -3455,6 +2994,9 @@ function ValueRow({
 
   value:
     string;
+
+  mono?:
+    boolean;
 
 }) {
 
@@ -3481,6 +3023,8 @@ function ValueRow({
 
       <span
         className="
+          shrink-0
+
           text-[9px]
 
           text-slate-500
@@ -3491,67 +3035,31 @@ function ValueRow({
 
 
       <span
-        className="
+        title={
+          value
+        }
+        className={`
+          max-w-[68%]
+
+          truncate
+
+          text-right
           text-[10px]
           font-semibold
 
           text-slate-800
-        "
+
+          ${
+            mono
+              ? 'font-mono text-[8px]'
+              : ''
+          }
+        `}
       >
         {value}
       </span>
 
     </div>
-
-  );
-
-}
-
-
-// ============================================================
-// FORM FIELD
-// ============================================================
-
-function FormField({
-
-  label,
-
-  children,
-
-}: {
-
-  label:
-    string;
-
-  children:
-    ReactNode;
-
-}) {
-
-  return (
-
-    <label className="block">
-
-      <span
-        className="
-          mb-1.5
-          block
-
-          text-[9px]
-          font-semibold
-          uppercase
-          tracking-[0.05em]
-
-          text-slate-500
-        "
-      >
-        {label}
-      </span>
-
-
-      {children}
-
-    </label>
 
   );
 
@@ -3589,7 +3097,7 @@ function TableHeader({
 
         px-3
 
-        text-[9px]
+        text-[8px]
         font-semibold
         uppercase
         tracking-[0.05em]
@@ -3618,34 +3126,126 @@ function TableHeader({
 // HELPERS
 // ============================================================
 
+function getUserDisplayName(
+  user:
+    AdminUser
+) {
+
+  return (
+    user.fullName
+    ||
+    user.email
+    ||
+    user.userId
+  );
+
+}
+
+
+function getMembershipClientKey(
+  membership:
+    AdminUserMembership
+) {
+
+  return [
+    membership.workspaceId,
+    membership.brandId,
+  ].join(
+    ':'
+  );
+
+}
+
+
+function getMembershipClientName(
+  membership:
+    AdminUserMembership
+) {
+
+  return (
+    membership.brandName
+    ||
+    membership.workspaceName
+    ||
+    membership.brandId
+    ||
+    membership.workspaceId
+  );
+
+}
+
+
+function formatMembershipClients(
+  memberships:
+    AdminUserMembership[]
+) {
+
+  if (
+    memberships.length ===
+    0
+  ) {
+
+    return 'No access';
+
+  }
+
+
+  const names =
+    Array.from(
+      new Set(
+        memberships.map(
+          membership =>
+            getMembershipClientName(
+              membership
+            )
+        )
+      )
+    );
+
+
+  if (
+    names.length <=
+    2
+  ) {
+
+    return names.join(
+      ', '
+    );
+
+  }
+
+
+  return `${names
+    .slice(
+      0,
+      2
+    )
+    .join(
+      ', '
+    )} +${names.length - 2}`;
+
+}
+
+
 function formatRole(
   role:
-    UserRole
+    MembershipRole
 ) {
 
   const labels:
     Record<
-      UserRole,
+      MembershipRole,
       string
     > = {
 
-    platform_admin:
-      'Platform Admin',
-
-    client_owner:
+    owner:
       'Owner',
 
-    client_admin:
+    admin:
       'Admin',
-
-    manager:
-      'Manager',
 
     analyst:
       'Analyst',
-
-    operator:
-      'Operator',
 
     viewer:
       'Viewer',
@@ -3660,51 +3260,91 @@ function formatRole(
 }
 
 
-function formatClientStatus(
+function formatUserStatus(
   status:
-    string
+    UserStatus |
+    null
 ) {
 
-  if (
-    status ===
-    'active'
-  ) {
+  if (!status) {
 
-    return 'Active';
+    return 'Unknown';
 
   }
 
 
-  if (
-    status ===
-    'setup'
-  ) {
-
-    return 'Setup Required';
-
-  }
-
-
-  return 'Suspended';
+  return status
+    .charAt(
+      0
+    )
+    .toUpperCase()
+  +
+  status.slice(
+    1
+  );
 
 }
 
 
-function capitalize(
+function formatTimestamp(
   value:
-    string
+    string |
+    null
 ) {
 
-  return (
-    value
-      .charAt(
-        0
-      )
-      .toUpperCase()
-    +
-    value.slice(
-      1
+  if (!value) {
+
+    return null;
+
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
     )
+  ) {
+
+    return value;
+
+  }
+
+
+  return date.toLocaleString(
+    'en-IN',
+    {
+
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+
+    }
+  );
+
+}
+
+
+function formatNumber(
+  value:
+    number
+) {
+
+  return new Intl.NumberFormat(
+    'en-IN',
+    {
+      maximumFractionDigits:
+        0,
+    }
+  ).format(
+    value
   );
 
 }

@@ -193,6 +193,139 @@ function buildOrdersBulkQuery(
 
 
 // ============================================================
+// CUSTOMERS BULK QUERY
+//
+// Historical Customer contract:
+//
+// [from, to)
+//
+// created_at >= start
+// created_at <  end
+//
+// IMPORTANT:
+//
+// Field set intentionally matches CUSTOMERS_QUERY from
+// shopify-api.js.
+//
+// Therefore:
+//
+// manual
+// incremental
+// webhook
+// historical Bulk
+//
+// can converge on the same canonical Customer payload.
+// ============================================================
+
+function buildCustomersBulkQuery(
+  from,
+  to
+) {
+
+  const search =
+    `created_at:>='${from}' AND created_at:<'${to}'`;
+
+
+  return `
+
+    {
+      customers(
+        query: "${search}"
+        sortKey: CREATED_AT
+      ) {
+
+        edges {
+
+          node {
+
+            id
+
+            legacyResourceId
+
+            firstName
+            lastName
+            displayName
+
+            createdAt
+            updatedAt
+
+            state
+
+            tags
+
+            locale
+
+            note
+
+            verifiedEmail
+
+            taxExempt
+
+            numberOfOrders
+
+
+            amountSpent {
+
+              amount
+              currencyCode
+
+            }
+
+
+            defaultEmailAddress {
+
+              emailAddress
+              marketingState
+
+            }
+
+
+            defaultPhoneNumber {
+
+              phoneNumber
+              marketingState
+
+            }
+
+
+            defaultAddress {
+
+              id
+
+              firstName
+              lastName
+
+              company
+
+              address1
+              address2
+
+              city
+
+              province
+              provinceCode
+
+              country
+              countryCodeV2
+
+              zip
+              phone
+
+            }
+
+          }
+
+        }
+
+      }
+
+    }
+
+  `;
+
+}
+
+// ============================================================
 // EXECUTE
 // ============================================================
 
@@ -480,6 +613,245 @@ export async function startOrdersBulkOperation(
   };
 
 }
+
+// ============================================================
+// START CUSTOMERS BULK OPERATION
+//
+// Same credential + Shopify Bulk lifecycle as Orders.
+//
+// This function ONLY starts the Shopify source operation.
+//
+// It does not:
+//
+// - modify Growth OS backfill state
+// - stage files
+// - write BigQuery
+//
+// Those responsibilities remain with the existing shared
+// backfill orchestration.
+// ============================================================
+
+export async function startCustomersBulkOperation(
+  runtime,
+  input
+) {
+
+  if (
+    !input?.from
+    ||
+    !input?.to
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_BULK_WINDOW_MISSING'
+    );
+
+  }
+
+
+  let token =
+    await getValidShopifyAccessToken(
+      runtime
+    );
+
+
+  const bulkQuery =
+    buildCustomersBulkQuery(
+      input.from,
+      input.to
+    );
+
+
+  let result =
+    await execute(
+
+      runtime,
+
+      token.accessToken,
+
+      START_BULK_MUTATION,
+
+      {
+
+        query:
+          bulkQuery,
+
+        groupObjects:
+          false,
+
+      }
+
+    );
+
+
+  // ==========================================================
+  // 401 → refresh once → retry
+  // ==========================================================
+
+  if (
+    result.response.status ===
+      401
+  ) {
+
+    token =
+      await getValidShopifyAccessToken(
+
+        runtime,
+
+        {
+
+          forceRefresh:
+            true,
+
+        }
+
+      );
+
+
+    result =
+      await execute(
+
+        runtime,
+
+        token.accessToken,
+
+        START_BULK_MUTATION,
+
+        {
+
+          query:
+            bulkQuery,
+
+          groupObjects:
+            false,
+
+        }
+
+      );
+
+  }
+
+
+  // ==========================================================
+  // HTTP FAILURE
+  // ==========================================================
+
+  if (
+    !result.response.ok
+  ) {
+
+    throw new Error(
+      `SHOPIFY_CUSTOMERS_BULK_HTTP_${result.response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL FAILURE
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      result.json?.errors
+    )
+    &&
+    result.json.errors.length
+  ) {
+
+    console.error(
+      'SHOPIFY_CUSTOMERS_BULK_GRAPHQL_ERROR',
+      {
+
+        errors:
+          result.json.errors.map(
+            error =>
+              error?.message
+              ??
+              'Unknown GraphQL error'
+          ),
+
+      }
+    );
+
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_BULK_GRAPHQL_FAILED'
+    );
+
+  }
+
+
+  // ==========================================================
+  // BULK MUTATION RESULT
+  // ==========================================================
+
+  const payload =
+    result
+      .json
+      ?.data
+      ?.bulkOperationRunQuery;
+
+
+  const userErrors =
+    payload?.userErrors
+    ??
+    [];
+
+
+  if (
+    userErrors.length >
+      0
+  ) {
+
+    console.error(
+      'SHOPIFY_CUSTOMERS_BULK_USER_ERRORS',
+      userErrors
+    );
+
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_BULK_USER_ERROR'
+    );
+
+  }
+
+
+  const operation =
+    payload?.bulkOperation;
+
+
+  if (
+    !operation?.id
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMERS_BULK_OPERATION_ID_MISSING'
+    );
+
+  }
+
+
+  return {
+
+    id:
+      operation.id,
+
+    status:
+      operation.status,
+
+    createdAt:
+      operation.createdAt
+      ??
+      null,
+
+    tokenRefreshed:
+      token.refreshed,
+
+  };
+
+}
+
 
 // ============================================================
 // GET BULK OPERATION

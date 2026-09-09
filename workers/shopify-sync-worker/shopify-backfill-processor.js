@@ -19,6 +19,10 @@ import {
 } from './shopify-bulk-warehouse.js';
 
 import {
+  writeShopifyCustomerBulkStage,
+} from './shopify-customer-bulk-warehouse.js';
+
+import {
   getBackfillWindow,
   markBackfillResultReady,
   markBackfillBulkFailed,
@@ -101,6 +105,79 @@ function normalizeInput(
       ),
 
   };
+
+}
+
+// ============================================================
+// AUTHORITATIVE BACKFILL ENTITY
+//
+// Entity comes only from persisted Growth OS backfill state.
+//
+// Request payload cannot choose the destination warehouse.
+// ============================================================
+
+function resolveBackfillEntity(
+  window
+) {
+
+  const entity =
+    requireString(
+      window?.entity,
+      'SHOPIFY_BACKFILL_PROCESS_ENTITY_MISSING'
+    );
+
+
+  if (
+    entity !==
+      'orders'
+    &&
+    entity !==
+      'customers'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_PROCESS_ENTITY_UNSUPPORTED'
+    );
+
+  }
+
+
+  return entity;
+
+}
+
+
+// ============================================================
+// ENTITY WAREHOUSE ADAPTER
+// ============================================================
+
+function getBackfillWarehouseWriter(
+  entity
+) {
+
+  if (
+    entity ===
+      'orders'
+  ) {
+
+    return writeShopifyBulkStage;
+
+  }
+
+
+  if (
+    entity ===
+      'customers'
+  ) {
+
+    return writeShopifyCustomerBulkStage;
+
+  }
+
+
+  throw new Error(
+    'SHOPIFY_BACKFILL_WAREHOUSE_ENTITY_UNSUPPORTED'
+  );
 
 }
 
@@ -222,6 +299,21 @@ export async function processShopifyBackfillWindow(
     );
 
   }
+
+    // ==========================================================
+  // AUTHORITATIVE ENTITY
+  // ==========================================================
+
+  const entity =
+    resolveBackfillEntity(
+      window
+    );
+
+
+  const warehouseWriter =
+    getBackfillWarehouseWriter(
+      entity
+    );
 
 
   // ==========================================================
@@ -716,8 +808,7 @@ export async function processShopifyBackfillWindow(
         integrationAccountId:
           runtimeJob.integrationAccountId,
 
-        entity:
-          'orders',
+        entity,
 
         backfillRunId:
           input.backfillRunId,
@@ -785,7 +876,7 @@ export async function processShopifyBackfillWindow(
     // ========================================================
 
     const warehouse =
-      await writeShopifyBulkStage({
+      await warehouseWriter({
 
         workspaceId:
           runtimeJob.workspaceId,

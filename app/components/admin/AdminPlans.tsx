@@ -2,25 +2,154 @@
 
 import {
   type ReactNode,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
 
 import {
   ArrowLeft,
-  Check,
   ChevronRight,
   CreditCard,
-  Plus,
+  RefreshCw,
   Search,
-  X,
+  XCircle,
 } from 'lucide-react';
 
-import {
-  type AdminPlan,
-  type PlanStatus,
-  useAdminStore,
-} from './AdminStore';
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type AdminPlanModule = {
+
+  moduleId:
+    string;
+
+  moduleName:
+    string | null;
+
+  description:
+    string | null;
+
+  category:
+    string | null;
+
+  routeKey:
+    string | null;
+
+  moduleStatus:
+    string | null;
+
+  setupRequired:
+    boolean;
+
+  enabled:
+    boolean;
+
+};
+
+
+type AdminPlan = {
+
+  planId:
+    string;
+
+  planName:
+    string;
+
+  description:
+    string | null;
+
+  status:
+    string;
+
+  monthlyOrderLimit:
+    number | null;
+
+  maxUsers:
+    number | null;
+
+  createdAt:
+    string | null;
+
+  updatedAt:
+    string | null;
+
+  assignedClients:
+    number;
+
+  enabledModules:
+    number;
+
+  totalModules:
+    number;
+
+  modules:
+    AdminPlanModule[];
+
+};
+
+
+type AdminPlansResponse = {
+
+  ok:
+    boolean;
+
+  scope?:
+    string;
+
+  summary?: {
+
+    total:
+      number;
+
+    active:
+      number;
+
+    inactive:
+      number;
+
+    assignedClients:
+      number;
+
+    unassignedPlans:
+      number;
+
+  };
+
+  plans?:
+    AdminPlan[];
+
+  meta?: {
+
+    durationMs?:
+      number;
+
+    source?:
+      string;
+
+    readOnly?:
+      boolean;
+
+  };
+
+  error?:
+    string;
+
+};
+
+
+type StatusFilter =
+  | 'all'
+  | 'active'
+  | 'inactive';
+
+
+type AssignmentFilter =
+  | 'all'
+  | 'assigned'
+  | 'unassigned';
 
 
 // ============================================================
@@ -29,21 +158,46 @@ import {
 
 export default function AdminPlans() {
 
-  // ==========================================================
-  // SHARED ADMIN STORE
-  // ==========================================================
-
-  const {
-    plans,
-    setPlans,
-    modules,
-    clients,
-  } =
-    useAdminStore();
-
 
   // ==========================================================
-  // LOCAL UI STATE
+  // SERVER DATA
+  // ==========================================================
+
+  const [
+    data,
+    setData,
+  ] =
+    useState<
+      AdminPlansResponse |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  // ==========================================================
+  // FILTERS
   // ==========================================================
 
   const [
@@ -52,6 +206,24 @@ export default function AdminPlans() {
   ] =
     useState(
       ''
+    );
+
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] =
+    useState<StatusFilter>(
+      'all'
+    );
+
+
+  const [
+    assignmentFilter,
+    setAssignmentFilter,
+  ] =
+    useState<AssignmentFilter>(
+      'all'
     );
 
 
@@ -67,57 +239,120 @@ export default function AdminPlans() {
     );
 
 
-  const [
-    addOpen,
-    setAddOpen,
-  ] =
-    useState(
-      false
+  // ==========================================================
+  // LOAD
+  // ==========================================================
+
+  async function loadPlans() {
+
+    setLoading(
+      true
     );
+
+
+    setError(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/plans',
+          {
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+          }
+        );
+
+
+      const json:
+        AdminPlansResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load Admin Plans'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+    } catch (
+      error:
+        any
+    ) {
+
+      console.error(
+        'ADMIN_PLANS_UI_ERROR',
+        error
+      );
+
+
+      setData(
+        null
+      );
+
+
+      setError(
+        String(
+          error?.message
+          ||
+          'Unable to load Admin Plans'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadPlans();
+
+    },
+    []
+  );
 
 
   // ==========================================================
-  // NEW PLAN
+  // PLANS
   // ==========================================================
 
-  const [
-    newName,
-    setNewName,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newDescription,
-    setNewDescription,
-  ] =
-    useState(
-      ''
-    );
-
-
-  const [
-    newMonthlyOrderLimit,
-    setNewMonthlyOrderLimit,
-  ] =
-    useState(
-      '2500'
-    );
-
-
-  const [
-    newMaxUsers,
-    setNewMaxUsers,
-  ] =
-    useState(
-      '5'
-    );
+  const plans =
+    data?.plans
+    ||
+    [];
 
 
   // ==========================================================
-  // SEARCH
+  // FILTER
   // ==========================================================
 
   const filteredPlans =
@@ -130,48 +365,203 @@ export default function AdminPlans() {
             .toLowerCase();
 
 
-        if (!query) {
-
-          return plans;
-
-        }
-
-
         return plans.filter(
-          plan =>
+          plan => {
 
-            plan.name
-              .toLowerCase()
-              .includes(
-                query
-              )
 
-            ||
+            // --------------------------------------------------
+            // STATUS
+            // --------------------------------------------------
 
-            plan.description
-              .toLowerCase()
-              .includes(
-                query
-              )
+            if (
+              statusFilter !==
+                'all'
+            ) {
 
-            ||
+              const active =
+                normalizeStatus(
+                  plan.status
+                ) ===
+                'active';
 
-            formatOrderLimit(
-              plan.monthlyOrderLimit
-            )
-              .toLowerCase()
-              .includes(
-                query
-              )
 
+              if (
+                statusFilter ===
+                  'active'
+                &&
+                !active
+              ) {
+
+                return false;
+
+              }
+
+
+              if (
+                statusFilter ===
+                  'inactive'
+                &&
+                active
+              ) {
+
+                return false;
+
+              }
+
+            }
+
+
+            // --------------------------------------------------
+            // ASSIGNMENT
+            // --------------------------------------------------
+
+            if (
+              assignmentFilter ===
+                'assigned'
+              &&
+              plan.assignedClients ===
+                0
+            ) {
+
+              return false;
+
+            }
+
+
+            if (
+              assignmentFilter ===
+                'unassigned'
+              &&
+              plan.assignedClients >
+                0
+            ) {
+
+              return false;
+
+            }
+
+
+            // --------------------------------------------------
+            // SEARCH
+            // --------------------------------------------------
+
+            if (!query) {
+
+              return true;
+
+            }
+
+
+            const moduleText =
+              plan.modules
+                .map(
+                  module =>
+                    [
+
+                      module.moduleId,
+                      module.moduleName,
+                      module.category,
+                      module.routeKey,
+
+                    ]
+                      .filter(
+                        Boolean
+                      )
+                      .join(
+                        ' '
+                      )
+                )
+                .join(
+                  ' '
+                );
+
+
+            const haystack =
+              [
+
+                plan.planId,
+                plan.planName,
+                plan.description,
+                plan.status,
+                moduleText,
+
+              ]
+                .filter(
+                  Boolean
+                )
+                .join(
+                  ' '
+                )
+                .toLowerCase();
+
+
+            return haystack.includes(
+              query
+            );
+
+          }
         );
 
       },
       [
         plans,
         search,
+        statusFilter,
+        assignmentFilter,
       ]
     );
+
+
+  // ==========================================================
+  // SUMMARY
+  // ==========================================================
+
+  const summary =
+    data?.summary
+    ||
+    {
+
+      total:
+        plans.length,
+
+      active:
+        plans.filter(
+          plan =>
+            normalizeStatus(
+              plan.status
+            ) ===
+            'active'
+        ).length,
+
+      inactive:
+        plans.filter(
+          plan =>
+            normalizeStatus(
+              plan.status
+            ) !==
+            'active'
+        ).length,
+
+      assignedClients:
+        plans.reduce(
+          (
+            total,
+            plan
+          ) =>
+            total
+            +
+            plan.assignedClients,
+          0
+        ),
+
+      unassignedPlans:
+        plans.filter(
+          plan =>
+            plan.assignedClients ===
+            0
+        ).length,
+
+    };
 
 
   // ==========================================================
@@ -181,7 +571,7 @@ export default function AdminPlans() {
   const selectedPlan =
     plans.find(
       plan =>
-        plan.id ===
+        plan.planId ===
         selectedPlanId
     )
     ||
@@ -189,137 +579,154 @@ export default function AdminPlans() {
 
 
   // ==========================================================
-  // PLAN CLIENT COUNT
+  // LOADING
   // ==========================================================
 
-  function getPlanClientCount(
-    planId:
-      string
+  if (
+    loading
+    &&
+    !data
   ) {
 
-    return clients.filter(
-      client =>
-        client.planId ===
-        planId
-    ).length;
+    return (
+
+      <section className="gos-panel !p-4">
+
+        <p
+          className="
+            text-[10px]
+
+            text-slate-500
+          "
+        >
+          Loading Plans...
+        </p>
+
+      </section>
+
+    );
 
   }
 
 
   // ==========================================================
-  // CREATE PLAN
+  // ERROR
   // ==========================================================
 
-  function createPlan() {
+  if (
+    error
+    &&
+    !data
+  ) {
 
-    const name =
-      newName.trim();
+    return (
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-red-200
+
+          bg-red-50
+
+          p-4
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-start
+            justify-between
+            gap-3
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-start
+              gap-2
+            "
+          >
+
+            <XCircle
+              size={15}
+
+              className="
+                mt-0.5
+                shrink-0
+
+                text-red-600
+              "
+            />
 
 
-    if (!name) {
+            <div>
 
-      return;
+              <p
+                className="
+                  text-[10px]
+                  font-semibold
 
-    }
-
-
-    const slug =
-      name
-        .toLowerCase()
-        .replace(
-          /[^a-z0-9]+/g,
-          '-'
-        )
-        .replace(
-          /^-|-$/g,
-          ''
-        );
+                  text-red-800
+                "
+              >
+                Unable to load Plans
+              </p>
 
 
-    const plan:
-      AdminPlan = {
+              <p
+                className="
+                  mt-1
 
-      id:
-        `${slug}-${Date.now()}`,
+                  text-[9px]
 
-      name,
+                  text-red-700
+                "
+              >
+                {error}
+              </p>
 
-      description:
-        newDescription.trim(),
+            </div>
 
-      status:
-        'draft',
+          </div>
 
-      // Command Center always starts enabled.
 
-      modules: [
-        'command-center',
-      ],
+          <button
 
-      monthlyOrderLimit:
-        parseNullablePositiveNumber(
-          newMonthlyOrderLimit
-        ),
+            type="button"
 
-      maxUsers:
-        parseNullablePositiveNumber(
-          newMaxUsers
-        ),
-
-      createdAt:
-        new Date()
-          .toLocaleDateString(
-            'en-IN',
-            {
-              day:
-                '2-digit',
-
-              month:
-                'short',
-
-              year:
-                'numeric',
+            onClick={
+              loadPlans
             }
-          ),
 
-    };
+            className="
+              h-7
 
+              rounded-[7px]
 
-    setPlans(
-      previous => [
-        ...previous,
-        plan,
-      ]
-    );
+              border
+              border-red-200
 
+              bg-white
 
-    setAddOpen(
-      false
-    );
+              px-2.5
 
+              text-[9px]
+              font-semibold
 
-    setNewName(
-      ''
-    );
+              text-red-700
+            "
+          >
+            Retry
+          </button>
 
+        </div>
 
-    setNewDescription(
-      ''
-    );
+      </section>
 
-
-    setNewMonthlyOrderLimit(
-      '2500'
-    );
-
-
-    setNewMaxUsers(
-      '5'
-    );
-
-
-    setSelectedPlanId(
-      plan.id
     );
 
   }
@@ -341,40 +748,10 @@ export default function AdminPlans() {
           selectedPlan
         }
 
-        availableModules={
-          modules
-        }
-
-        clientCount={
-          getPlanClientCount(
-            selectedPlan.id
-          )
-        }
-
         onBack={() =>
           setSelectedPlanId(
             null
           )
-        }
-
-        onChange={
-          updatedPlan => {
-
-            setPlans(
-              previous =>
-                previous.map(
-                  plan =>
-
-                    plan.id ===
-                      updatedPlan.id
-
-                      ? updatedPlan
-
-                      : plan
-                )
-            );
-
-          }
         }
 
       />
@@ -394,7 +771,7 @@ export default function AdminPlans() {
 
 
       {/* =====================================================
-          TOOLBAR
+          HEADER
       ===================================================== */}
 
       <section
@@ -407,9 +784,9 @@ export default function AdminPlans() {
 
           p-3
 
-          md:flex-row
-          md:items-center
-          md:justify-between
+          xl:flex-row
+          xl:items-center
+          xl:justify-between
         "
       >
 
@@ -437,130 +814,65 @@ export default function AdminPlans() {
               text-slate-500
             "
           >
-            Define monthly order volume, module entitlement and user access.
+            Canonical commercial plans, usage limits and module entitlements.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            flex
-            flex-col
-            gap-2
+        <button
 
-            sm:flex-row
+          type="button"
+
+          onClick={
+            loadPlans
+          }
+
+          disabled={
+            loading
+          }
+
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-1.5
+
+            rounded-[8px]
+
+            border
+            border-slate-200
+
+            bg-white
+
+            px-3
+
+            text-[9px]
+            font-semibold
+
+            text-slate-700
+
+            hover:bg-slate-50
+
+            disabled:opacity-60
           "
         >
 
-          <div
-            className="
-              relative
+          <RefreshCw
 
-              w-full
+            size={12}
 
-              sm:w-[240px]
-            "
-          >
-
-            <Search
-              size={14}
-              className="
-                absolute
-                left-2.5
-                top-1/2
-
-                -translate-y-1/2
-
-                text-slate-400
-              "
-            />
-
-
-            <input
-
-              value={
-                search
-              }
-
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
-
-              placeholder="Search plans"
-
-              className="
-                h-8
-                w-full
-
-                rounded-[8px]
-
-                border
-                border-slate-300
-
-                bg-white
-
-                pl-8
-                pr-3
-
-                text-[11px]
-
-                outline-none
-
-                focus:border-violet-400
-                focus:ring-2
-                focus:ring-violet-100
-              "
-
-            />
-
-          </div>
-
-
-          <button
-
-            type="button"
-
-            onClick={() =>
-              setAddOpen(
-                true
-              )
+            className={
+              loading
+                ? 'animate-spin'
+                : ''
             }
 
-            className="
-              inline-flex
-              h-8
-              items-center
-              justify-center
-              gap-1.5
+          />
 
-              rounded-[8px]
+          Refresh
 
-              bg-slate-950
-
-              px-3
-
-              text-[10px]
-              font-semibold
-
-              text-white
-
-              hover:bg-slate-800
-            "
-          >
-
-            <Plus
-              size={14}
-            />
-
-            Add Plan
-
-          </button>
-
-        </div>
+        </button>
 
       </section>
 
@@ -575,56 +887,237 @@ export default function AdminPlans() {
           grid-cols-2
           gap-2
 
-          md:grid-cols-4
+          md:grid-cols-5
         "
       >
 
         <SummaryCard
           label="Plans"
           value={
-            plans.length
+            summary.total
           }
         />
 
 
         <SummaryCard
-          label="Active Plans"
+          label="Active"
           value={
-            plans.filter(
-              plan =>
-                plan.status ===
-                'active'
-            ).length
+            summary.active
           }
+          tone="green"
         />
 
 
         <SummaryCard
-          label="Clients Assigned"
+          label="Inactive"
           value={
-            clients.length
+            summary.inactive
           }
+          tone="slate"
         />
 
 
         <SummaryCard
-          label="Registry Modules"
+          label="Assigned Clients"
           value={
-            modules.length
+            summary.assignedClients
           }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="Unassigned Plans"
+          value={
+            summary.unassignedPlans
+          }
+          tone="amber"
         />
 
       </section>
 
 
       {/* =====================================================
-          PLANS TABLE
+          FILTERS
+      ===================================================== */}
+
+      <section
+        className="
+          gos-panel
+
+          flex
+          flex-col
+          gap-2
+
+          !p-3
+
+          xl:flex-row
+          xl:items-center
+        "
+      >
+
+        <div
+          className="
+            relative
+
+            w-full
+
+            xl:max-w-[360px]
+          "
+        >
+
+          <Search
+            size={14}
+
+            className="
+              absolute
+              left-2.5
+              top-1/2
+
+              -translate-y-1/2
+
+              text-slate-400
+            "
+          />
+
+
+          <input
+
+            value={
+              search
+            }
+
+            onChange={
+              event =>
+                setSearch(
+                  event.target.value
+                )
+            }
+
+            placeholder="Search plan, module, category..."
+
+            className="
+              h-8
+              w-full
+
+              rounded-[8px]
+
+              border
+              border-slate-300
+
+              bg-white
+
+              pl-8
+              pr-3
+
+              text-[10px]
+
+              outline-none
+
+              focus:border-violet-400
+              focus:ring-2
+              focus:ring-violet-100
+            "
+
+          />
+
+        </div>
+
+
+        <select
+
+          value={
+            statusFilter
+          }
+
+          onChange={
+            event =>
+              setStatusFilter(
+                event.target.value as StatusFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Status
+          </option>
+
+          <option value="active">
+            Active
+          </option>
+
+          <option value="inactive">
+            Inactive
+          </option>
+
+        </select>
+
+
+        <select
+
+          value={
+            assignmentFilter
+          }
+
+          onChange={
+            event =>
+              setAssignmentFilter(
+                event.target.value as AssignmentFilter
+              )
+          }
+
+          className="gos-input"
+        >
+
+          <option value="all">
+            All Assignments
+          </option>
+
+          <option value="assigned">
+            Assigned
+          </option>
+
+          <option value="unassigned">
+            Unassigned
+          </option>
+
+        </select>
+
+
+        <div
+          className="
+            ml-auto
+
+            whitespace-nowrap
+
+            text-[9px]
+
+            text-slate-500
+          "
+        >
+          {filteredPlans.length}
+          {' / '}
+          {plans.length}
+          {' plans'}
+        </div>
+
+      </section>
+
+
+      {/* =====================================================
+          TABLE
       ===================================================== */}
 
       <section className="gos-panel !p-0">
 
         <div
           className="
+            flex
+            items-center
+            justify-between
+
             border-b
             border-slate-200
 
@@ -633,22 +1126,69 @@ export default function AdminPlans() {
           "
         >
 
-          <h3 className="gos-section-title">
-            Plans
-          </h3>
+          <div>
+
+            <h3 className="gos-section-title">
+              Plans
+            </h3>
 
 
-          <p
-            className="
-              mt-0.5
+            <p
+              className="
+                mt-0.5
 
-              text-[9px]
+                text-[9px]
 
-              text-slate-500
-            "
-          >
-            {filteredPlans.length} plan{filteredPlans.length === 1 ? '' : 's'}
-          </p>
+                text-slate-500
+              "
+            >
+              Commercial entitlement definitions from the Growth OS control plane.
+            </p>
+
+          </div>
+
+
+          {(
+            search
+            ||
+            statusFilter !==
+              'all'
+            ||
+            assignmentFilter !==
+              'all'
+          ) && (
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setSearch(
+                  ''
+                );
+
+                setStatusFilter(
+                  'all'
+                );
+
+                setAssignmentFilter(
+                  'all'
+                );
+
+              }}
+
+              className="
+                text-[9px]
+                font-semibold
+
+                text-violet-600
+              "
+            >
+              Clear filters
+            </button>
+
+          )}
 
         </div>
 
@@ -657,8 +1197,8 @@ export default function AdminPlans() {
 
           <table
             className="
-              min-w-[980px]
               w-full
+              min-w-[1150px]
 
               border-collapse
             "
@@ -688,15 +1228,15 @@ export default function AdminPlans() {
                 </TableHeader>
 
                 <TableHeader>
-                  Modules
+                  User Limit
+                </TableHeader>
+
+                <TableHeader>
+                  Enabled Modules
                 </TableHeader>
 
                 <TableHeader>
                   Clients
-                </TableHeader>
-
-                <TableHeader>
-                  User Limit
                 </TableHeader>
 
                 <TableHeader>
@@ -718,8 +1258,9 @@ export default function AdminPlans() {
                 plan => (
 
                   <tr
+
                     key={
-                      plan.id
+                      plan.planId
                     }
 
                     className="
@@ -732,7 +1273,10 @@ export default function AdminPlans() {
                     "
                   >
 
-                    <td className="px-3 py-2">
+
+                    {/* PLAN */}
+
+                    <td className="px-3 py-2.5">
 
                       <div
                         className="
@@ -758,11 +1302,9 @@ export default function AdminPlans() {
                             text-violet-600
                           "
                         >
-
                           <CreditCard
                             size={15}
                           />
-
                         </div>
 
 
@@ -770,29 +1312,37 @@ export default function AdminPlans() {
 
                           <div
                             className="
-                              text-[11px]
+                              text-[10px]
                               font-semibold
 
                               text-slate-900
                             "
                           >
-                            {plan.name}
+                            {plan.planName}
                           </div>
 
 
                           <div
                             className="
                               mt-0.5
-                              max-w-[320px]
+
+                              max-w-[340px]
 
                               truncate
 
-                              text-[9px]
+                              text-[8px]
 
                               text-slate-500
                             "
+                            title={
+                              plan.description
+                              ||
+                              ''
+                            }
                           >
-                            {plan.description}
+                            {plan.description
+                              ||
+                              plan.planId}
                           </div>
 
                         </div>
@@ -802,7 +1352,9 @@ export default function AdminPlans() {
                     </td>
 
 
-                    <td className="px-3 py-2">
+                    {/* STATUS */}
+
+                    <td className="px-3 py-2.5">
 
                       <PlanStatusBadge
                         status={
@@ -813,10 +1365,12 @@ export default function AdminPlans() {
                     </td>
 
 
+                    {/* ORDERS */}
+
                     <td
                       className="
                         px-3
-                        py-2
+                        py-2.5
 
                         text-[10px]
                         font-semibold
@@ -824,53 +1378,24 @@ export default function AdminPlans() {
                         text-slate-800
                       "
                     >
-                      {formatOrderLimit(
-                        plan.monthlyOrderLimit
+                      {formatLimit(
+                        plan.monthlyOrderLimit,
+                        'orders'
                       )}
                     </td>
 
 
+                    {/* USERS */}
+
                     <td
                       className="
                         px-3
-                        py-2
+                        py-2.5
 
                         text-[10px]
                         font-semibold
 
-                        text-slate-800
-                      "
-                    >
-                      {plan.modules.length}
-                    </td>
-
-
-                    <td
-                      className="
-                        px-3
-                        py-2
-
-                        text-[10px]
-                        font-semibold
-
-                        text-slate-800
-                      "
-                    >
-                      {getPlanClientCount(
-                        plan.id
-                      )}
-                    </td>
-
-
-                    <td
-                      className="
-                        px-3
-                        py-2
-
-                        text-[10px]
-                        font-medium
-
-                        text-slate-600
+                        text-slate-700
                       "
                     >
                       {plan.maxUsers ===
@@ -880,26 +1405,69 @@ export default function AdminPlans() {
 
                         : formatNumber(
                             plan.maxUsers
-                          )
-                      }
+                          )}
                     </td>
 
+
+                    {/* MODULES */}
 
                     <td
                       className="
                         px-3
-                        py-2
+                        py-2.5
+
+                        text-[10px]
+                        font-semibold
+
+                        text-slate-800
+                      "
+                    >
+                      {plan.enabledModules}
+                      {' / '}
+                      {plan.totalModules}
+                    </td>
+
+
+                    {/* CLIENTS */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        text-[10px]
+                        font-semibold
+
+                        text-slate-800
+                      "
+                    >
+                      {plan.assignedClients}
+                    </td>
+
+
+                    {/* CREATED */}
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
 
                         text-[9px]
 
                         text-slate-500
                       "
                     >
-                      {plan.createdAt}
+                      {formatTimestamp(
+                        plan.createdAt
+                      )
+                      ||
+                      '—'}
                     </td>
 
 
-                    <td className="px-3 py-2 text-right">
+                    {/* ACTION */}
+
+                    <td className="px-3 py-2.5 text-right">
 
                       <button
 
@@ -907,7 +1475,7 @@ export default function AdminPlans() {
 
                         onClick={() =>
                           setSelectedPlanId(
-                            plan.id
+                            plan.planId
                           )
                         }
 
@@ -934,7 +1502,8 @@ export default function AdminPlans() {
                           hover:bg-slate-50
                         "
                       >
-                        Manage
+
+                        Inspect
 
                         <ChevronRight
                           size={12}
@@ -949,6 +1518,36 @@ export default function AdminPlans() {
                 )
               )}
 
+
+              {filteredPlans.length ===
+                0 && (
+
+                <tr>
+
+                  <td
+
+                    colSpan={
+                      8
+                    }
+
+                    className="
+                      px-4
+                      py-14
+
+                      text-center
+
+                      text-[10px]
+
+                      text-slate-500
+                    "
+                  >
+                    No plans match the selected filters.
+                  </td>
+
+                </tr>
+
+              )}
+
             </tbody>
 
           </table>
@@ -959,335 +1558,55 @@ export default function AdminPlans() {
 
 
       {/* =====================================================
-          ADD PLAN
+          SOURCE
       ===================================================== */}
 
-      {addOpen && (
+      <section
+        className="
+          rounded-[9px]
 
-        <div
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          px-3
+          py-2.5
+        "
+      >
+
+        <p
           className="
-            fixed
-            inset-0
-            z-[100]
+            text-[8px]
+            leading-4
 
-            flex
-            items-center
-            justify-center
-
-            bg-slate-950/40
-
-            p-4
-
-            backdrop-blur-[2px]
+            text-violet-700
           "
         >
+          Source of truth: growthos_control.plans, plan_modules, modules and brand_subscriptions. Admin Plans is read-only during this architecture phase.
+        </p>
 
-          <div
+
+        {data?.meta?.durationMs !==
+          undefined && (
+
+          <p
             className="
-              w-full
-              max-w-[540px]
+              mt-1
 
-              rounded-[14px]
+              text-[8px]
 
-              border
-              border-slate-200
-
-              bg-white
-
-              shadow-xl
+              text-violet-500
             "
           >
+            API runtime: {formatNumber(
+              data.meta.durationMs
+            )} ms
+          </p>
 
-            <div
-              className="
-                flex
-                items-center
-                justify-between
+        )}
 
-                border-b
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <div>
-
-                <h3
-                  className="
-                    text-[14px]
-                    font-semibold
-
-                    text-slate-950
-                  "
-                >
-                  Add Plan
-                </h3>
-
-
-                <p
-                  className="
-                    mt-0.5
-
-                    text-[9px]
-
-                    text-slate-500
-                  "
-                >
-                  Create a Growth OS plan based on monthly business order volume.
-                </p>
-
-              </div>
-
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-                  setAddOpen(
-                    false
-                  )
-                }
-
-                className="
-                  flex
-                  h-7
-                  w-7
-                  items-center
-                  justify-center
-
-                  rounded-[7px]
-
-                  text-slate-400
-
-                  hover:bg-slate-100
-                "
-              >
-
-                <X
-                  size={15}
-                />
-
-              </button>
-
-            </div>
-
-
-            <div className="space-y-3 p-4">
-
-              <FormField
-                label="Plan Name"
-              >
-
-                <input
-
-                  value={
-                    newName
-                  }
-
-                  onChange={
-                    event =>
-                      setNewName(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Example: Growth Pro"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <FormField
-                label="Description"
-              >
-
-                <input
-
-                  value={
-                    newDescription
-                  }
-
-                  onChange={
-                    event =>
-                      setNewDescription(
-                        event.target.value
-                      )
-                  }
-
-                  placeholder="Plan description"
-
-                  className="gos-input w-full"
-
-                />
-
-              </FormField>
-
-
-              <div
-                className="
-                  grid
-                  grid-cols-1
-                  gap-3
-
-                  md:grid-cols-2
-                "
-              >
-
-                <FormField
-                  label="Monthly Order Limit"
-                  hint="Blank = Unlimited"
-                >
-
-                  <input
-
-                    type="number"
-
-                    min="1"
-
-                    value={
-                      newMonthlyOrderLimit
-                    }
-
-                    onChange={
-                      event =>
-                        setNewMonthlyOrderLimit(
-                          event.target.value
-                        )
-                    }
-
-                    placeholder="Unlimited"
-
-                    className="gos-input w-full"
-
-                  />
-
-                </FormField>
-
-
-                <FormField
-                  label="Maximum Users"
-                  hint="Blank = Unlimited"
-                >
-
-                  <input
-
-                    type="number"
-
-                    min="1"
-
-                    value={
-                      newMaxUsers
-                    }
-
-                    onChange={
-                      event =>
-                        setNewMaxUsers(
-                          event.target.value
-                        )
-                    }
-
-                    placeholder="Unlimited"
-
-                    className="gos-input w-full"
-
-                  />
-
-                </FormField>
-
-              </div>
-
-            </div>
-
-
-            <div
-              className="
-                flex
-                justify-end
-                gap-2
-
-                border-t
-                border-slate-200
-
-                px-4
-                py-3
-              "
-            >
-
-              <button
-
-                type="button"
-
-                onClick={() =>
-                  setAddOpen(
-                    false
-                  )
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  border
-                  border-slate-200
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-slate-600
-                "
-              >
-                Cancel
-              </button>
-
-
-              <button
-
-                type="button"
-
-                disabled={
-                  !newName.trim()
-                }
-
-                onClick={
-                  createPlan
-                }
-
-                className="
-                  h-8
-
-                  rounded-[8px]
-
-                  bg-slate-950
-
-                  px-3
-
-                  text-[10px]
-                  font-semibold
-
-                  text-white
-
-                  disabled:opacity-40
-                "
-              >
-                Create Plan
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      )}
+      </section>
 
     </div>
 
@@ -1304,88 +1623,17 @@ function PlanDetail({
 
   plan,
 
-  availableModules,
-
-  clientCount,
-
   onBack,
-
-  onChange,
 
 }: {
 
   plan:
     AdminPlan;
 
-  availableModules:
-    ReturnType<
-      typeof useAdminStore
-    >['modules'];
-
-  clientCount:
-    number;
-
   onBack:
     () => void;
 
-  onChange:
-    (
-      plan:
-        AdminPlan
-    ) => void;
-
 }) {
-
-
-  // ==========================================================
-  // MODULE TOGGLE
-  // ==========================================================
-
-  function toggleModule(
-    moduleId:
-      string
-  ) {
-
-    // Command Center is mandatory.
-
-    if (
-      moduleId ===
-      'command-center'
-    ) {
-
-      return;
-
-    }
-
-
-    const enabled =
-      plan.modules.includes(
-        moduleId
-      );
-
-
-    onChange({
-
-      ...plan,
-
-      modules:
-        enabled
-
-          ? plan.modules.filter(
-              id =>
-                id !==
-                moduleId
-            )
-
-          : [
-              ...plan.modules,
-              moduleId,
-            ],
-
-    });
-
-  }
-
 
   return (
 
@@ -1441,14 +1689,12 @@ function PlanDetail({
 
                 bg-white
 
-                text-slate-500
+                hover:bg-slate-50
               "
             >
-
               <ArrowLeft
                 size={14}
               />
-
             </button>
 
 
@@ -1468,11 +1714,9 @@ function PlanDetail({
                 text-violet-600
               "
             >
-
               <CreditCard
                 size={17}
               />
-
             </div>
 
 
@@ -1495,7 +1739,7 @@ function PlanDetail({
                     text-slate-950
                   "
                 >
-                  {plan.name}
+                  {plan.planName}
                 </h2>
 
 
@@ -1512,12 +1756,16 @@ function PlanDetail({
                 className="
                   mt-0.5
 
+                  max-w-3xl
+
                   text-[9px]
 
                   text-slate-500
                 "
               >
-                {plan.description}
+                {plan.description
+                  ||
+                  plan.planId}
               </p>
 
             </div>
@@ -1525,53 +1773,26 @@ function PlanDetail({
           </div>
 
 
-          <select
-
-            value={
-              plan.status
-            }
-
-            onChange={
-              event =>
-                onChange({
-
-                  ...plan,
-
-                  status:
-                    event.target.value as PlanStatus,
-
-                })
-            }
-
+          <span
             className="
-              h-8
-
-              rounded-[8px]
+              rounded-full
 
               border
-              border-slate-300
+              border-slate-200
 
-              bg-white
+              bg-slate-50
 
               px-2.5
+              py-1
 
-              text-[10px]
+              text-[8px]
+              font-semibold
+
+              text-slate-500
             "
           >
-
-            <option value="active">
-              Active
-            </option>
-
-            <option value="draft">
-              Draft
-            </option>
-
-            <option value="archived">
-              Archived
-            </option>
-
-          </select>
+            Read Only
+          </span>
 
         </div>
 
@@ -1595,17 +1816,10 @@ function PlanDetail({
         <SummaryCard
           label="Orders / Month"
           value={
-            formatOrderLimit(
-              plan.monthlyOrderLimit
+            formatLimit(
+              plan.monthlyOrderLimit,
+              'orders'
             )
-          }
-        />
-
-
-        <SummaryCard
-          label="Modules"
-          value={
-            plan.modules.length
           }
         />
 
@@ -1626,9 +1840,26 @@ function PlanDetail({
 
 
         <SummaryCard
-          label="Clients"
+          label="Enabled Modules"
           value={
-            clientCount
+            `${plan.enabledModules} / ${plan.totalModules}`
+          }
+          tone="violet"
+        />
+
+
+        <SummaryCard
+          label="Assigned Clients"
+          value={
+            plan.assignedClients
+          }
+          tone={
+            plan.assignedClients >
+              0
+
+              ? 'green'
+
+              : 'amber'
           }
         />
 
@@ -1636,127 +1867,156 @@ function PlanDetail({
 
 
       {/* =====================================================
-          BUSINESS VOLUME
+          PLAN IDENTITY
+      ===================================================== */}
+
+      <section
+        className="
+          grid
+          grid-cols-1
+          gap-3
+
+          lg:grid-cols-2
+        "
+      >
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Plan
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Plan ID"
+              value={
+                plan.planId
+              }
+              mono
+            />
+
+
+            <ValueRow
+              label="Plan Name"
+              value={
+                plan.planName
+              }
+            />
+
+
+            <ValueRow
+              label="Status"
+              value={
+                formatLabel(
+                  plan.status
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Assigned Clients"
+              value={
+                formatNumber(
+                  plan.assignedClients
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+
+        <section className="gos-panel !p-3.5">
+
+          <h3 className="gos-section-title">
+            Commercial Limits
+          </h3>
+
+
+          <div className="mt-3 space-y-2">
+
+            <ValueRow
+              label="Monthly Orders"
+              value={
+                formatLimit(
+                  plan.monthlyOrderLimit,
+                  'orders'
+                )
+              }
+              strong
+            />
+
+
+            <ValueRow
+              label="Maximum Users"
+              value={
+                plan.maxUsers ===
+                  null
+
+                  ? 'Unlimited'
+
+                  : formatNumber(
+                      plan.maxUsers
+                    )
+              }
+            />
+
+
+            <ValueRow
+              label="Enabled Modules"
+              value={
+                formatNumber(
+                  plan.enabledModules
+                )
+              }
+            />
+
+
+            <ValueRow
+              label="Registry Modules"
+              value={
+                formatNumber(
+                  plan.totalModules
+                )
+              }
+            />
+
+          </div>
+
+        </section>
+
+      </section>
+
+
+      {/* =====================================================
+          DESCRIPTION
       ===================================================== */}
 
       <section className="gos-panel !p-3.5">
 
         <h3 className="gos-section-title">
-          Business Volume
+          Description
         </h3>
 
 
         <p
           className="
-            mt-0.5
+            mt-2
 
-            text-[9px]
+            text-[10px]
+            leading-5
 
-            text-slate-500
+            text-slate-600
           "
         >
-          Monthly orders are the commercial volume allowance for this plan.
+          {plan.description
+            ||
+            'No plan description configured.'}
         </p>
-
-
-        <div
-          className="
-            mt-3
-
-            grid
-            grid-cols-1
-            gap-3
-
-            md:grid-cols-2
-          "
-        >
-
-          <FormField
-            label="Monthly Order Limit"
-            hint="Blank = Unlimited"
-          >
-
-            <input
-
-              type="number"
-
-              min="1"
-
-              value={
-                plan.monthlyOrderLimit ??
-                ''
-              }
-
-              placeholder="Unlimited"
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...plan,
-
-                    monthlyOrderLimit:
-                      parseNullablePositiveNumber(
-                        event.target.value
-                      ),
-
-                  })
-              }
-
-              className="gos-input w-full"
-
-            />
-
-          </FormField>
-
-
-          <div
-            className="
-              rounded-[9px]
-
-              border
-              border-violet-200
-
-              bg-violet-50
-
-              px-3
-              py-2.5
-            "
-          >
-
-            <p
-              className="
-                text-[8px]
-                font-semibold
-                uppercase
-                tracking-[0.06em]
-
-                text-violet-600
-              "
-            >
-              Current Allowance
-            </p>
-
-
-            <p
-              className="
-                mt-1
-
-                text-[17px]
-                font-semibold
-                tracking-[-0.03em]
-
-                text-violet-950
-              "
-            >
-              {formatOrderLimit(
-                plan.monthlyOrderLimit
-              )}
-            </p>
-
-          </div>
-
-        </div>
 
       </section>
 
@@ -1791,200 +2051,233 @@ function PlanDetail({
               text-slate-500
             "
           >
-            Modules now come directly from the shared Admin Module Registry.
+            Canonical module access defined by this plan.
           </p>
 
         </div>
 
 
-        <div
-          className="
-            grid
-            grid-cols-1
+        <div className="overflow-x-auto">
 
-            lg:grid-cols-2
-          "
-        >
+          <table
+            className="
+              w-full
+              min-w-[1100px]
 
-          {availableModules.map(
-            module => {
+              border-collapse
+            "
+          >
 
-              const enabled =
-                plan.modules.includes(
-                  module.id
-                );
+            <thead>
+
+              <tr
+                className="
+                  border-b
+                  border-slate-200
+
+                  bg-slate-50
+                "
+              >
+
+                <TableHeader>
+                  Module
+                </TableHeader>
+
+                <TableHeader>
+                  Category
+                </TableHeader>
+
+                <TableHeader>
+                  Route
+                </TableHeader>
+
+                <TableHeader>
+                  Module Status
+                </TableHeader>
+
+                <TableHeader>
+                  Setup
+                </TableHeader>
+
+                <TableHeader>
+                  Plan Access
+                </TableHeader>
+
+              </tr>
+
+            </thead>
 
 
-              const mandatory =
-                module.id ===
-                'command-center';
+            <tbody>
+
+              {plan.modules.map(
+                module => (
+
+                  <tr
+
+                    key={
+                      module.moduleId
+                    }
+
+                    className="
+                      border-b
+                      border-slate-100
+
+                      last:border-0
+                    "
+                  >
 
 
-              return (
-
-                <button
-
-                  key={
-                    module.id
-                  }
-
-                  type="button"
-
-                  onClick={() =>
-                    toggleModule(
-                      module.id
-                    )
-                  }
-
-                  className="
-                    flex
-                    items-center
-                    justify-between
-                    gap-4
-
-                    border-b
-                    border-slate-100
-
-                    px-3
-                    py-3
-
-                    text-left
-
-                    hover:bg-slate-50
-                  "
-                >
-
-                  <div className="min-w-0">
-
-                    <div
-                      className="
-                        flex
-                        flex-wrap
-                        items-center
-                        gap-2
-                      "
-                    >
+                    <td className="px-3 py-2.5">
 
                       <div
                         className="
-                          text-[11px]
+                          text-[10px]
                           font-semibold
 
                           text-slate-900
                         "
                       >
-                        {module.name}
+                        {module.moduleName
+                          ||
+                          module.moduleId}
                       </div>
 
 
-                      {module.type ===
-                        'custom' && (
+                      <div
+                        className="
+                          mt-0.5
 
-                        <span
-                          className="
-                            rounded-full
+                          max-w-[360px]
 
-                            bg-amber-50
+                          truncate
 
-                            px-1.5
-                            py-0.5
+                          text-[8px]
 
-                            text-[7px]
-                            font-semibold
+                          text-slate-500
+                        "
+                        title={
+                          module.description
+                          ||
+                          ''
+                        }
+                      >
+                        {module.description
+                          ||
+                          module.moduleId}
+                      </div>
 
-                            text-amber-700
-                          "
-                        >
-                          Custom
-                        </span>
-
-                      )}
-
-
-                      {mandatory && (
-
-                        <span
-                          className="
-                            rounded-full
-
-                            bg-slate-100
-
-                            px-1.5
-                            py-0.5
-
-                            text-[7px]
-                            font-semibold
-
-                            text-slate-500
-                          "
-                        >
-                          Required
-                        </span>
-
-                      )}
-
-                    </div>
+                    </td>
 
 
-                    <p
+                    <td
                       className="
-                        mt-0.5
+                        px-3
+                        py-2.5
 
                         text-[9px]
-                        leading-4
+                        font-medium
+
+                        text-slate-600
+                      "
+                    >
+                      {formatLabelOrDash(
+                        module.category
+                      )}
+                    </td>
+
+
+                    <td
+                      className="
+                        px-3
+                        py-2.5
+
+                        font-mono
+                        text-[8px]
 
                         text-slate-500
                       "
                     >
-                      {module.description}
-                    </p>
+                      {module.routeKey
+                        ||
+                        '—'}
+                    </td>
 
-                  </div>
+
+                    <td className="px-3 py-2.5">
+
+                      <SimpleBadge
+                        label={
+                          formatLabelOrDash(
+                            module.moduleStatus
+                          )
+                        }
+                        tone={
+                          normalizeStatus(
+                            module.moduleStatus
+                          ) ===
+                            'active'
+
+                            ? 'green'
+
+                            : 'slate'
+                        }
+                      />
+
+                    </td>
 
 
-                  <div
-                    className={`
-                      flex
-                      h-6
-                      w-6
-                      shrink-0
-                      items-center
-                      justify-center
+                    <td className="px-3 py-2.5">
 
-                      rounded-[7px]
+                      <SimpleBadge
+                        label={
+                          module.setupRequired
 
-                      border
+                            ? 'Required'
 
-                      ${
-                        enabled
+                            : 'No Setup'
+                        }
+                        tone={
+                          module.setupRequired
 
-                          ? `
-                            border-violet-500
-                            bg-violet-500
-                            text-white
-                          `
+                            ? 'amber'
 
-                          : `
-                            border-slate-300
-                            bg-white
-                            text-transparent
-                          `
-                      }
-                    `}
-                  >
+                            : 'slate'
+                        }
+                      />
 
-                    <Check
-                      size={13}
-                    />
+                    </td>
 
-                  </div>
 
-                </button>
+                    <td className="px-3 py-2.5">
 
-              );
+                      <SimpleBadge
+                        label={
+                          module.enabled
 
-            }
-          )}
+                            ? 'Enabled'
+
+                            : 'Disabled'
+                        }
+                        tone={
+                          module.enabled
+
+                            ? 'green'
+
+                            : 'slate'
+                        }
+                      />
+
+                    </td>
+
+                  </tr>
+
+                )
+              )}
+
+            </tbody>
+
+          </table>
 
         </div>
 
@@ -1992,13 +2285,13 @@ function PlanDetail({
 
 
       {/* =====================================================
-          PLAN SETTINGS
+          LIFECYCLE
       ===================================================== */}
 
       <section className="gos-panel !p-3.5">
 
         <h3 className="gos-section-title">
-          Plan Settings
+          Lifecycle
         </h3>
 
 
@@ -2008,113 +2301,81 @@ function PlanDetail({
 
             grid
             grid-cols-1
-            gap-3
+            gap-2
 
             md:grid-cols-2
           "
         >
 
-          <FormField
-            label="Plan Name"
-          >
-
-            <input
-
-              value={
-                plan.name
-              }
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...plan,
-
-                    name:
-                      event.target.value,
-
-                  })
-              }
-
-              className="gos-input w-full"
-
-            />
-
-          </FormField>
+          <ValueRow
+            label="Created"
+            value={
+              formatTimestamp(
+                plan.createdAt
+              )
+              ||
+              '—'
+            }
+          />
 
 
-          <FormField
-            label="Maximum Users"
-            hint="Blank = Unlimited"
-          >
-
-            <input
-
-              type="number"
-
-              min="1"
-
-              value={
-                plan.maxUsers ??
-                ''
-              }
-
-              placeholder="Unlimited"
-
-              onChange={
-                event =>
-                  onChange({
-
-                    ...plan,
-
-                    maxUsers:
-                      parseNullablePositiveNumber(
-                        event.target.value
-                      ),
-
-                  })
-              }
-
-              className="gos-input w-full"
-
-            />
-
-          </FormField>
-
-
-          <div className="md:col-span-2">
-
-            <FormField
-              label="Description"
-            >
-
-              <input
-
-                value={
-                  plan.description
-                }
-
-                onChange={
-                  event =>
-                    onChange({
-
-                      ...plan,
-
-                      description:
-                        event.target.value,
-
-                    })
-                }
-
-                className="gos-input w-full"
-
-              />
-
-            </FormField>
-
-          </div>
+          <ValueRow
+            label="Updated"
+            value={
+              formatTimestamp(
+                plan.updatedAt
+              )
+              ||
+              '—'
+            }
+          />
 
         </div>
+
+      </section>
+
+
+      {/* =====================================================
+          OWNERSHIP
+      ===================================================== */}
+
+      <section
+        className="
+          rounded-[10px]
+
+          border
+          border-violet-200
+
+          bg-violet-50
+
+          p-3
+        "
+      >
+
+        <p
+          className="
+            text-[9px]
+            font-semibold
+
+            text-violet-800
+          "
+        >
+          Commercial entitlement ownership
+        </p>
+
+
+        <p
+          className="
+            mt-1
+
+            text-[8px]
+            leading-4
+
+            text-violet-600
+          "
+        >
+          This screen reflects the canonical Growth OS plan registry. Plan creation, pricing-limit changes, status changes and module-entitlement mutations are intentionally disabled until dedicated authenticated Admin command APIs are introduced.
+        </p>
 
       </section>
 
@@ -2126,7 +2387,7 @@ function PlanDetail({
 
 
 // ============================================================
-// SMALL COMPONENTS
+// SUMMARY CARD
 // ============================================================
 
 function SummaryCard({
@@ -2134,6 +2395,9 @@ function SummaryCard({
   label,
 
   value,
+
+  tone =
+    'default',
 
 }: {
 
@@ -2144,7 +2408,39 @@ function SummaryCard({
     string |
     number;
 
+  tone?:
+    | 'default'
+    | 'green'
+    | 'amber'
+    | 'violet'
+    | 'slate';
+
 }) {
+
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'text-emerald-700'
+
+      : tone ===
+          'amber'
+
+        ? 'text-amber-700'
+
+        : tone ===
+            'violet'
+
+          ? 'text-violet-700'
+
+          : tone ===
+              'slate'
+
+            ? 'text-slate-500'
+
+            : 'text-slate-950';
+
 
   return (
 
@@ -2165,15 +2461,17 @@ function SummaryCard({
 
 
       <p
-        className="
+        className={`
           mt-1.5
+
+          truncate
 
           text-[18px]
           font-semibold
           tracking-[-0.03em]
 
-          text-slate-950
-        "
+          ${cls}
+        `}
       >
         {value}
       </p>
@@ -2185,6 +2483,10 @@ function SummaryCard({
 }
 
 
+// ============================================================
+// PLAN STATUS
+// ============================================================
+
 function PlanStatusBadge({
 
   status,
@@ -2192,41 +2494,119 @@ function PlanStatusBadge({
 }: {
 
   status:
-    PlanStatus;
+    string;
 
 }) {
 
-  const config =
 
-    status ===
-      'active'
+  const normalized =
+    normalizeStatus(
+      status
+    );
 
-      ? {
-          label:
-            'Active',
 
-          cls:
-            'border-emerald-200 bg-emerald-50 text-emerald-700',
-        }
+  if (
+    normalized ===
+    'active'
+  ) {
 
-      : status ===
-          'draft'
+    return (
 
-        ? {
-            label:
-              'Draft',
+      <span
+        className="
+          inline-flex
 
-            cls:
-              'border-amber-200 bg-amber-50 text-amber-700',
-          }
+          rounded-full
 
-        : {
-            label:
-              'Archived',
+          border
+          border-emerald-200
 
-            cls:
-              'border-slate-200 bg-slate-100 text-slate-600',
-          };
+          bg-emerald-50
+
+          px-2
+          py-0.5
+
+          text-[8px]
+          font-semibold
+
+          text-emerald-700
+        "
+      >
+        Active
+      </span>
+
+    );
+
+  }
+
+
+  return (
+
+    <span
+      className="
+        inline-flex
+
+        rounded-full
+
+        border
+        border-slate-200
+
+        bg-slate-100
+
+        px-2
+        py-0.5
+
+        text-[8px]
+        font-semibold
+
+        text-slate-600
+      "
+    >
+      {formatLabel(
+        status
+      )}
+    </span>
+
+  );
+
+}
+
+
+// ============================================================
+// SIMPLE BADGE
+// ============================================================
+
+function SimpleBadge({
+
+  label,
+
+  tone,
+
+}: {
+
+  label:
+    string;
+
+  tone:
+    | 'green'
+    | 'amber'
+    | 'slate';
+
+}) {
+
+
+  const cls =
+    tone ===
+      'green'
+
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+
+      : tone ===
+          'amber'
+
+        ? 'border-amber-200 bg-amber-50 text-amber-700'
+
+        : 'border-slate-200 bg-slate-100 text-slate-600';
 
 
   return (
@@ -2245,16 +2625,122 @@ function PlanStatusBadge({
         text-[8px]
         font-semibold
 
-        ${config.cls}
+        ${cls}
       `}
     >
-      {config.label}
+      {label}
     </span>
 
   );
 
 }
 
+
+// ============================================================
+// VALUE ROW
+// ============================================================
+
+function ValueRow({
+
+  label,
+
+  value,
+
+  mono =
+    false,
+
+  strong =
+    false,
+
+}: {
+
+  label:
+    string;
+
+  value:
+    string;
+
+  mono?:
+    boolean;
+
+  strong?:
+    boolean;
+
+}) {
+
+  return (
+
+    <div
+      className="
+        flex
+        min-h-[38px]
+        items-center
+        justify-between
+        gap-3
+
+        rounded-[8px]
+
+        border
+        border-slate-200
+
+        bg-slate-50
+
+        px-3
+      "
+    >
+
+      <span
+        className="
+          shrink-0
+
+          text-[9px]
+
+          text-slate-500
+        "
+      >
+        {label}
+      </span>
+
+
+      <span
+        title={
+          value
+        }
+        className={`
+          max-w-[68%]
+
+          truncate
+
+          text-right
+          text-[10px]
+          font-semibold
+
+          ${
+            strong
+              ? 'text-violet-700'
+              : 'text-slate-800'
+          }
+
+          ${
+            mono
+              ? 'font-mono text-[8px]'
+              : ''
+          }
+        `}
+      >
+        {value}
+      </span>
+
+    </div>
+
+  );
+
+}
+
+
+// ============================================================
+// TABLE HEADER
+// ============================================================
 
 function TableHeader({
 
@@ -2283,7 +2769,7 @@ function TableHeader({
 
         px-3
 
-        text-[9px]
+        text-[8px]
         font-semibold
         uppercase
         tracking-[0.05em]
@@ -2308,111 +2794,98 @@ function TableHeader({
 }
 
 
-function FormField({
-
-  label,
-
-  hint,
-
-  children,
-
-}: {
-
-  label:
-    string;
-
-  hint?:
-    string;
-
-  children:
-    ReactNode;
-
-}) {
-
-  return (
-
-    <label className="block">
-
-      <div
-        className="
-          mb-1.5
-
-          flex
-          items-center
-          justify-between
-          gap-2
-        "
-      >
-
-        <span
-          className="
-            text-[9px]
-            font-semibold
-            uppercase
-            tracking-[0.05em]
-
-            text-slate-500
-          "
-        >
-          {label}
-        </span>
-
-
-        {hint && (
-
-          <span
-            className="
-              text-[8px]
-
-              text-slate-400
-            "
-          >
-            {hint}
-          </span>
-
-        )}
-
-      </div>
-
-
-      {children}
-
-    </label>
-
-  );
-
-}
-
-
 // ============================================================
 // HELPERS
 // ============================================================
 
-function formatNumber(
+function normalizeStatus(
   value:
-    number
+    string |
+    null
 ) {
 
-  return new Intl.NumberFormat(
-    'en-IN',
-    {
-      maximumFractionDigits:
-        0,
-    }
-  ).format(
-    Number(
-      value ||
-      0
-    )
+  return String(
+    value
+    ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+}
+
+
+function formatLabelOrDash(
+  value:
+    string |
+    null
+) {
+
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return formatLabel(
+    value
   );
 
 }
 
 
-function formatOrderLimit(
+function formatLabel(
+  value:
+    string
+) {
+
+  if (!value) {
+
+    return '—';
+
+  }
+
+
+  return value
+    .replace(
+      /[_-]+/g,
+      ' '
+    )
+    .split(
+      ' '
+    )
+    .filter(
+      Boolean
+    )
+    .map(
+      word =>
+        word
+          .charAt(
+            0
+          )
+          .toUpperCase()
+        +
+        word.slice(
+          1
+        )
+    )
+    .join(
+      ' '
+    );
+
+}
+
+
+function formatLimit(
+
   value:
     number |
-    null
+    null,
+
+  suffix:
+    string
+
 ) {
 
   if (
@@ -2427,49 +2900,70 @@ function formatOrderLimit(
 
   return `${formatNumber(
     value
-  )} orders`;
+  )} ${suffix}`;
 
 }
 
 
-function parseNullablePositiveNumber(
+function formatTimestamp(
   value:
-    string
+    string |
+    null
 ) {
 
-  const trimmed =
-    value.trim();
-
-
-  if (!trimmed) {
+  if (!value) {
 
     return null;
 
   }
 
 
-  const parsed =
-    Number(
-      trimmed
+  const date =
+    new Date(
+      value
     );
 
 
   if (
-    !Number.isFinite(
-      parsed
+    Number.isNaN(
+      date.getTime()
     )
-    ||
-    parsed <=
-      0
   ) {
 
-    return null;
+    return value;
 
   }
 
 
-  return Math.floor(
-    parsed
+  return date.toLocaleString(
+    'en-IN',
+    {
+
+      dateStyle:
+        'medium',
+
+      timeStyle:
+        'short',
+
+    }
+  );
+
+}
+
+
+function formatNumber(
+  value:
+    number
+) {
+
+  return new Intl.NumberFormat(
+    'en-IN',
+    {
+      maximumFractionDigits:
+        0,
+    }
+  ).format(
+    value
   );
 
 }
