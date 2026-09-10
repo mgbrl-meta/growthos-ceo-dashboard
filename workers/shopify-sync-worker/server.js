@@ -1084,41 +1084,25 @@ app.post(
       }
 
 
-            // ======================================================
-      // CUSTOMERS — C1 MANUAL SYNC
+             // ======================================================
+      // CUSTOMERS — MANUAL SYNC
       //
-      // Development proof only.
+      // Manual Customer jobs are handled here.
       //
-      // Final architecture will later add:
+      // Historical Customer backfills intentionally fall
+      // through to the shared entity-aware backfill path below.
       //
-      // historical Bulk
-      // incremental recovery
-      // scheduler
-      // customers/create
-      // customers/update
-      //
-      // without changing this canonical Customer shape.
+      // Customer incremental / reconciliation are not enabled
+      // yet and remain fail-closed by the routing gate below.
       // ======================================================
 
       if (
         job.entity ===
           'customers'
+        &&
+        job.syncType ===
+          'manual'
       ) {
-
-        // ====================================================
-        // C1 ONLY SUPPORTS MANUAL
-        // ====================================================
-
-        if (
-          job.syncType !==
-            'manual'
-        ) {
-
-          throw new Error(
-            'SHOPIFY_CUSTOMERS_SYNC_TYPE_NOT_IMPLEMENTED'
-          );
-
-        }
 
 
         // ====================================================
@@ -1275,12 +1259,44 @@ app.post(
 
 
       // ======================================================
-      // CURRENT IMPLEMENTATION: ORDERS
+      // SUPPORTED ROUTING
+      //
+      // Non-backfill execution:
+      //
+      // orders
+      //   manual
+      //   incremental
+      //   reconciliation
+      //
+      // customers
+      //   manual is handled above
+      //
+      // Historical backfill:
+      //
+      // orders
+      // customers
+      //
+      // All other entity/sync combinations remain fail-closed.
       // ======================================================
+
+      const isSupportedHistoricalBackfill =
+        job.syncType ===
+          'backfill'
+        &&
+        (
+          job.entity ===
+            'orders'
+          ||
+          job.entity ===
+            'customers'
+        );
+
 
       if (
         job.entity !==
           'orders'
+        &&
+        !isSupportedHistoricalBackfill
       ) {
 
         throw new Error(

@@ -1576,6 +1576,12 @@ export default function GrowthSettings() {
                 subscriptionContext
               }
 
+              currentRole={
+                authContext?.activeContext?.role
+                ??
+                null
+              }
+
               loading={
                 usersLoading
                 ||
@@ -2620,6 +2626,8 @@ function UserAccessSettings({
 
   subscriptionContext,
 
+  currentRole,
+
   loading,
 
   error,
@@ -2636,6 +2644,10 @@ function UserAccessSettings({
     WorkspaceSubscriptionResponse |
     null;
 
+  currentRole:
+    string |
+    null;
+
   loading:
     boolean;
 
@@ -2648,6 +2660,346 @@ function UserAccessSettings({
 
 }) {
 
+
+  // ==========================================================
+  // ADD USER STATE
+  // ==========================================================
+
+  const [
+    showAddUser,
+    setShowAddUser,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    newUserName,
+    setNewUserName,
+  ] =
+    useState(
+      ''
+    );
+
+
+  const [
+    newUserEmail,
+    setNewUserEmail,
+  ] =
+    useState(
+      ''
+    );
+
+
+  const [
+    newUserPassword,
+    setNewUserPassword,
+  ] =
+    useState(
+      ''
+    );
+
+
+  const [
+    newUserRole,
+    setNewUserRole,
+  ] =
+    useState<
+      'owner'
+      |
+      'admin'
+      |
+      'analyst'
+      |
+      'viewer'
+    >(
+      'viewer'
+    );
+
+
+  const [
+    userSaving,
+    setUserSaving,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    userCreateError,
+    setUserCreateError,
+  ] =
+    useState(
+      ''
+    );
+
+
+  // ==========================================================
+  // ADD WORKSPACE USER
+  // ==========================================================
+
+  async function addWorkspaceUser() {
+
+    if (userSaving) {
+
+      return;
+
+    }
+
+
+    const email =
+      newUserEmail
+        .trim()
+        .toLowerCase();
+
+
+    const fullName =
+      newUserName
+        .trim();
+
+
+    if (!email) {
+
+      setUserCreateError(
+        'Email address is required.'
+      );
+
+      return;
+
+    }
+
+
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        .test(
+          email
+        )
+    ) {
+
+      setUserCreateError(
+        'Enter a valid email address.'
+      );
+
+      return;
+
+    }
+
+
+    try {
+
+      setUserSaving(
+        true
+      );
+
+
+      setUserCreateError(
+        ''
+      );
+
+
+      const response =
+        await fetch(
+          '/api/workspace/users',
+          {
+
+            method:
+              'POST',
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+
+              'Content-Type':
+                'application/json',
+
+            },
+
+            body:
+              JSON.stringify({
+
+                fullName,
+
+                email,
+
+                password:
+                  newUserPassword,
+
+                role:
+                  newUserRole,
+
+              }),
+
+          }
+        );
+
+
+      const raw =
+        await response.text();
+
+
+      let json:
+        any;
+
+
+      try {
+
+        json =
+          JSON.parse(
+            raw
+          );
+
+      } catch {
+
+        throw new Error(
+          `Users API returned HTTP ${response.status} instead of JSON`
+        );
+
+      }
+
+
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
+
+        const apiError =
+          String(
+            json?.error
+            ||
+            'Unable to add user'
+          );
+
+
+        const friendlyErrors:
+          Record<
+            string,
+            string
+          > = {
+
+          VALID_EMAIL_REQUIRED:
+            'Enter a valid email address.',
+
+          VALID_ROLE_REQUIRED:
+            'Select a valid user role.',
+
+          PASSWORD_MINIMUM_10_CHARACTERS:
+            'New users require a password of at least 10 characters.',
+
+          USER_ALREADY_HAS_ACCESS:
+            'This user already has access to the current brand.',
+
+          USER_LIMIT_REACHED:
+            'Your current plan user limit has been reached.',
+
+          USER_NOT_ACTIVE:
+            'This Growth OS user is currently inactive.',
+
+          SUBSCRIPTION_REQUIRED:
+            'An active Growth OS subscription is required.',
+
+          USER_MANAGEMENT_ACCESS_REQUIRED:
+            'Only an active Owner or Admin can add users.',
+
+          OWNER_ROLE_REQUIRED:
+            'Only an Owner can grant the Owner role.',
+
+          ACTIVE_BRAND_REQUIRED:
+            'An active Growth OS brand is required.',
+
+          UNAUTHENTICATED:
+            'Your session has expired. Please sign in again.',
+
+          INVALID_REQUEST_BODY:
+            'The user details could not be processed.',
+
+        };
+
+
+        throw new Error(
+          friendlyErrors[
+            apiError
+          ]
+          ||
+          apiError
+        );
+
+      }
+
+
+      // ======================================================
+      // SUCCESS
+      // ======================================================
+
+      setNewUserName(
+        ''
+      );
+
+
+      setNewUserEmail(
+        ''
+      );
+
+
+      setNewUserPassword(
+        ''
+      );
+
+
+      setNewUserRole(
+        'viewer'
+      );
+
+
+      setShowAddUser(
+        false
+      );
+
+
+      // Reload canonical server user list.
+
+      reload();
+
+
+    } catch (
+      createError:
+        any
+    ) {
+
+      console.error(
+        'GROWTH_OS_WORKSPACE_USER_CREATE_ERROR',
+        createError
+      );
+
+
+      setUserCreateError(
+        String(
+          createError?.message
+          ||
+          'Unable to add user'
+        )
+      );
+
+    } finally {
+
+      setUserSaving(
+        false
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // LOADING
+  // ==========================================================
 
   if (
     loading
@@ -2664,6 +3016,10 @@ function UserAccessSettings({
 
   }
 
+
+  // ==========================================================
+  // ERROR
+  // ==========================================================
 
   if (
     error
@@ -2682,6 +3038,10 @@ function UserAccessSettings({
   }
 
 
+  // ==========================================================
+  // SERVER DATA
+  // ==========================================================
+
   const users =
     usersContext?.users
     ||
@@ -2692,6 +3052,7 @@ function UserAccessSettings({
     usersContext?.summary
     ||
     {
+
       totalUsers:
         users.length,
 
@@ -2718,6 +3079,7 @@ function UserAccessSettings({
             user.role ===
               'admin'
         ).length,
+
     };
 
 
@@ -2740,10 +3102,39 @@ function UserAccessSettings({
         )}`;
 
 
+  const userLimitReached =
+    maxUsers !==
+      null
+    &&
+    summary.activeUsers >=
+      maxUsers;
+
+
+  const canManageUsers =
+    currentRole ===
+      'owner'
+    ||
+    currentRole ===
+      'admin';
+
+
+  const canGrantOwner =
+    currentRole ===
+      'owner';
+
+
+  // ==========================================================
+  // UI
+  // ==========================================================
+
   return (
 
     <div className="space-y-3">
 
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
       <SectionHeader
 
@@ -2753,9 +3144,474 @@ function UserAccessSettings({
 
         title="Users & Access"
 
-        description="Review people who can access the current brand and their membership roles."
+        description="Review people who can access the current brand and manage their workspace access."
 
       />
+
+
+      {/* =====================================================
+          ADD USER ACTION
+      ===================================================== */}
+
+      <div
+        className="
+          flex
+          items-center
+          justify-between
+          gap-3
+        "
+      >
+
+        <p
+          className="
+            text-[9px]
+            text-slate-500
+          "
+        >
+          {canManageUsers
+            ? 'Owners and Admins can add users to this brand.'
+            : 'Only an Owner or Admin can add users to this brand.'}
+        </p>
+
+
+        <button
+
+          type="button"
+
+          disabled={
+            !canManageUsers
+            ||
+            userLimitReached
+          }
+
+          title={
+            !canManageUsers
+
+              ? 'Owner or Admin access is required'
+
+              : userLimitReached
+
+                ? 'Plan user limit reached'
+
+                : 'Add a user'
+          }
+
+          onClick={
+            () => {
+
+              setUserCreateError(
+                ''
+              );
+
+
+              setShowAddUser(
+                current =>
+                  !current
+              );
+
+            }
+          }
+
+          className="
+            shrink-0
+
+            rounded-lg
+
+            bg-slate-950
+
+            px-3
+            py-2
+
+            text-[10px]
+            font-semibold
+
+            text-white
+
+            transition
+
+            hover:bg-slate-800
+
+            disabled:cursor-not-allowed
+            disabled:opacity-40
+          "
+        >
+
+          {showAddUser
+            ? 'Cancel'
+            : 'Add User'}
+
+        </button>
+
+      </div>
+
+
+      {/* =====================================================
+          ADD USER FORM
+      ===================================================== */}
+
+      {showAddUser &&
+        canManageUsers && (
+
+        <section
+          className="
+            gos-panel
+            !p-3.5
+          "
+        >
+
+          <div>
+
+            <h3 className="gos-section-title">
+              Add User
+            </h3>
+
+
+            <p
+              className="
+                mt-1
+
+                text-[9px]
+                leading-4
+
+                text-slate-500
+              "
+            >
+              Add a person to the current authenticated brand.
+            </p>
+
+          </div>
+
+
+          <div
+            className="
+              mt-4
+
+              grid
+              grid-cols-1
+              gap-3
+
+              md:grid-cols-2
+            "
+          >
+
+
+            {/* FULL NAME */}
+
+            <FormField label="Full Name">
+
+              <input
+
+                type="text"
+
+                value={
+                  newUserName
+                }
+
+                onChange={
+                  event =>
+                    setNewUserName(
+                      event.target.value
+                    )
+                }
+
+                placeholder="e.g. Rahul Sharma"
+
+                autoComplete="name"
+
+                className="gos-input w-full"
+              />
+
+            </FormField>
+
+
+            {/* EMAIL */}
+
+            <FormField label="Email">
+
+              <input
+
+                type="email"
+
+                value={
+                  newUserEmail
+                }
+
+                onChange={
+                  event =>
+                    setNewUserEmail(
+                      event.target.value
+                    )
+                }
+
+                placeholder="user@company.com"
+
+                autoComplete="email"
+
+                className="gos-input w-full"
+              />
+
+            </FormField>
+
+
+            {/* PASSWORD */}
+
+            <FormField label="Initial Password">
+
+              <input
+
+                type="password"
+
+                value={
+                  newUserPassword
+                }
+
+                onChange={
+                  event =>
+                    setNewUserPassword(
+                      event.target.value
+                    )
+                }
+
+                placeholder="Minimum 10 characters"
+
+                autoComplete="new-password"
+
+                className="gos-input w-full"
+              />
+
+
+              <span
+                className="
+                  mt-1
+                  block
+
+                  text-[8px]
+                  leading-4
+
+                  text-slate-400
+                "
+              >
+                Required only when the email does not already have a Growth OS account.
+              </span>
+
+            </FormField>
+
+
+            {/* ROLE */}
+
+            <FormField label="Role">
+
+              <select
+
+                value={
+                  newUserRole
+                }
+
+                onChange={
+                  event =>
+                    setNewUserRole(
+                      event.target.value as
+                        'owner'
+                        |
+                        'admin'
+                        |
+                        'analyst'
+                        |
+                        'viewer'
+                    )
+                }
+
+                className="gos-input w-full"
+              >
+
+                <option value="viewer">
+                  Viewer
+                </option>
+
+                <option value="analyst">
+                  Analyst
+                </option>
+
+                <option value="admin">
+                  Admin
+                </option>
+
+                {canGrantOwner && (
+
+                  <option value="owner">
+                    Owner
+                  </option>
+
+                )}
+
+              </select>
+
+
+              <span
+                className="
+                  mt-1
+                  block
+
+                  text-[8px]
+                  leading-4
+
+                  text-slate-400
+                "
+              >
+                Admin can manage users. Only an Owner can grant Owner access.
+              </span>
+
+            </FormField>
+
+          </div>
+
+
+          {/* ERROR */}
+
+          {userCreateError && (
+
+            <div
+              className="
+                mt-3
+
+                rounded-lg
+
+                border
+                border-red-200
+
+                bg-red-50
+
+                px-3
+                py-2.5
+              "
+            >
+
+              <p
+                className="
+                  text-[9px]
+                  font-semibold
+
+                  text-red-700
+                "
+              >
+                {userCreateError}
+              </p>
+
+            </div>
+
+          )}
+
+
+          {/* ACTIONS */}
+
+          <div
+            className="
+              mt-4
+
+              flex
+              items-center
+              justify-end
+              gap-2
+            "
+          >
+
+            <button
+
+              type="button"
+
+              disabled={
+                userSaving
+              }
+
+              onClick={
+                () => {
+
+                  setUserCreateError(
+                    ''
+                  );
+
+
+                  setShowAddUser(
+                    false
+                  );
+
+                }
+              }
+
+              className="
+                rounded-lg
+
+                border
+                border-slate-200
+
+                bg-white
+
+                px-3
+                py-2
+
+                text-[10px]
+                font-semibold
+
+                text-slate-600
+
+                transition
+
+                hover:bg-slate-50
+
+                disabled:opacity-40
+              "
+            >
+              Cancel
+            </button>
+
+
+            <button
+
+              type="button"
+
+              disabled={
+                userSaving
+                ||
+                !newUserEmail.trim()
+              }
+
+              onClick={
+                addWorkspaceUser
+              }
+
+              className="
+                rounded-lg
+
+                bg-violet-600
+
+                px-4
+                py-2
+
+                text-[10px]
+                font-semibold
+
+                text-white
+
+                transition
+
+                hover:bg-violet-700
+
+                disabled:cursor-not-allowed
+                disabled:opacity-40
+              "
+            >
+
+              {userSaving
+                ? 'Adding...'
+                : 'Add User'}
+
+            </button>
+
+          </div>
+
+        </section>
+
+      )}
 
 
       {/* =====================================================
@@ -2774,24 +3630,30 @@ function UserAccessSettings({
 
         <MetricCard
           label="Total Users"
-          value={formatNumber(
-            summary.totalUsers
-          )}
+          value={
+            formatNumber(
+              summary.totalUsers
+            )
+          }
         />
 
 
         <MetricCard
           label="Active Users"
-          value={formatNumber(
-            summary.activeUsers
-          )}
+          value={
+            formatNumber(
+              summary.activeUsers
+            )
+          }
           tone="green"
         />
 
 
         <MetricCard
           label="Plan Usage"
-          value={userAllowance}
+          value={
+            userAllowance
+          }
         />
 
 
@@ -2813,7 +3675,12 @@ function UserAccessSettings({
           USER TABLE
       ===================================================== */}
 
-      <section className="gos-panel !p-0">
+      <section
+        className="
+          gos-panel
+          !p-0
+        "
+      >
 
         <div
           className="
@@ -2873,14 +3740,19 @@ function UserAccessSettings({
                 text-slate-500
               "
             >
+
               {formatNumber(
                 summary.activeUsers
               )}
+
               {' / '}
+
               {formatNumber(
                 maxUsers
               )}
+
               {' users'}
+
             </span>
 
           )}
@@ -2892,7 +3764,9 @@ function UserAccessSettings({
           0 ? (
 
           <EmptyServerState
-            icon={Users}
+            icon={
+              Users
+            }
             title="No users found"
             description="No Growth OS users are currently assigned to this brand."
           />
@@ -3020,10 +3894,12 @@ function UserAccessSettings({
                                 text-violet-700
                               "
                             >
+
                               {getUserInitials(
                                 user.fullName,
                                 user.email
                               )}
+
                             </div>
 
 
@@ -3041,11 +3917,13 @@ function UserAccessSettings({
                                   text-slate-900
                                 "
                               >
+
                                 {user.fullName
                                   ||
                                   user.email
                                   ||
                                   'Growth OS User'}
+
                               </p>
 
 
@@ -3061,9 +3939,11 @@ function UserAccessSettings({
                                   text-slate-500
                                 "
                               >
+
                                 {user.email
                                   ||
                                   user.userId}
+
                               </p>
 
                             </div>
@@ -3114,11 +3994,13 @@ function UserAccessSettings({
                             text-slate-600
                           "
                         >
+
                           {formatTimestamp(
                             user.lastLoginAt
                           )
                           ||
                           'Never'}
+
                         </td>
 
 
@@ -3178,11 +4060,13 @@ function UserAccessSettings({
                             text-slate-600
                           "
                         >
+
                           {formatDate(
                             user.membershipCreatedAt
                           )
                           ||
                           '—'}
+
                         </td>
 
                       </tr>
@@ -3204,7 +4088,7 @@ function UserAccessSettings({
 
 
       <ServerNotice
-        text="Users and roles are read from growthos_control.users and brand_memberships. Browser storage cannot grant or modify workspace access."
+        text="Users and roles are controlled by Growth OS server-side access rules. Browser storage cannot grant or modify workspace access."
       />
 
     </div>

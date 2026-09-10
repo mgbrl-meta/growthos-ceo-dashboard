@@ -48,6 +48,245 @@ const bigquery =
 
   });
 
+// ============================================================
+// BIGQUERY MUTATING DML RETRY
+//
+// Realtime Shopify webhooks can arrive concurrently.
+//
+// BigQuery internally retries conflicting mutating DML, but
+// sustained webhook bursts can still surface:
+//
+// - concurrent update / serialization conflicts
+// - mutating-DML queue saturation
+//
+// IMPORTANT:
+//
+// Retry ONLY the STATE MERGE.
+//
+// RAW has already been appended before this point, so the
+// complete writeShopifyOrders() operation must NOT be blindly
+// retried inside this writer.
+// ============================================================
+
+const ORDER_STATE_MERGE_MAX_ATTEMPTS =
+  3;
+
+
+// ============================================================
+// RETRYABLE BIGQUERY STATE ERROR
+// ============================================================
+
+function isRetryableOrderStateMergeError(
+  error
+) {
+
+  const message =
+    String(
+      error?.message
+      ||
+      ''
+    )
+      .toLowerCase();
+
+
+  return (
+
+    message.includes(
+      'could not serialize access'
+    )
+
+    ||
+
+    message.includes(
+      'concurrent update'
+    )
+
+    ||
+
+    message.includes(
+      'too many dml statements outstanding'
+    )
+
+    ||
+
+    message.includes(
+      'rate limit'
+    )
+
+  );
+
+}
+
+
+// ============================================================
+// RETRY DELAY
+//
+// Short exponential backoff + jitter.
+//
+// Attempt 1 failure:
+// ~500-750 ms
+//
+// Attempt 2 failure:
+// ~1500-1750 ms
+// ============================================================
+
+function getOrderStateMergeRetryDelayMs(
+  attempt
+) {
+
+  const baseDelay =
+    attempt === 1
+      ?
+        500
+      :
+        1500;
+
+
+  const jitter =
+    Math.floor(
+      Math.random()
+      *
+      250
+    );
+
+
+  return (
+    baseDelay
+    +
+    jitter
+  );
+
+}
+
+
+// ============================================================
+// SLEEP
+// ============================================================
+
+function sleep(
+  milliseconds
+) {
+
+  return new Promise(
+    resolve => {
+
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+
+    }
+  );
+
+}
+
+
+// ============================================================
+// RUN ORDER STATE MERGE WITH RETRY
+//
+// BigQuery itself already performs internal conflict retries.
+//
+// This is one additional bounded application-level recovery
+// layer for bursts that survive BigQuery's internal retries.
+// ============================================================
+
+async function runOrderStateMergeWithRetry(
+  queryOptions
+) {
+
+  let lastError =
+    null;
+
+
+  for (
+    let attempt = 1;
+    attempt <=
+      ORDER_STATE_MERGE_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+
+    try {
+
+      return await bigquery.query(
+        queryOptions
+      );
+
+    } catch (
+      error
+    ) {
+
+      lastError =
+        error;
+
+
+      const retryable =
+        isRetryableOrderStateMergeError(
+          error
+        );
+
+
+      if (
+        !retryable
+        ||
+        attempt >=
+          ORDER_STATE_MERGE_MAX_ATTEMPTS
+      ) {
+
+        throw error;
+
+      }
+
+
+      const delayMs =
+        getOrderStateMergeRetryDelayMs(
+          attempt
+        );
+
+
+      console.warn(
+        'SHOPIFY_ORDER_STATE_MERGE_RETRY',
+        {
+
+          attempt,
+
+          nextAttempt:
+            attempt + 1,
+
+          maxAttempts:
+            ORDER_STATE_MERGE_MAX_ATTEMPTS,
+
+          delayMs,
+
+          message:
+            String(
+              error?.message
+              ||
+              'Unknown BigQuery state MERGE failure'
+            ),
+
+        }
+      );
+
+
+      await sleep(
+        delayMs
+      );
+
+    }
+
+  }
+
+
+  throw (
+    lastError
+    ||
+    new Error(
+      'SHOPIFY_ORDER_STATE_MERGE_FAILED'
+    )
+  );
+
+}  
+
 
 // ============================================================
 // CANONICALIZE
@@ -489,7 +728,7 @@ export async function writeShopifyOrders(
     );
 
 
-  await bigquery.query({
+  await runOrderStateMergeWithRetry({
 
     query: `
 

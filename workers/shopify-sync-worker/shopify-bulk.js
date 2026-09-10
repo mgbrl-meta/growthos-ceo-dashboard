@@ -199,8 +199,11 @@ function buildOrdersBulkQuery(
 //
 // [from, to)
 //
-// created_at >= start
-// created_at <  end
+// customer_date >= start
+// customer_date <  end
+//
+// Shopify Customer search syntax uses customer_date to
+// filter the Customer.createdAt field.
 //
 // IMPORTANT:
 //
@@ -223,7 +226,7 @@ function buildCustomersBulkQuery(
 ) {
 
   const search =
-    `created_at:>='${from}' AND created_at:<'${to}'`;
+    `customer_date:>='${from}' AND customer_date:<'${to}'`;
 
 
   return `
