@@ -14,6 +14,7 @@ import {
   CalendarDays,
   CheckCircle2,
   CreditCard,
+  EllipsisVertical,
   LayoutDashboard,
   PanelLeft,
   Plug,
@@ -1565,38 +1566,26 @@ export default function GrowthSettings() {
 
           {activeTab ===
             'Users & Access' && (
-
-            <UserAccessSettings
-
-              usersContext={
-                usersContext
-              }
-
-              subscriptionContext={
-                subscriptionContext
-              }
-
-              currentRole={
-                authContext?.activeContext?.role
-                ??
-                null
-              }
-
-              loading={
-                usersLoading
-                ||
-                !usersLoaded
-              }
-
-              error={
-                usersError
-              }
-
-              reload={
-                loadUsersContext
-              }
-
-            />
+             
+             <UserAccessSettings
+  usersContext={usersContext}
+  subscriptionContext={subscriptionContext}
+  currentUserId={
+    authContext?.user?.userId
+    ?? null
+  }
+  currentRole={
+    authContext?.activeContext?.role
+    ?? null
+  }
+  loading={
+    usersLoading
+    ||
+    !usersLoaded
+  }
+  error={usersError}
+  reload={loadUsersContext}
+/> 
 
           )}
 
@@ -2626,6 +2615,8 @@ function UserAccessSettings({
 
   subscriptionContext,
 
+  currentUserId,
+
   currentRole,
 
   loading,
@@ -2642,6 +2633,10 @@ function UserAccessSettings({
 
   subscriptionContext:
     WorkspaceSubscriptionResponse |
+    null;
+
+  currentUserId:
+    string |
     null;
 
   currentRole:
@@ -2730,6 +2725,78 @@ function UserAccessSettings({
   const [
     userCreateError,
     setUserCreateError,
+  ] =
+    useState(
+      ''
+    );
+
+
+  // ==========================================================
+  // USER ACTION MENU / EDIT ACCESS STATE
+  // ==========================================================
+
+  const [
+    actionMenu,
+    setActionMenu,
+  ] =
+    useState<{
+      userId:
+        string;
+
+      top:
+        number;
+
+      left:
+        number;
+    } | null>(
+      null
+    );
+
+
+  const [
+    editingUserId,
+    setEditingUserId,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    editRole,
+    setEditRole,
+  ] =
+    useState<
+      'owner'
+      |
+      'admin'
+      |
+      'analyst'
+      |
+      'viewer'
+    >(
+      'viewer'
+    );
+
+
+  const [
+    userActionSavingId,
+    setUserActionSavingId,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    userActionError,
+    setUserActionError,
   ] =
     useState(
       ''
@@ -2998,6 +3065,494 @@ function UserAccessSettings({
 
 
   // ==========================================================
+  // USER ACTION ERROR MESSAGES
+  // ==========================================================
+
+  function getUserActionErrorMessage(
+    apiError:
+      string
+  ) {
+
+    const friendlyErrors:
+      Record<
+        string,
+        string
+      > = {
+
+      VALID_ROLE_REQUIRED:
+        'Select a valid user role.',
+
+      VALID_USER_ACTION_REQUIRED:
+        'Select a valid user action.',
+
+      USER_ID_REQUIRED:
+        'The selected user could not be resolved.',
+
+      WORKSPACE_USER_NOT_FOUND:
+        'This user no longer has access to the current brand.',
+
+      USER_MANAGEMENT_ACCESS_REQUIRED:
+        'Only an active Owner or Admin can manage users.',
+
+      OWNER_ROLE_REQUIRED:
+        'Only an Owner can modify or grant Owner access.',
+
+      LAST_OWNER_REQUIRED:
+        'The final active Owner cannot be demoted, suspended or removed.',
+
+      CANNOT_MODIFY_SELF:
+        'You cannot change or suspend your own access.',
+
+      CANNOT_DELETE_SELF:
+        'You cannot remove your own access.',
+
+      USER_LIMIT_REACHED:
+        'Your current plan user limit has been reached.',
+
+      SUBSCRIPTION_REQUIRED:
+        'An active Growth OS subscription is required.',
+
+      ACTIVE_BRAND_REQUIRED:
+        'An active Growth OS brand is required.',
+
+      UNAUTHENTICATED:
+        'Your session has expired. Please sign in again.',
+
+      INVALID_REQUEST_BODY:
+        'The user action could not be processed.',
+
+    };
+
+
+    return (
+      friendlyErrors[
+        apiError
+      ]
+      ||
+      apiError
+      ||
+      'Unable to update user access.'
+    );
+
+  }
+
+
+  // ==========================================================
+  // PATCH USER ACCESS
+  // ==========================================================
+
+  async function patchWorkspaceUserAccess(
+
+    userId:
+      string,
+
+    payload:
+      Record<
+        string,
+        unknown
+      >
+
+  ) {
+
+    if (
+      userActionSavingId
+    ) {
+
+      return false;
+
+    }
+
+
+    try {
+
+      setUserActionSavingId(
+        userId
+      );
+
+
+      setUserActionError(
+        ''
+      );
+
+
+      const response =
+        await fetch(
+          '/api/workspace/users',
+          {
+
+            method:
+              'PATCH',
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+
+              'Content-Type':
+                'application/json',
+
+            },
+
+            body:
+              JSON.stringify({
+
+                userId,
+
+                ...payload,
+
+              }),
+
+          }
+        );
+
+
+      const raw =
+        await response.text();
+
+
+      let json:
+        any;
+
+
+      try {
+
+        json =
+          JSON.parse(
+            raw
+          );
+
+      } catch {
+
+        throw new Error(
+          `Users API returned HTTP ${response.status} instead of JSON`
+        );
+
+      }
+
+
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
+
+        throw new Error(
+          getUserActionErrorMessage(
+            String(
+              json?.error
+              ||
+              'Unable to update user access'
+            )
+          )
+        );
+
+      }
+
+
+      setActionMenu(
+        null
+      );
+
+
+      reload();
+
+
+      return true;
+
+
+    } catch (
+      actionError:
+        any
+    ) {
+
+      console.error(
+        'GROWTH_OS_WORKSPACE_USER_ACTION_ERROR',
+        actionError
+      );
+
+
+      setUserActionError(
+        String(
+          actionError?.message
+          ||
+          'Unable to update user access'
+        )
+      );
+
+
+      return false;
+
+
+    } finally {
+
+      setUserActionSavingId(
+        null
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // SAVE ROLE
+  // ==========================================================
+
+  async function saveWorkspaceUserRole() {
+
+    if (!editingUserId) {
+
+      return;
+
+    }
+
+
+    const success =
+      await patchWorkspaceUserAccess(
+        editingUserId,
+        {
+
+          action:
+            'role',
+
+          role:
+            editRole,
+
+        }
+      );
+
+
+    if (success) {
+
+      setEditingUserId(
+        null
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // SUSPEND / REACTIVATE
+  // ==========================================================
+
+  async function suspendWorkspaceUser(
+
+    userId:
+      string,
+
+    email:
+      string |
+      null
+
+  ) {
+
+    const confirmed =
+      window.confirm(
+        `Suspend access for ${email || 'this user'} on the current brand?`
+      );
+
+
+    if (!confirmed) {
+
+      return;
+
+    }
+
+
+    await patchWorkspaceUserAccess(
+      userId,
+      {
+        action:
+          'suspend',
+      }
+    );
+
+  }
+
+
+  async function activateWorkspaceUser(
+    userId:
+      string
+  ) {
+
+    await patchWorkspaceUserAccess(
+      userId,
+      {
+        action:
+          'activate',
+      }
+    );
+
+  }
+
+
+  // ==========================================================
+  // DELETE BRAND ACCESS
+  // ==========================================================
+
+  async function deleteWorkspaceUserAccess(
+
+    userId:
+      string,
+
+    email:
+      string |
+      null
+
+  ) {
+
+    if (
+      userActionSavingId
+    ) {
+
+      return;
+
+    }
+
+
+    const confirmed =
+      window.confirm(
+        `Remove ${email || 'this user'} from the current brand?\n\nThis removes only their access to this brand. Their global Growth OS user account will remain.`
+      );
+
+
+    if (!confirmed) {
+
+      return;
+
+    }
+
+
+    try {
+
+      setUserActionSavingId(
+        userId
+      );
+
+
+      setUserActionError(
+        ''
+      );
+
+
+      const response =
+        await fetch(
+          '/api/workspace/users',
+          {
+
+            method:
+              'DELETE',
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+
+              'Content-Type':
+                'application/json',
+
+            },
+
+            body:
+              JSON.stringify({
+                userId,
+              }),
+
+          }
+        );
+
+
+      const raw =
+        await response.text();
+
+
+      let json:
+        any;
+
+
+      try {
+
+        json =
+          JSON.parse(
+            raw
+          );
+
+      } catch {
+
+        throw new Error(
+          `Users API returned HTTP ${response.status} instead of JSON`
+        );
+
+      }
+
+
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
+
+        throw new Error(
+          getUserActionErrorMessage(
+            String(
+              json?.error
+              ||
+              'Unable to remove user access'
+            )
+          )
+        );
+
+      }
+
+
+      setActionMenu(
+        null
+      );
+
+
+      reload();
+
+
+    } catch (
+      deleteError:
+        any
+    ) {
+
+      console.error(
+        'GROWTH_OS_WORKSPACE_USER_DELETE_ERROR',
+        deleteError
+      );
+
+
+      setUserActionError(
+        String(
+          deleteError?.message
+          ||
+          'Unable to remove user access'
+        )
+      );
+
+
+    } finally {
+
+      setUserActionSavingId(
+        null
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
   // LOADING
   // ==========================================================
 
@@ -3121,6 +3676,38 @@ function UserAccessSettings({
   const canGrantOwner =
     currentRole ===
       'owner';
+
+
+  const actionMenuUser =
+    actionMenu
+
+      ? (
+          users.find(
+            user =>
+              user.userId ===
+                actionMenu.userId
+          )
+          ||
+          null
+        )
+
+      : null;
+
+
+  const editingUser =
+    editingUserId
+
+      ? (
+          users.find(
+            user =>
+              user.userId ===
+                editingUserId
+          )
+          ||
+          null
+        )
+
+      : null;
 
 
   // ==========================================================
@@ -3819,6 +4406,10 @@ function UserAccessSettings({
                     Member Since
                   </TableHeader>
 
+                  <TableHeader>
+                    Actions
+                  </TableHeader>
+
                 </tr>
 
               </thead>
@@ -3842,6 +4433,38 @@ function UserAccessSettings({
                         user.userStatus,
                         user.membershipStatus
                       );
+
+
+                    const isCurrentUser =
+                      Boolean(
+                        currentUserId
+                        &&
+                        user.userId ===
+                          currentUserId
+                      );
+
+
+                    const isOwner =
+                      user.role ===
+                        'owner';
+
+
+                    const canManageThisUser =
+                      canManageUsers
+                      &&
+                      !isCurrentUser
+                      &&
+                      !(
+                        currentRole ===
+                          'admin'
+                        &&
+                        isOwner
+                      );
+
+
+                    const actionSaving =
+                      userActionSavingId ===
+                        user.userId;
 
 
                     return (
@@ -4069,6 +4692,137 @@ function UserAccessSettings({
 
                         </td>
 
+
+                        {/* ACTIONS */}
+
+                        <td className="px-3 py-2.5 text-right">
+
+                          <button
+
+                            type="button"
+
+                            disabled={
+                              !canManageThisUser
+                              ||
+                              actionSaving
+                            }
+
+                            title={
+                              isCurrentUser
+
+                                ? 'You cannot modify your own access'
+
+                                : currentRole ===
+                                    'admin'
+                                  &&
+                                  isOwner
+
+                                  ? 'Admins cannot modify an Owner'
+
+                                  : !canManageUsers
+
+                                    ? 'Owner or Admin access is required'
+
+                                    : 'User actions'
+                            }
+
+                            onClick={
+                              event => {
+
+                                if (
+                                  !canManageThisUser
+                                ) {
+
+                                  return;
+
+                                }
+
+
+                                const rect =
+                                  event
+                                    .currentTarget
+                                    .getBoundingClientRect();
+
+
+                                const menuWidth =
+                                  184;
+
+
+                                const left =
+                                  Math.min(
+                                    Math.max(
+                                      8,
+                                      rect.right
+                                      -
+                                      menuWidth
+                                    ),
+                                    Math.max(
+                                      8,
+                                      window.innerWidth
+                                      -
+                                      menuWidth
+                                      -
+                                      8
+                                    )
+                                  );
+
+
+                                setUserActionError(
+                                  ''
+                                );
+
+
+                                setActionMenu({
+
+                                  userId:
+                                    user.userId,
+
+                                  top:
+                                    rect.bottom
+                                    +
+                                    6,
+
+                                  left,
+
+                                });
+
+                              }
+                            }
+
+                            className="
+                              inline-flex
+                              h-7
+                              w-7
+                              items-center
+                              justify-center
+
+                              rounded-[7px]
+
+                              border
+                              border-slate-200
+
+                              bg-white
+
+                              text-slate-500
+
+                              transition
+
+                              hover:bg-slate-100
+                              hover:text-slate-900
+
+                              disabled:cursor-not-allowed
+                              disabled:opacity-30
+                            "
+                          >
+
+                            <EllipsisVertical
+                              size={14}
+                            />
+
+                          </button>
+
+                        </td>
+
                       </tr>
 
                     );
@@ -4085,6 +4839,505 @@ function UserAccessSettings({
         )}
 
       </section>
+
+
+      {/* =====================================================
+          USER ACTION ERROR
+      ===================================================== */}
+
+      {userActionError && (
+
+        <div
+          className="
+            rounded-[9px]
+
+            border
+            border-red-200
+
+            bg-red-50
+
+            px-3
+            py-2.5
+          "
+        >
+
+          <p className="text-[9px] font-semibold text-red-700">
+            {userActionError}
+          </p>
+
+        </div>
+
+      )}
+
+
+      {/* =====================================================
+          FLOATING DOTTED ACTION MENU
+      ===================================================== */}
+
+      {actionMenu &&
+        actionMenuUser && (
+
+        <>
+
+          <button
+            type="button"
+            aria-label="Close user actions"
+            onClick={() =>
+              setActionMenu(
+                null
+              )
+            }
+            className="
+              fixed
+              inset-0
+              z-40
+
+              cursor-default
+
+              bg-transparent
+            "
+          />
+
+
+          <div
+
+            style={{
+              top:
+                actionMenu.top,
+
+              left:
+                actionMenu.left,
+            }}
+
+            className="
+              fixed
+              z-50
+
+              w-[184px]
+
+              overflow-hidden
+
+              rounded-[10px]
+
+              border
+              border-slate-200
+
+              bg-white
+
+              p-1
+
+              shadow-xl
+            "
+          >
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setEditRole(
+                  actionMenuUser.role as
+                    'owner'
+                    |
+                    'admin'
+                    |
+                    'analyst'
+                    |
+                    'viewer'
+                );
+
+
+                setEditingUserId(
+                  actionMenuUser.userId
+                );
+
+
+                setActionMenu(
+                  null
+                );
+
+              }}
+
+              className="
+                flex
+                w-full
+                items-center
+
+                rounded-[7px]
+
+                px-3
+                py-2
+
+                text-left
+                text-[9px]
+                font-semibold
+
+                text-slate-700
+
+                transition
+
+                hover:bg-slate-100
+              "
+            >
+              Edit Access
+            </button>
+
+
+            {actionMenuUser.membershipStatus ===
+              'active' ? (
+
+              <button
+
+                type="button"
+
+                onClick={() => {
+
+                  setActionMenu(
+                    null
+                  );
+
+
+                  suspendWorkspaceUser(
+                    actionMenuUser.userId,
+                    actionMenuUser.email
+                  );
+
+                }}
+
+                className="
+                  flex
+                  w-full
+                  items-center
+
+                  rounded-[7px]
+
+                  px-3
+                  py-2
+
+                  text-left
+                  text-[9px]
+                  font-semibold
+
+                  text-amber-700
+
+                  transition
+
+                  hover:bg-amber-50
+                "
+              >
+                Suspend Access
+              </button>
+
+            ) : (
+
+              <button
+
+                type="button"
+
+                onClick={() => {
+
+                  setActionMenu(
+                    null
+                  );
+
+
+                  activateWorkspaceUser(
+                    actionMenuUser.userId
+                  );
+
+                }}
+
+                className="
+                  flex
+                  w-full
+                  items-center
+
+                  rounded-[7px]
+
+                  px-3
+                  py-2
+
+                  text-left
+                  text-[9px]
+                  font-semibold
+
+                  text-emerald-700
+
+                  transition
+
+                  hover:bg-emerald-50
+                "
+              >
+                Reactivate Access
+              </button>
+
+            )}
+
+
+            <div className="my-1 border-t border-slate-100" />
+
+
+            <button
+
+              type="button"
+
+              onClick={() => {
+
+                setActionMenu(
+                  null
+                );
+
+
+                deleteWorkspaceUserAccess(
+                  actionMenuUser.userId,
+                  actionMenuUser.email
+                );
+
+              }}
+
+              className="
+                flex
+                w-full
+                items-center
+
+                rounded-[7px]
+
+                px-3
+                py-2
+
+                text-left
+                text-[9px]
+                font-semibold
+
+                text-red-700
+
+                transition
+
+                hover:bg-red-50
+              "
+            >
+              Delete Access
+            </button>
+
+          </div>
+
+        </>
+
+      )}
+
+
+      {/* =====================================================
+          EDIT ACCESS DIALOG
+      ===================================================== */}
+
+      {editingUser && (
+
+        <div
+          className="
+            fixed
+            inset-0
+            z-[60]
+
+            flex
+            items-center
+            justify-center
+
+            bg-slate-950/20
+
+            p-4
+          "
+        >
+
+          <div
+            className="
+              w-full
+              max-w-[430px]
+
+              rounded-[14px]
+
+              border
+              border-slate-200
+
+              bg-white
+
+              p-4
+
+              shadow-2xl
+            "
+          >
+
+            <div>
+
+              <h3 className="text-[13px] font-semibold text-slate-950">
+                Edit Access
+              </h3>
+
+
+              <p className="mt-1 break-all text-[9px] text-slate-500">
+                {editingUser.email ||
+                  editingUser.userId}
+              </p>
+
+            </div>
+
+
+            <div className="mt-4">
+
+              <FormField label="Role">
+
+                <select
+
+                  value={
+                    editRole
+                  }
+
+                  disabled={
+                    userActionSavingId ===
+                      editingUser.userId
+                  }
+
+                  onChange={
+                    event =>
+                      setEditRole(
+                        event.target.value as
+                          'owner'
+                          |
+                          'admin'
+                          |
+                          'analyst'
+                          |
+                          'viewer'
+                      )
+                  }
+
+                  className="gos-input w-full"
+                >
+
+                  <option value="viewer">
+                    Viewer
+                  </option>
+
+                  <option value="analyst">
+                    Analyst
+                  </option>
+
+                  <option value="admin">
+                    Admin
+                  </option>
+
+                  {canGrantOwner && (
+
+                    <option value="owner">
+                      Owner
+                    </option>
+
+                  )}
+
+                </select>
+
+              </FormField>
+
+            </div>
+
+
+            <div
+              className="
+                mt-4
+
+                flex
+                items-center
+                justify-end
+                gap-2
+              "
+            >
+
+              <button
+
+                type="button"
+
+                disabled={
+                  userActionSavingId ===
+                    editingUser.userId
+                }
+
+                onClick={() =>
+                  setEditingUserId(
+                    null
+                  )
+                }
+
+                className="
+                  rounded-[8px]
+
+                  border
+                  border-slate-200
+
+                  bg-white
+
+                  px-3
+                  py-2
+
+                  text-[9px]
+                  font-semibold
+
+                  text-slate-600
+
+                  hover:bg-slate-50
+
+                  disabled:opacity-40
+                "
+              >
+                Cancel
+              </button>
+
+
+              <button
+
+                type="button"
+
+                disabled={
+                  userActionSavingId ===
+                    editingUser.userId
+                }
+
+                onClick={
+                  saveWorkspaceUserRole
+                }
+
+                className="
+                  rounded-[8px]
+
+                  bg-slate-950
+
+                  px-4
+                  py-2
+
+                  text-[9px]
+                  font-semibold
+
+                  text-white
+
+                  hover:bg-slate-800
+
+                  disabled:opacity-40
+                "
+              >
+
+                {userActionSavingId ===
+                  editingUser.userId
+                  ? 'Saving...'
+                  : 'Save Access'}
+
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      )}
 
 
       <ServerNotice

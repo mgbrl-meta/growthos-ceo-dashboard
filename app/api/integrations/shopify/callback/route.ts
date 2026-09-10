@@ -27,6 +27,7 @@ import {
 
 import {
   ensureShopifyOrdersWebhookSubscriptions,
+  ensureShopifyCustomersWebhookSubscriptions,
 } from '@/lib/integrations/providers/shopify-webhooks';
 
 import {
@@ -430,6 +431,13 @@ export async function GET(
       )
         .toString();
 
+    const customersWebhookUrl =
+      new URL(
+        '/api/integrations/shopify/webhooks/customers',
+        request.url
+      )
+        .toString();    
+
 
     await ensureShopifyOrdersWebhookSubscriptions({
 
@@ -441,6 +449,19 @@ export async function GET(
 
       webhookUri:
         ordersWebhookUrl,
+
+    });
+
+    await ensureShopifyCustomersWebhookSubscriptions({
+
+      shopDomain:
+        canonicalShop.shopDomain,
+
+      accessToken:
+        credential.accessToken,
+
+      webhookUri:
+        customersWebhookUrl,
 
     });
 

@@ -9,6 +9,7 @@ import {
   fetchCustomersPage,
   fetchEarliestShopifyOrder,
   fetchShopifyOrderById,
+  fetchShopifyCustomerById,
 } from './shopify-api.js';
 
 import {
@@ -422,6 +423,7 @@ function validateShopifyMessage(
       'shopify.queue.test',
       'shopify.sync.requested',
       'shopify.order.webhook',
+      'shopify.customer.webhook',
     ]);
 
 
@@ -530,10 +532,15 @@ function validateShopifyMessage(
       ??
       null,
 
-        orderId:
+    orderId:
       payload.orderId
       ??
       null,
+
+    customerId:
+      payload.customerId
+      ??
+      null,  
 
     webhookTopic:
       payload.webhookTopic
@@ -664,6 +671,87 @@ function validateShopifyMessage(
 
     if (
       !allowedWebhookTopics.has(
+        job.webhookTopic
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_WEBHOOK_TOPIC_INVALID'
+      );
+
+    }
+
+
+    return job;
+
+  }
+
+    // ==========================================================
+  // REALTIME CUSTOMER WEBHOOK
+  //
+  // Customer webhook messages contain only identity.
+  //
+  // Supported topics:
+  //
+  // customers/create
+  // customers/update
+  // ==========================================================
+
+  if (
+    eventType ===
+      'shopify.customer.webhook'
+  ) {
+
+    job.entity =
+      'customers';
+
+
+    // ========================================================
+    // CUSTOMER ID
+    // ========================================================
+
+    job.customerId =
+      requireString(
+        job.customerId,
+        'SHOPIFY_WEBHOOK_CUSTOMER_ID_MISSING'
+      );
+
+
+    if (
+      !job.customerId.startsWith(
+        'gid://shopify/Customer/'
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_WEBHOOK_CUSTOMER_ID_INVALID'
+      );
+
+    }
+
+
+    // ========================================================
+    // WEBHOOK TOPIC
+    // ========================================================
+
+    job.webhookTopic =
+      requireString(
+        job.webhookTopic,
+        'SHOPIFY_WEBHOOK_TOPIC_MISSING'
+      );
+
+
+    const allowedCustomerWebhookTopics =
+      new Set([
+
+        'customers/create',
+        'customers/update',
+
+      ]);
+
+
+    if (
+      !allowedCustomerWebhookTopics.has(
         job.webhookTopic
       )
     ) {
@@ -1082,6 +1170,166 @@ app.post(
           .end();
 
       }
+
+            // ======================================================
+      // REALTIME SHOPIFY CUSTOMER WEBHOOK
+      //
+      // Webhook message contains only Customer identity.
+      //
+      // Worker:
+      //
+      // 1. resolves Secret Manager credential
+      // 2. fetches canonical GraphQL Customer
+      // 3. writes through canonical Customer writer
+      //
+      // The REST webhook payload itself never enters the
+      // canonical warehouse.
+      //
+      // Duplicate Pub/Sub deliveries are safe because the
+      // Customer writer hashes/dedupes canonical payloads.
+      // ======================================================
+
+      if (
+        job.eventType ===
+          'shopify.customer.webhook'
+      ) {
+
+        // ====================================================
+        // RUNTIME / CREDENTIAL
+        // ====================================================
+
+        const runtime =
+          await resolveShopifyRuntimeContext(
+            job
+          );
+
+
+        // ====================================================
+        // CANONICAL CUSTOMER REFETCH
+        // ====================================================
+
+        const fetched =
+          await fetchShopifyCustomerById(
+
+            runtime,
+
+            job.customerId
+
+          );
+
+
+        if (
+          !fetched.customer
+        ) {
+
+          throw new Error(
+            'SHOPIFY_WEBHOOK_CUSTOMER_NOT_FOUND'
+          );
+
+        }
+
+
+        // ====================================================
+        // CANONICAL CUSTOMER WAREHOUSE
+        // ====================================================
+
+        const warehouse =
+          await writeShopifyCustomers({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            customers: [
+
+              fetched.customer,
+
+            ],
+
+          });
+
+
+        // ====================================================
+        // RESULT
+        // ====================================================
+
+        console.log(
+          'SHOPIFY_CUSTOMER_WEBHOOK_COMPLETED',
+          {
+
+            pubsubMessageId:
+              message.messageId
+              ??
+              null,
+
+            jobId:
+              job.jobId,
+
+            webhookId:
+              job.webhookId
+              ??
+              null,
+
+            webhookTopic:
+              job.webhookTopic,
+
+            customerId:
+              job.customerId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            customerUpdatedAt:
+              fetched
+                .customer
+                .updatedAt
+              ??
+              null,
+
+            tokenRefreshed:
+              fetched.tokenRefreshed,
+
+            warehouseReceived:
+              warehouse.received,
+
+            warehouseChanged:
+              warehouse.changed,
+
+            warehouseSkipped:
+              warehouse.skipped,
+
+            warehouseLoaded:
+              warehouse.loaded,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          }
+        );
+
+
+        return res
+          .status(204)
+          .end();
+
+      }
+
+
+      // ======================================================
+      // CUSTOMERS — MANUAL SYNC
 
 
              // ======================================================

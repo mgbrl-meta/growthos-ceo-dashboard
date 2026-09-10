@@ -456,6 +456,118 @@ const CUSTOMERS_QUERY = `
 
 `;
 
+// ============================================================
+// ONE CUSTOMER QUERY
+//
+// Realtime Customer webhook path.
+//
+// IMPORTANT:
+//
+// This field set intentionally matches CUSTOMERS_QUERY exactly.
+//
+// Webhook payload
+//      ↓
+// Customer GID
+//      ↓
+// this canonical GraphQL representation
+//      ↓
+// same Customer warehouse writer used by manual / Bulk.
+//
+// The webhook JSON itself never becomes the canonical
+// warehouse Customer payload.
+// ============================================================
+
+const CUSTOMER_BY_ID_QUERY = `
+
+  query GrowthOsCustomerById(
+    $id: ID!
+  ) {
+
+    customer(
+      id: $id
+    ) {
+
+      id
+
+      legacyResourceId
+
+      firstName
+      lastName
+      displayName
+
+      createdAt
+      updatedAt
+
+      state
+
+      tags
+
+      locale
+
+      note
+
+      verifiedEmail
+
+      taxExempt
+
+      numberOfOrders
+
+
+      amountSpent {
+
+        amount
+        currencyCode
+
+      }
+
+
+      defaultEmailAddress {
+
+        emailAddress
+        marketingState
+
+      }
+
+
+      defaultPhoneNumber {
+
+        phoneNumber
+        marketingState
+
+      }
+
+
+      defaultAddress {
+
+        id
+
+        firstName
+        lastName
+
+        company
+
+        address1
+        address2
+
+        city
+
+        province
+        provinceCode
+
+        country
+        countryCodeV2
+
+        zip
+        phone
+
+      }
+
+    }
+
+  }
+
+`;
+
 
 // ============================================================
 // EARLIEST ORDER QUERY
@@ -1884,6 +1996,233 @@ export async function fetchShopifyOrderById(
         .json
         ?.data
         ?.order
+      ??
+      null,
+
+    tokenRefreshed:
+      Boolean(
+        token
+          ?.refreshed
+      ),
+
+  };
+
+}
+
+// ============================================================
+// FETCH ONE SHOPIFY CUSTOMER
+//
+// Used by realtime Customer webhook processing.
+//
+// Uses the exact same canonical Customer representation as:
+//
+// manual
+// historical Bulk
+// future incremental
+//
+// Uses the same credential lifecycle and 401 recovery as the
+// existing Order realtime path.
+// ============================================================
+
+export async function fetchShopifyCustomerById(
+  runtime,
+  customerId
+) {
+
+  const id =
+    String(
+      customerId
+      ??
+      ''
+    ).trim();
+
+
+  // ==========================================================
+  // CUSTOMER ID
+  // ==========================================================
+
+  if (
+    !id.startsWith(
+      'gid://shopify/Customer/'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_ID_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // CREDENTIAL
+  // ==========================================================
+
+  let token =
+    await getValidShopifyAccessToken(
+      runtime
+    );
+
+
+  // ==========================================================
+  // QUERY
+  // ==========================================================
+
+  let result =
+    await executeGraphQL({
+
+      shopDomain:
+        runtime
+          .credential
+          .shopDomain,
+
+      accessToken:
+        token.accessToken,
+
+      query:
+        CUSTOMER_BY_ID_QUERY,
+
+      variables: {
+
+        id,
+
+      },
+
+    });
+
+
+  // ==========================================================
+  // 401 TOKEN RECOVERY
+  // ==========================================================
+
+  if (
+    result
+      .response
+      .status ===
+        401
+  ) {
+
+    token =
+      await getValidShopifyAccessToken(
+
+        runtime,
+
+        {
+
+          forceRefresh:
+            true,
+
+        }
+
+      );
+
+
+    result =
+      await executeGraphQL({
+
+        shopDomain:
+          runtime
+            .credential
+            .shopDomain,
+
+        accessToken:
+          token.accessToken,
+
+        query:
+          CUSTOMER_BY_ID_QUERY,
+
+        variables: {
+
+          id,
+
+        },
+
+      });
+
+  }
+
+
+  // ==========================================================
+  // HTTP ERROR
+  // ==========================================================
+
+  if (
+    !result
+      .response
+      .ok
+  ) {
+
+    throw new Error(
+      `SHOPIFY_CUSTOMER_HTTP_${result.response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL ERROR
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      result
+        .json
+        ?.errors
+    )
+    &&
+    result
+      .json
+      .errors
+      .length >
+        0
+  ) {
+
+    console.error(
+      'SHOPIFY_CUSTOMER_GRAPHQL_ERROR',
+      {
+
+        customerId:
+          id,
+
+        errors:
+          result
+            .json
+            .errors
+            .map(
+              error => ({
+
+                message:
+                  String(
+                    error?.message
+                    ??
+                    'Unknown GraphQL error'
+                  ),
+
+              })
+            ),
+
+      }
+    );
+
+
+    throw new Error(
+      'SHOPIFY_CUSTOMER_GRAPHQL_ERROR'
+    );
+
+  }
+
+
+  // ==========================================================
+  // RESULT
+  // ==========================================================
+
+  return {
+
+    customer:
+      result
+        .json
+        ?.data
+        ?.customer
       ??
       null,
 

@@ -12,6 +12,7 @@ import {
 
 import {
   ensureShopifyOrdersWebhookSubscriptions,
+  ensureShopifyCustomersWebhookSubscriptions,
 } from '@/lib/integrations/providers/shopify-webhooks';
 
 
@@ -285,10 +286,25 @@ export async function bootstrapShopifyOrdersWebhooks(
   // WEBHOOK URI
   // ==========================================================
 
-  const webhookUri =
+    // ==========================================================
+  // WEBHOOK URIS
+  // ==========================================================
+
+  const ordersWebhookUri =
     new URL(
 
       '/api/integrations/shopify/webhooks/orders',
+
+      input.origin
+
+    )
+      .toString();
+
+
+  const customersWebhookUri =
+    new URL(
+
+      '/api/integrations/shopify/webhooks/customers',
 
       input.origin
 
@@ -329,12 +345,17 @@ export async function bootstrapShopifyOrdersWebhooks(
   // check, refresh once and retry.
   // ==========================================================
 
-  let result;
+    let ordersResult;
+  let customersResult;
 
 
   try {
 
-    result =
+    // ========================================================
+    // ORDERS
+    // ========================================================
+
+    ordersResult =
       await ensureShopifyOrdersWebhookSubscriptions({
 
         shopDomain,
@@ -342,7 +363,26 @@ export async function bootstrapShopifyOrdersWebhooks(
         accessToken:
           credential.accessToken,
 
-        webhookUri,
+        webhookUri:
+          ordersWebhookUri,
+
+      });
+
+
+    // ========================================================
+    // CUSTOMERS
+    // ========================================================
+
+    customersResult =
+      await ensureShopifyCustomersWebhookSubscriptions({
+
+        shopDomain,
+
+        accessToken:
+          credential.accessToken,
+
+        webhookUri:
+          customersWebhookUri,
 
       });
 
@@ -368,6 +408,18 @@ export async function bootstrapShopifyOrdersWebhooks(
 
     }
 
+
+    // ========================================================
+    // TOKEN RECOVERY
+    //
+    // If either Orders or Customers receives an unexpected
+    // 401, refresh the credential once and rerun both ensure
+    // operations.
+    //
+    // Both ensure functions are idempotent, so an Orders
+    // subscription successfully repaired before the 401 will
+    // simply be reused on the retry.
+    // ========================================================
 
     await refreshStoredShopifyCredential({
 
@@ -402,7 +454,7 @@ export async function bootstrapShopifyOrdersWebhooks(
       });
 
 
-    result =
+    ordersResult =
       await ensureShopifyOrdersWebhookSubscriptions({
 
         shopDomain,
@@ -410,15 +462,33 @@ export async function bootstrapShopifyOrdersWebhooks(
         accessToken:
           credential.accessToken,
 
-        webhookUri,
+        webhookUri:
+          ordersWebhookUri,
+
+      });
+
+
+    customersResult =
+      await ensureShopifyCustomersWebhookSubscriptions({
+
+        shopDomain,
+
+        accessToken:
+          credential.accessToken,
+
+        webhookUri:
+          customersWebhookUri,
 
       });
 
   }
 
 
-  // ==========================================================
+    // ==========================================================
   // SAFE RESPONSE ONLY
+  //
+  // Preserve webhookUri as the Orders URI for backward
+  // compatibility with the previous response contract.
   // ==========================================================
 
   return {
@@ -435,23 +505,44 @@ export async function bootstrapShopifyOrdersWebhooks(
 
     shopDomain,
 
-    webhookUri,
+
+    // ========================================================
+    // BACKWARD-COMPATIBLE FIELD
+    // ========================================================
+
+    webhookUri:
+      ordersWebhookUri,
+
+
+    // ========================================================
+    // EXPLICIT RECEIVERS
+    // ========================================================
+
+    ordersWebhookUri,
+
+    customersWebhookUri,
+
 
     tokenRefreshed:
       credential.tokenRefreshed
       ||
       forcedRefresh,
 
+
+    // ========================================================
+    // ORDERS
+    // ========================================================
+
     ordersCreate: {
 
       action:
-        result
+        ordersResult
           .subscriptions
           .ordersCreate
           .action,
 
       id:
-        result
+        ordersResult
           .subscriptions
           .ordersCreate
           .id,
@@ -461,15 +552,52 @@ export async function bootstrapShopifyOrdersWebhooks(
     ordersUpdated: {
 
       action:
-        result
+        ordersResult
           .subscriptions
           .ordersUpdated
           .action,
 
       id:
-        result
+        ordersResult
           .subscriptions
           .ordersUpdated
+          .id,
+
+    },
+
+
+    // ========================================================
+    // CUSTOMERS
+    // ========================================================
+
+    customersCreate: {
+
+      action:
+        customersResult
+          .subscriptions
+          .customersCreate
+          .action,
+
+      id:
+        customersResult
+          .subscriptions
+          .customersCreate
+          .id,
+
+    },
+
+    customersUpdate: {
+
+      action:
+        customersResult
+          .subscriptions
+          .customersUpdate
+          .action,
+
+      id:
+        customersResult
+          .subscriptions
+          .customersUpdate
           .id,
 
     },

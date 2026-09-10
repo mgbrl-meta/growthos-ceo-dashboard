@@ -12,7 +12,9 @@ import {
 
 type ShopifyWebhookTopic =
   | 'ORDERS_CREATE'
-  | 'ORDERS_UPDATED';
+  | 'ORDERS_UPDATED'
+  | 'CUSTOMERS_CREATE'
+  | 'CUSTOMERS_UPDATE';
 
 
 type ShopifyWebhookSubscription = {
@@ -1170,6 +1172,199 @@ export async function ensureShopifyOrdersWebhookSubscriptions(
       ordersCreate,
 
       ordersUpdated,
+
+    },
+
+  };
+
+}
+
+// ============================================================
+// ENSURE SHOPIFY CUSTOMER WEBHOOK SUBSCRIPTIONS
+//
+// customers/create
+// customers/update
+//
+// Both intentionally use ONE Customer receiver.
+//
+// x-shopify-topic tells the receiver which event occurred.
+//
+// This follows the exact same idempotent registration contract
+// as Orders:
+//
+// list existing
+//      ↓
+// reuse / correct / create customers/create
+//      ↓
+// refresh subscriptions when mutation occurred
+//      ↓
+// reuse / correct / create customers/update
+//
+// Calling this repeatedly must not create duplicates.
+// ============================================================
+
+export async function ensureShopifyCustomersWebhookSubscriptions(
+  input: {
+
+    shopDomain:
+      string;
+
+    accessToken:
+      string;
+
+    webhookUri:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // SHOP
+  // ==========================================================
+
+  const shopDomain =
+    normalizeShopDomain(
+      input.shopDomain
+    );
+
+
+  if (
+    !shopDomain
+    ||
+    !shopDomain.endsWith(
+      '.myshopify.com'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_WEBHOOK_SHOP_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // ACCESS TOKEN
+  // ==========================================================
+
+  const accessToken =
+    requireValue(
+      input.accessToken,
+      'SHOPIFY_WEBHOOK_ACCESS_TOKEN_MISSING'
+    );
+
+
+  // ==========================================================
+  // RECEIVER
+  // ==========================================================
+
+  const webhookUri =
+    normalizeWebhookUri(
+      input.webhookUri
+    );
+
+
+  // ==========================================================
+  // CURRENT SHOPIFY CONFIGURATION
+  // ==========================================================
+
+  const existing =
+    await listShopifyWebhookSubscriptions({
+
+      shopDomain,
+
+      accessToken,
+
+    });
+
+
+  // ==========================================================
+  // CUSTOMERS / CREATE
+  // ==========================================================
+
+  const customersCreate =
+    await ensureTopic({
+
+      shopDomain,
+
+      accessToken,
+
+      topic:
+        'CUSTOMERS_CREATE',
+
+      uri:
+        webhookUri,
+
+      existing,
+
+    });
+
+
+  // ==========================================================
+  // REFRESH AFTER MUTATION
+  //
+  // If CUSTOMERS_CREATE was created/updated, fetch the true
+  // current configuration before processing CUSTOMERS_UPDATE.
+  // ==========================================================
+
+  const refreshed =
+    customersCreate.action ===
+      'reused'
+
+      ?
+        existing
+
+      :
+        await listShopifyWebhookSubscriptions({
+
+          shopDomain,
+
+          accessToken,
+
+        });
+
+
+  // ==========================================================
+  // CUSTOMERS / UPDATE
+  // ==========================================================
+
+  const customersUpdate =
+    await ensureTopic({
+
+      shopDomain,
+
+      accessToken,
+
+      topic:
+        'CUSTOMERS_UPDATE',
+
+      uri:
+        webhookUri,
+
+      existing:
+        refreshed,
+
+    });
+
+
+  // ==========================================================
+  // SAFE RESULT
+  // ==========================================================
+
+  return {
+
+    ok:
+      true,
+
+    shopDomain,
+
+    webhookUri,
+
+    subscriptions: {
+
+      customersCreate,
+
+      customersUpdate,
 
     },
 
