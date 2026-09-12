@@ -19,6 +19,14 @@ import {
   verifyShopifyIdToken,
 } from './shopify';
 
+import {
+  getActiveBrandMembershipFast,
+} from './user-store';
+
+import {
+  getGrowthOSSecuritySessionFast,
+} from './security-store';
+
 
 // ============================================================
 // AUTH IDENTITY
@@ -45,6 +53,9 @@ export type AuthIdentity = {
     'public';
 
   userId:
+    string;
+
+  authSessionId?:
     string;
 
   email?:
@@ -197,39 +208,164 @@ export async function authenticateRequest(
 
   try {
 
-    const session =
-      await verifyGrowthOsSession(
-        sessionToken
-      );
+  const session =
+  await verifyGrowthOsSession(
+    sessionToken
+  );
 
 
-    return {
+// ==========================================================
+// SHOPIFY-LAUNCHED GROWTH OS SESSION
+//
+// Shopify installation sessions use a synthetic Shopify user
+// identity and do not require a normal brand_memberships row.
+// ==========================================================
 
-      authSource:
-        'public',
+if (
+  session.authMethod ===
+    'shopify'
+) {
 
-      userId:
-        session.userId,
+  return {
 
-      email:
-        session.email,
+    authSource:
+      'public',
 
-      workspaceId:
-        session.workspaceId,
+    userId:
+      session.userId,
 
-      brandId:
-        session.brandId,
+    authSessionId:
+      session.sessionId,
 
-      role:
-        session.role,
+    email:
+      session.email,
 
-      authMethod:
-        session.authMethod,
+    workspaceId:
+      session.workspaceId,
 
-      tenantId:
-        session.tenantId,
+    brandId:
+      session.brandId,
 
-    };
+    role:
+      session.role,
+
+    authMethod:
+      session.authMethod,
+
+    tenantId:
+      session.tenantId,
+
+  };
+
+}
+
+
+// ==========================================================
+// PASSWORD SESSION → LIVE SESSION CHECK
+//
+// V3 password sessions are registered server-side so logout,
+// sign-out-all and session revocation take effect immediately.
+//
+// Legacy password sessions without a sessionId are rejected
+// after Security V1 deploy and must sign in again.
+// ==========================================================
+
+if (!session.sessionId) {
+
+  return null;
+
+}
+
+
+const liveSecuritySession =
+  await getGrowthOSSecuritySessionFast(
+
+    session.sessionId,
+
+    session.userId
+
+  );
+
+
+if (
+  !liveSecuritySession
+  ||
+  liveSecuritySession.workspace_id !==
+    session.workspaceId
+  ||
+  liveSecuritySession.brand_id !==
+    session.brandId
+) {
+
+  return null;
+
+}
+
+
+// ==========================================================
+// PASSWORD SESSION → LIVE ACCESS CHECK
+//
+// Session proves identity.
+//
+// Control plane proves CURRENT authorization.
+// ==========================================================
+
+const membership =
+  await getActiveBrandMembershipFast(
+
+    session.userId,
+
+    session.workspaceId,
+
+    session.brandId
+
+  );
+
+
+if (!membership) {
+
+  return null;
+
+}
+
+
+// ==========================================================
+// RETURN LIVE ROLE
+//
+// Do NOT trust session.role because it may have changed since
+// login.
+// ==========================================================
+
+return {
+
+  authSource:
+    'public',
+
+  userId:
+    session.userId,
+
+  authSessionId:
+    session.sessionId,
+
+  email:
+    session.email,
+
+  workspaceId:
+    membership.workspace_id,
+
+  brandId:
+    membership.brand_id,
+
+  role:
+    membership.role,
+
+  authMethod:
+    session.authMethod,
+
+  tenantId:
+    session.tenantId,
+
+};
 
   } catch (
     error

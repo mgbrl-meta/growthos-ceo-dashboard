@@ -1,4 +1,13 @@
 import {
+  requireGrowthOSApiAccess,
+  runtimeAccessErrorResponse,
+} from '@/lib/auth/runtime-guard';
+
+import {
+  requireLegacyBrillareDataScope,
+} from '@/lib/tenancy/legacy-data-guard';
+
+import {
   NextRequest,
   NextResponse,
 } from 'next/server';
@@ -11,13 +20,58 @@ const EXECUTION_TABLE =
 const MEMBER_TABLE =
   'shopify-colab.brillare_shopify.retention_action_execution_member_v1_tbl';
 
-const BRAND_ID =
-  'brillare';
 
 export const dynamic =
   'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  let runtimeBrandId =
+    '';
+
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        req
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+
+    runtimeBrandId =
+      runtimeAccess.brandId;
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const query = `
       SELECT
@@ -122,7 +176,7 @@ export async function GET() {
 
         params: {
           brandId:
-            BRAND_ID,
+            runtimeBrandId,
         },
       });
 
@@ -155,6 +209,45 @@ export async function GET() {
 export async function POST(
   req: NextRequest
 ) {
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        req
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const body =
       await req.json();

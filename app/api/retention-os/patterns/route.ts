@@ -1,3 +1,12 @@
+import {
+  requireGrowthOSApiAccess,
+  runtimeAccessErrorResponse,
+} from '@/lib/auth/runtime-guard';
+
+import {
+  requireLegacyBrillareDataScope,
+} from '@/lib/tenancy/legacy-data-guard';
+
 import { unstable_cache } from 'next/cache';
 import { NextResponse } from 'next/server';
 
@@ -427,6 +436,45 @@ const loadCachedPatternDiscoveryData = unstable_cache(
 );
 
 export async function GET(request: Request) {
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        request
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const url = new URL(request.url);
 

@@ -36,6 +36,14 @@ import AppHeader
 import GrowthSettings
   from './settings/GrowthSettings';
 
+import type {
+  ClientEffectiveAccess,
+} from '@/lib/auth/client-effective-access';
+
+import {
+  getGrowthOSSubmodules,
+} from '@/lib/auth/submodule-registry';
+
 import {
   Activity,
   History,
@@ -43,6 +51,66 @@ import {
 
 
 type Row = any;
+
+
+// ============================================================
+// CANONICAL DASHBOARD MODULE NAVIGATION
+//
+// moduleId = server/control-plane identity
+// tab      = current client navigation identity
+// ============================================================
+
+const MODULE_NAVIGATION = [
+
+  {
+    moduleId:
+      'command-center',
+
+    tab:
+      'CEO Summary',
+  },
+
+  {
+    moduleId:
+      'meta',
+
+    tab:
+      'Meta OS',
+  },
+
+  {
+    moduleId:
+      'google',
+
+    tab:
+      'Google OS',
+  },
+
+  {
+    moduleId:
+      'attribution',
+
+    tab:
+      'Attribution OS',
+  },
+
+  {
+    moduleId:
+      'retention',
+
+    tab:
+      'Retention OS',
+  },
+
+  {
+    moduleId:
+      'product',
+
+    tab:
+      'Product OS',
+  },
+
+] as const;
 
 
 /* ============================================================
@@ -229,6 +297,181 @@ export default function GrowthOSDashboard() {
     setSidebarOpen,
   ] = useState(
     false
+  );
+
+
+  /* ==========================================================
+     EFFECTIVE ACCESS
+  ========================================================== */
+
+  const [
+    effectiveAccess,
+    setEffectiveAccess,
+  ] =
+    useState<
+      ClientEffectiveAccess |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    accessLoading,
+    setAccessLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    accessError,
+    setAccessError,
+  ] =
+    useState(
+      ''
+    );
+
+
+  /* ==========================================================
+     LOAD CURRENT EFFECTIVE ACCESS
+
+     Browser never supplies workspace / brand identity.
+
+     The server resolves the current authenticated tenant and
+     returns the canonical effective-access snapshot.
+  ========================================================== */
+
+  useEffect(
+    () => {
+
+      let cancelled =
+        false;
+
+
+      async function loadAccess() {
+
+        try {
+
+          setAccessLoading(
+            true
+          );
+
+
+          setAccessError(
+            ''
+          );
+
+
+          const response =
+            await fetch(
+              '/api/auth/effective-access',
+              {
+
+                cache:
+                  'no-store',
+
+                credentials:
+                  'same-origin',
+
+              }
+            );
+
+
+          const json =
+            await response.json();
+
+
+          if (
+            response.status ===
+              401
+          ) {
+
+            window.location.assign(
+              '/login'
+            );
+
+
+            return;
+
+          }
+
+
+          if (
+            !response.ok
+            ||
+            !json?.ok
+            ||
+            !json?.access
+          ) {
+
+            throw new Error(
+              json?.error
+              ||
+              'Unable to load Growth OS access'
+            );
+
+          }
+
+
+          if (!cancelled) {
+
+            setEffectiveAccess(
+              json.access
+            );
+
+          }
+
+        } catch (
+          error:
+            any
+        ) {
+
+          if (!cancelled) {
+
+            setEffectiveAccess(
+              null
+            );
+
+
+            setAccessError(
+              String(
+                error?.message
+                ||
+                'Unable to load Growth OS access'
+              )
+            );
+
+          }
+
+        } finally {
+
+          if (!cancelled) {
+
+            setAccessLoading(
+              false
+            );
+
+          }
+
+        }
+
+      }
+
+
+      loadAccess();
+
+
+      return () => {
+
+        cancelled =
+          true;
+
+      };
+
+    },
+    []
   );
 
 
@@ -732,19 +975,296 @@ export default function GrowthOSDashboard() {
 
 
   /* ==========================================================
-     INITIAL DATA LOAD
+     INITIAL CEO DATA LOAD
+
+     Do not call Command Center APIs until effective access has
+     resolved. A user without Command Center access must never
+     generate a speculative CEO Summary request.
   ========================================================== */
 
   useEffect(
     () => {
 
+      if (!effectiveAccess) {
+
+        return;
+
+      }
+
+
+      const commandCenterPermission =
+        effectiveAccess
+          .modules[
+            'command-center'
+          ]
+          ?.effectivePermission;
+
+
+      if (
+        !commandCenterPermission
+        ||
+        commandCenterPermission ===
+          'disabled'
+      ) {
+
+        return;
+
+      }
+
+
       fetchData();
 
-      // Initial load only.
+      // Access resolution triggers the one initial CEO load.
       // eslint-disable-next-line react-hooks/exhaustive-deps
 
     },
-    []
+    [
+      effectiveAccess,
+    ]
+  );
+
+
+  /* ==========================================================
+     MODULE FALLBACK
+
+     If the current module becomes unavailable, immediately
+     move to the first allowed module.
+
+     Settings remains available as the final safe destination.
+  ========================================================== */
+
+  useEffect(
+    () => {
+
+      if (!effectiveAccess) {
+
+        return;
+
+      }
+
+
+      if (
+        activeTab ===
+          'Settings'
+      ) {
+
+        return;
+
+      }
+
+
+      const currentModule =
+        MODULE_NAVIGATION.find(
+          item =>
+            item.tab ===
+              activeTab
+        );
+
+
+      const currentAllowed =
+        Boolean(
+          currentModule
+        )
+        &&
+        effectiveAccess
+          .modules[
+            currentModule!
+              .moduleId
+          ]
+          ?.effectivePermission
+        !==
+        'disabled';
+
+
+      if (currentAllowed) {
+
+        return;
+
+      }
+
+
+      const firstAllowed =
+        MODULE_NAVIGATION.find(
+          item =>
+            effectiveAccess
+              .modules[
+                item.moduleId
+              ]
+              ?.effectivePermission
+            !==
+            'disabled'
+        );
+
+
+      setActiveTab(
+        firstAllowed
+          ?.tab
+        ||
+        'Settings'
+      );
+
+    },
+    [
+      effectiveAccess,
+      activeTab,
+    ]
+  );
+
+
+  /* ==========================================================
+     SUBMODULE FALLBACK
+
+     Each module remembers the selected subtab. If permissions
+     later remove that subtab, automatically select the first
+     allowed submodule from the canonical registry.
+  ========================================================== */
+
+  useEffect(
+    () => {
+
+      if (!effectiveAccess) {
+
+        return;
+
+      }
+
+
+      let changed =
+        false;
+
+
+      const nextSubTabs =
+        {
+          ...activeSubTabs,
+        };
+
+
+      for (
+        const item
+        of MODULE_NAVIGATION
+      ) {
+
+        const moduleAccess =
+          effectiveAccess
+            .modules[
+              item.moduleId
+            ];
+
+
+        if (
+          !moduleAccess
+          ||
+          moduleAccess
+            .effectivePermission ===
+            'disabled'
+        ) {
+
+          continue;
+
+        }
+
+
+        const registry =
+          getGrowthOSSubmodules(
+            item.moduleId
+          );
+
+
+        if (
+          registry.length ===
+          0
+        ) {
+
+          continue;
+
+        }
+
+
+        const selectedLabel =
+          activeSubTabs[
+            item.tab
+          ];
+
+
+        const selectedDefinition =
+          registry.find(
+            submodule =>
+              submodule.label ===
+                selectedLabel
+          );
+
+
+        const selectedAllowed =
+          Boolean(
+            selectedDefinition
+          )
+          &&
+          moduleAccess
+            .submodules[
+              selectedDefinition!
+                .submoduleId
+            ]
+            ?.effectivePermission
+          !==
+          'disabled';
+
+
+        if (selectedAllowed) {
+
+          continue;
+
+        }
+
+
+        const firstAllowed =
+          registry.find(
+            submodule =>
+              moduleAccess
+                .submodules[
+                  submodule.submoduleId
+                ]
+                ?.effectivePermission
+              !==
+              'disabled'
+          );
+
+
+        if (
+          firstAllowed
+          &&
+          nextSubTabs[
+            item.tab
+          ] !==
+            firstAllowed.label
+        ) {
+
+          nextSubTabs[
+            item.tab
+          ] =
+            firstAllowed.label;
+
+
+          changed =
+            true;
+
+        }
+
+      }
+
+
+      if (changed) {
+
+        setActiveSubTabs(
+          nextSubTabs
+        );
+
+      }
+
+    },
+    [
+      effectiveAccess,
+      activeSubTabs,
+    ]
   );
 
 
@@ -1005,6 +1525,33 @@ export default function GrowthOSDashboard() {
 
 
   /* ==========================================================
+     DIRECT COMPONENT ACCESS GUARD
+
+     Sidebar filtering is only navigation UX.
+
+     These checks also prevent a denied module from rendering
+     if activeTab is manipulated or becomes stale.
+  ========================================================== */
+
+  function moduleVisible(
+    moduleId:
+      string
+  ) {
+
+    return (
+      effectiveAccess
+        ?.modules[
+          moduleId
+        ]
+        ?.effectivePermission
+      !==
+      'disabled'
+    );
+
+  }
+
+
+  /* ==========================================================
      DATE CONTROL VISIBILITY
 
      Date controls belong on analytical OS pages.
@@ -1027,6 +1574,117 @@ export default function GrowthOSDashboard() {
 
 
   /* ==========================================================
+     ACCESS RESOLUTION UI
+  ========================================================== */
+
+  if (accessLoading) {
+
+    return (
+
+      <main
+        className="
+          flex
+          min-h-screen
+          items-center
+          justify-center
+
+          bg-[#f5f6f8]
+        "
+      >
+
+        <div
+          className="
+            text-sm
+            font-semibold
+
+            text-slate-500
+          "
+        >
+          Loading Growth OS access…
+        </div>
+
+      </main>
+
+    );
+
+  }
+
+
+  if (
+    accessError
+    ||
+    !effectiveAccess
+  ) {
+
+    return (
+
+      <main
+        className="
+          flex
+          min-h-screen
+          items-center
+          justify-center
+
+          bg-[#f5f6f8]
+
+          px-6
+        "
+      >
+
+        <section
+          className="
+            w-full
+            max-w-md
+
+            rounded-2xl
+            border
+            border-slate-200
+
+            bg-white
+
+            p-6
+
+            shadow-sm
+          "
+        >
+
+          <h2
+            className="
+              text-base
+              font-bold
+
+              text-slate-950
+            "
+          >
+            Access unavailable
+          </h2>
+
+
+          <p
+            className="
+              mt-2
+
+              text-sm
+              leading-6
+
+              text-slate-500
+            "
+          >
+            {accessError
+              ||
+              'Growth OS could not resolve your current access.'}
+          </p>
+
+        </section>
+
+      </main>
+
+    );
+
+  }
+
+
+  /* ==========================================================
      UI
   ========================================================== */
 
@@ -1043,6 +1701,10 @@ export default function GrowthOSDashboard() {
         ==================================================== */}
 
         <AppSidebar
+
+          access={
+            effectiveAccess
+          }
 
           activeTab={
             activeTab
@@ -1176,7 +1838,11 @@ export default function GrowthOSDashboard() {
               ============================================== */}
 
               {activeTab ===
-                'CEO Summary' && (
+                'CEO Summary'
+                &&
+                moduleVisible(
+                  'command-center'
+                ) && (
 
                 <CeoSummary
 
@@ -1198,7 +1864,11 @@ export default function GrowthOSDashboard() {
               ============================================== */}
 
               {activeTab ===
-                'Meta OS' && (
+                'Meta OS'
+                &&
+                moduleVisible(
+                  'meta'
+                ) && (
 
                 <MetaOS
 
@@ -1234,7 +1904,11 @@ export default function GrowthOSDashboard() {
               ============================================== */}
 
               {activeTab ===
-                'Google OS' && (
+                'Google OS'
+                &&
+                moduleVisible(
+                  'google'
+                ) && (
 
                 <GoogleOS
 
@@ -1271,7 +1945,11 @@ export default function GrowthOSDashboard() {
               ============================================== */}
 
               {activeTab ===
-                'Attribution OS' && (
+                'Attribution OS'
+                &&
+                moduleVisible(
+                  'attribution'
+                ) && (
 
                 <AttributionOS
 
@@ -1307,7 +1985,11 @@ export default function GrowthOSDashboard() {
               ============================================== */}
 
               {activeTab ===
-                'Retention OS' && (
+                'Retention OS'
+                &&
+                moduleVisible(
+                  'retention'
+                ) && (
 
                 <RetentionOS
 
@@ -1332,7 +2014,11 @@ export default function GrowthOSDashboard() {
               ============================================== */}
 
               {activeTab ===
-                'Product OS' && (
+                'Product OS'
+                &&
+                moduleVisible(
+                  'product'
+                ) && (
 
                 <ProductOS
 

@@ -1,3 +1,12 @@
+import {
+  requireGrowthOSApiAccess,
+  runtimeAccessErrorResponse,
+} from '@/lib/auth/runtime-guard';
+
+import {
+  requireLegacyBrillareDataScope,
+} from '@/lib/tenancy/legacy-data-guard';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { bigquery } from '@/lib/bigquery';
 
@@ -7,11 +16,57 @@ const PLANNER_TABLE =
 const ACTION_TABLE =
   'shopify-colab.brillare_shopify.retention_action_execution_v1_tbl';
 
-const BRAND_ID = 'brillare';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+
+  let runtimeBrandId =
+    '';
+
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        req
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+
+    runtimeBrandId =
+      runtimeAccess.brandId;
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const { searchParams } = new URL(req.url);
 
@@ -153,7 +208,7 @@ export async function GET(req: NextRequest) {
 
     const params:
       Record<string, string> = {
-        brandId: BRAND_ID,
+        brandId: runtimeBrandId,
       };
 
     if (selectedDate) {

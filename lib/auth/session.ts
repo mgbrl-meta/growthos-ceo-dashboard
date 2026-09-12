@@ -74,9 +74,12 @@ export type GrowthOsSessionAuthMethod =
 export type GrowthOsSession = {
 
   sessionVersion:
-    1 | 2;
+    1 | 2 | 3;
 
   userId:
+    string;
+
+  sessionId?:
     string;
 
   email?:
@@ -132,6 +135,9 @@ export type GrowthOsSession = {
 export type GrowthOsSessionInput = {
 
   userId:
+    string;
+
+  sessionId?:
     string;
 
   email?:
@@ -273,6 +279,14 @@ function normalizeSessionInput(
   }
 
 
+  const sessionId =
+    String(
+      input.sessionId
+      ||
+      ''
+    ).trim();
+
+
   // ==========================================================
   // WORKSPACE
   //
@@ -377,6 +391,11 @@ function normalizeSessionInput(
 
     userId,
 
+    sessionId:
+      sessionId
+        ? sessionId
+        : undefined,
+
     email:
       email
         ? email
@@ -443,7 +462,12 @@ export async function createGrowthOsSession(
     {
 
       sessionVersion:
-        2,
+        3,
+
+      sid:
+        session.sessionId
+        ||
+        '',
 
       email:
         session.email
@@ -618,7 +642,7 @@ export async function verifyGrowthOsSession(
 
 
   // ==========================================================
-  // DETECT V2
+  // SESSION VERSION
   // ==========================================================
 
   const sessionVersion =
@@ -627,6 +651,115 @@ export async function verifyGrowthOsSession(
       ||
       1
     );
+
+
+  if (
+    sessionVersion ===
+    3
+  ) {
+
+    const workspaceId =
+      String(
+        payload.workspaceId
+        ||
+        ''
+      ).trim();
+
+
+    const brandId =
+      String(
+        payload.brandId
+        ||
+        ''
+      ).trim();
+
+
+    const role =
+      String(
+        payload.role
+        ||
+        ''
+      );
+
+
+    const authMethod =
+      String(
+        payload.authMethod
+        ||
+        ''
+      );
+
+
+    const sessionId =
+      String(
+        payload.sid
+        ||
+        ''
+      ).trim();
+
+
+    if (
+      !workspaceId
+      ||
+      !brandId
+      ||
+      !isValidRole(
+        role
+      )
+      ||
+      !isValidAuthMethod(
+        authMethod
+      )
+      ||
+      (
+        authMethod ===
+          'password'
+        &&
+        !sessionId
+      )
+    ) {
+
+      throw new Error(
+        'Invalid Growth OS V3 session'
+      );
+
+    }
+
+
+    return {
+
+      sessionVersion:
+        3,
+
+      userId,
+
+      sessionId:
+        sessionId
+          ? sessionId
+          : undefined,
+
+      email:
+        email
+          ? email
+          : undefined,
+
+      workspaceId,
+
+      brandId,
+
+      role,
+
+      authMethod,
+
+      tenantId:
+        brandId,
+
+      authSource:
+        'public',
+
+    };
+
+  }
 
 
   if (

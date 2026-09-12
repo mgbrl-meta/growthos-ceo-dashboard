@@ -1,3 +1,12 @@
+import {
+  requireGrowthOSApiAccess,
+  runtimeAccessErrorResponse,
+} from '@/lib/auth/runtime-guard';
+
+import {
+  requireLegacyBrillareDataScope,
+} from '@/lib/tenancy/legacy-data-guard';
+
 import { NextResponse } from 'next/server';
 import { bigquery } from '@/lib/bigquery';
 
@@ -6,7 +15,46 @@ const DATASET = 'brillare_shopify';
 const SOURCE_TABLE = 'retention_learning_summary_tbl';
 const LOCATION = 'asia-southeast1';
 
-export async function GET() {
+export async function GET(req: Request) {
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        req
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const query = `
       SELECT *

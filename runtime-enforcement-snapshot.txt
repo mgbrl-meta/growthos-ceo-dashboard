@@ -1,0 +1,3908 @@
+===== EFFECTIVE ACCESS FILE =====
+import 'server-only';
+
+import type {
+  AuthIdentity,
+} from './request-auth';
+
+import {
+  getActiveBrandMembershipFast,
+} from './user-store';
+
+import {
+  getGrowthOSWorkspaceSubscriptionSnapshot,
+  listGrowthOSUserModulePermissionsFast,
+  listGrowthOSUserSubmodulePermissionsFast,
+} from '@/lib/admin/control-plane';
+
+import {
+  GROWTHOS_SUBMODULES,
+} from './submodule-registry';
+
+
+// ============================================================
+// EFFECTIVE ACCESS TYPES
+// ============================================================
+
+export type GrowthOSEffectivePermission =
+  | 'disabled'
+  | 'viewer'
+  | 'editor';
+
+
+export type GrowthOSConfiguredPermission =
+  | 'inherit'
+  | 'viewer'
+  | 'editor'
+  | 'disabled';
+
+
+export type GrowthOSEffectiveRole =
+  | 'owner'
+  | 'admin'
+  | 'analyst'
+  | 'viewer';
+
+
+export type GrowthOSEffectiveSubmoduleAccess = {
+
+  moduleId:
+    string;
+
+  submoduleId:
+    string;
+
+  label:
+    string;
+
+  configuredPermission:
+    GrowthOSConfiguredPermission |
+    null;
+
+  effectivePermission:
+    GrowthOSEffectivePermission;
+
+};
+
+
+export type GrowthOSEffectiveModuleAccess = {
+
+  moduleId:
+    string;
+
+  name:
+    string | null;
+
+  category:
+    string | null;
+
+  routeKey:
+    string | null;
+
+  moduleStatus:
+    string | null;
+
+  planEnabled:
+    boolean;
+
+  brandOverride:
+    string;
+
+  brandEnabled:
+    boolean;
+
+  configuredPermission:
+    GrowthOSConfiguredPermission |
+    null;
+
+  effectivePermission:
+    GrowthOSEffectivePermission;
+
+  submodules:
+    Record<
+      string,
+      GrowthOSEffectiveSubmoduleAccess
+    >;
+
+};
+
+
+export type GrowthOSEffectiveAccessSnapshot = {
+
+  userId:
+    string;
+
+  membershipId:
+    string;
+
+  workspaceId:
+    string;
+
+  brandId:
+    string;
+
+  role:
+    GrowthOSEffectiveRole;
+
+  subscriptionConfigured:
+    boolean;
+
+  planId:
+    string | null;
+
+  planName:
+    string | null;
+
+  modules:
+    Record<
+      string,
+      GrowthOSEffectiveModuleAccess
+    >;
+
+};
+
+
+// ============================================================
+// ACCESS RESOLUTION ERROR
+// ============================================================
+
+export class GrowthOSEffectiveAccessError
+  extends Error {
+
+  code:
+    string;
+
+
+  constructor(
+    code:
+      string,
+    message:
+      string
+  ) {
+
+    super(
+      message
+    );
+
+
+    this.name =
+      'GrowthOSEffectiveAccessError';
+
+
+    this.code =
+      code;
+
+  }
+
+}
+
+
+// ============================================================
+// PERMISSION RANK
+//
+// disabled = 0
+// viewer   = 1
+// editor   = 2
+//
+// This allows us to safely cap child permission to parent
+// permission.
+// ============================================================
+
+function permissionRank(
+  permission:
+    GrowthOSEffectivePermission
+) {
+
+  switch (
+    permission
+  ) {
+
+    case 'editor':
+
+      return 2;
+
+
+    case 'viewer':
+
+      return 1;
+
+
+    default:
+
+      return 0;
+
+  }
+
+}
+
+
+// ============================================================
+// MINIMUM / CAPPED PERMISSION
+// ============================================================
+
+function capPermission(
+
+  requested:
+    GrowthOSEffectivePermission,
+
+  maximum:
+    GrowthOSEffectivePermission
+
+):
+  GrowthOSEffectivePermission {
+
+  return (
+    permissionRank(
+      requested
+    )
+    <=
+    permissionRank(
+      maximum
+    )
+  )
+
+    ? requested
+
+    : maximum;
+
+}
+
+
+// ============================================================
+// NORMALIZE CONFIGURED PERMISSION
+//
+// Unknown database values fail closed.
+// ============================================================
+
+function normalizeConfiguredPermission(
+  value:
+    unknown
+):
+  GrowthOSConfiguredPermission |
+  null {
+
+  if (
+    value ===
+      'inherit'
+    ||
+    value ===
+      'viewer'
+    ||
+    value ===
+      'editor'
+    ||
+    value ===
+      'disabled'
+  ) {
+
+    return value;
+
+  }
+
+
+  return null;
+
+}
+
+
+// ============================================================
+// NORMALIZE ROLE
+//
+// Unknown roles fail to viewer.
+// ============================================================
+
+function normalizeRole(
+  value:
+    unknown
+):
+  GrowthOSEffectiveRole {
+
+  if (
+    value ===
+      'owner'
+    ||
+    value ===
+      'admin'
+    ||
+    value ===
+      'analyst'
+    ||
+    value ===
+      'viewer'
+  ) {
+
+    return value;
+
+  }
+
+
+  return 'viewer';
+
+}
+
+
+// ============================================================
+// ROLE DEFAULT
+//
+// Mirrors the provisioning rules already used by Settings:
+//
+// viewer:
+//   viewer
+//
+// analyst/admin/owner:
+//   editor
+//
+// IMPORTANT:
+//
+// This applies ONLY when an explicit permission row says
+// "inherit".
+//
+// Missing permission row does NOT inherit.
+//
+// Missing row = disabled.
+//
+// This is intentionally fail-closed.
+// ============================================================
+
+function roleDefaultPermission(
+  role:
+    GrowthOSEffectiveRole
+):
+  GrowthOSEffectivePermission {
+
+  if (
+    role ===
+      'viewer'
+  ) {
+
+    return 'viewer';
+
+  }
+
+
+  return 'editor';
+
+}
+
+
+// ============================================================
+// RESOLVE MODULE PERMISSION
+// ============================================================
+
+function resolveModulePermission({
+
+  brandEnabled,
+
+  configuredPermission,
+
+  role,
+
+}: {
+
+  brandEnabled:
+    boolean;
+
+  configuredPermission:
+    GrowthOSConfiguredPermission |
+    null;
+
+  role:
+    GrowthOSEffectiveRole;
+
+}):
+  GrowthOSEffectivePermission {
+
+
+  // ----------------------------------------------------------
+  // COMMERCIAL / BRAND ENTITLEMENT ALWAYS WINS
+  // ----------------------------------------------------------
+
+  if (
+    !brandEnabled
+  ) {
+
+    return 'disabled';
+
+  }
+
+
+  // ----------------------------------------------------------
+  // FAIL CLOSED
+  //
+  // No explicit user module permission row.
+  // ----------------------------------------------------------
+
+  if (
+    !configuredPermission
+  ) {
+
+    return 'disabled';
+
+  }
+
+
+  switch (
+    configuredPermission
+  ) {
+
+    case 'disabled':
+
+      return 'disabled';
+
+
+    case 'viewer':
+
+      return 'viewer';
+
+
+    case 'editor':
+
+      return 'editor';
+
+
+    case 'inherit':
+
+      return roleDefaultPermission(
+        role
+      );
+
+
+    default:
+
+      return 'disabled';
+
+  }
+
+}
+
+
+// ============================================================
+// RESOLVE SUBMODULE PERMISSION
+// ============================================================
+
+function resolveSubmodulePermission({
+
+  parentPermission,
+
+  configuredPermission,
+
+}: {
+
+  parentPermission:
+    GrowthOSEffectivePermission;
+
+  configuredPermission:
+    GrowthOSConfiguredPermission |
+    null;
+
+}):
+  GrowthOSEffectivePermission {
+
+
+  // ----------------------------------------------------------
+  // CHILD CAN NEVER BYPASS DISABLED PARENT
+  // ----------------------------------------------------------
+
+  if (
+    parentPermission ===
+      'disabled'
+  ) {
+
+    return 'disabled';
+
+  }
+
+
+  // ----------------------------------------------------------
+  // FAIL CLOSED
+  //
+  // Missing explicit submodule permission row.
+  // ----------------------------------------------------------
+
+  if (
+    !configuredPermission
+  ) {
+
+    return 'disabled';
+
+  }
+
+
+  switch (
+    configuredPermission
+  ) {
+
+    case 'disabled':
+
+      return 'disabled';
+
+
+    case 'inherit':
+
+      return parentPermission;
+
+
+    case 'viewer':
+
+      return capPermission(
+        'viewer',
+        parentPermission
+      );
+
+
+    case 'editor':
+
+      return capPermission(
+        'editor',
+        parentPermission
+      );
+
+
+    default:
+
+      return 'disabled';
+
+  }
+
+}
+
+
+// ============================================================
+// RESOLVE EFFECTIVE ACCESS
+//
+// This is the canonical Growth OS authorization resolver.
+//
+// Input:
+//
+// authenticated request identity
+//
+// Resolution:
+//
+// active membership
+//      ↓
+// subscription / plan entitlement
+//      ↓
+// brand module override
+//      ↓
+// user module permission
+//      ↓
+// user submodule permission
+//      ↓
+// EFFECTIVE ACCESS
+//
+// SECURITY:
+//
+// Missing permission rows fail closed.
+// Child permission can never exceed parent permission.
+// User permission can never bypass commercial entitlement.
+// ============================================================
+
+export async function resolveGrowthOSEffectiveAccess(
+  identity:
+    AuthIdentity
+):
+
+  Promise<
+    GrowthOSEffectiveAccessSnapshot
+  > {
+
+  // ==========================================================
+  // 1. NORMALIZE AUTHENTICATED TENANT
+  // ==========================================================
+
+  const userId =
+    String(
+      identity.userId
+      ||
+      ''
+    ).trim();
+
+
+  const workspaceId =
+    String(
+      identity.workspaceId
+      ||
+      ''
+    ).trim();
+
+
+  const brandId =
+    String(
+      identity.brandId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !userId
+  ) {
+
+    throw new GrowthOSEffectiveAccessError(
+      'USER_REQUIRED',
+      'Authenticated user is required'
+    );
+
+  }
+
+
+  if (
+    !workspaceId
+    ||
+    !brandId
+  ) {
+
+    throw new GrowthOSEffectiveAccessError(
+      'ACTIVE_BRAND_REQUIRED',
+      'Active workspace and brand are required'
+    );
+
+  }
+
+
+  // ==========================================================
+  // 2. LIVE ACTIVE MEMBERSHIP
+  //
+  // authenticateRequest() already performs this for password
+  // sessions.
+  //
+  // We intentionally perform the lookup again here because:
+  //
+  // - resolver needs membership_id
+  // - authorization remains self-contained
+  // - permission-sensitive calls fail closed
+  //
+  // We can remove the duplicate lookup later by adding
+  // membershipId to AuthIdentity if profiling shows value.
+  // ==========================================================
+
+  const membership =
+    await getActiveBrandMembershipFast(
+      userId,
+      workspaceId,
+      brandId
+    );
+
+
+  if (!membership) {
+
+    throw new GrowthOSEffectiveAccessError(
+      'ACTIVE_MEMBERSHIP_REQUIRED',
+      'Active Growth OS membership is required'
+    );
+
+  }
+
+
+  const membershipId =
+    String(
+      membership.membership_id
+      ||
+      ''
+    ).trim();
+
+
+  if (!membershipId) {
+
+    throw new GrowthOSEffectiveAccessError(
+      'MEMBERSHIP_ID_REQUIRED',
+      'Active Growth OS membership could not be resolved'
+    );
+
+  }
+
+
+  const role =
+    normalizeRole(
+      membership.role
+    );
+
+
+  // ==========================================================
+  // 3. LOAD CONTROL-PLANE ACCESS INPUTS
+  // ==========================================================
+
+  const [
+    subscription,
+    modulePermissions,
+    submodulePermissions,
+  ] =
+    await Promise.all([
+
+      getGrowthOSWorkspaceSubscriptionSnapshot(
+        workspaceId,
+        brandId
+      ),
+
+      listGrowthOSUserModulePermissionsFast(
+        membershipId
+      ),
+
+      listGrowthOSUserSubmodulePermissionsFast(
+        membershipId
+      ),
+
+    ]);
+
+
+  // ==========================================================
+  // 4. PERMISSION LOOKUPS
+  // ==========================================================
+
+  const modulePermissionMap =
+    new Map<
+      string,
+      GrowthOSConfiguredPermission
+    >();
+
+
+  for (
+    const permission
+    of modulePermissions
+  ) {
+
+    const moduleId =
+      String(
+        permission.module_id
+        ||
+        ''
+      ).trim();
+
+
+    const normalizedPermission =
+      normalizeConfiguredPermission(
+        permission.permission
+      );
+
+
+    if (
+      moduleId
+      &&
+      normalizedPermission
+    ) {
+
+      modulePermissionMap.set(
+        moduleId,
+        normalizedPermission
+      );
+
+    }
+
+  }
+
+
+  const submodulePermissionMap =
+    new Map<
+      string,
+      GrowthOSConfiguredPermission
+    >();
+
+
+  for (
+    const permission
+    of submodulePermissions
+  ) {
+
+    const moduleId =
+      String(
+        permission.module_id
+        ||
+        ''
+      ).trim();
+
+
+    const submoduleId =
+      String(
+        permission.submodule_id
+        ||
+        ''
+      ).trim();
+
+
+    const normalizedPermission =
+      normalizeConfiguredPermission(
+        permission.permission
+      );
+
+
+    if (
+      moduleId
+      &&
+      submoduleId
+      &&
+      normalizedPermission
+    ) {
+
+      submodulePermissionMap.set(
+        `${moduleId}:${submoduleId}`,
+        normalizedPermission
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // 5. RESOLVE MODULES
+  // ==========================================================
+
+  const resolvedModules:
+    Record<
+      string,
+      GrowthOSEffectiveModuleAccess
+    > = {};
+
+
+  for (
+    const module
+    of (
+      subscription.modules
+      ||
+      []
+    )
+  ) {
+
+    const moduleId =
+      String(
+        module.moduleId
+        ||
+        ''
+      ).trim();
+
+
+    if (!moduleId) {
+
+      continue;
+
+    }
+
+
+    // --------------------------------------------------------
+    // BRAND ENTITLEMENT
+    //
+    // subscription snapshot already resolves:
+    //
+    // plan entitlement
+    // +
+    // brand module override
+    //
+    // We still require active catalog status.
+    // --------------------------------------------------------
+
+    const brandEnabled =
+      Boolean(
+        module.enabled
+      )
+      &&
+      module.status ===
+        'active';
+
+
+    const configuredPermission =
+      modulePermissionMap.get(
+        moduleId
+      )
+      ??
+      null;
+
+
+    const effectivePermission =
+      resolveModulePermission({
+
+        brandEnabled,
+
+        configuredPermission,
+
+        role,
+
+      });
+
+
+    // ========================================================
+    // SUBMODULES
+    // ========================================================
+
+    const resolvedSubmodules:
+      Record<
+        string,
+        GrowthOSEffectiveSubmoduleAccess
+      > = {};
+
+
+    const canonicalSubmodules =
+      GROWTHOS_SUBMODULES.filter(
+        submodule =>
+          submodule.moduleId ===
+            moduleId
+      );
+
+
+    for (
+      const submodule
+      of canonicalSubmodules
+    ) {
+
+      const key =
+        `${moduleId}:${submodule.submoduleId}`;
+
+
+      const configuredSubmodulePermission =
+        submodulePermissionMap.get(
+          key
+        )
+        ??
+        null;
+
+
+      const effectiveSubmodulePermission =
+        resolveSubmodulePermission({
+
+          parentPermission:
+            effectivePermission,
+
+          configuredPermission:
+            configuredSubmodulePermission,
+
+        });
+
+
+      resolvedSubmodules[
+        submodule.submoduleId
+      ] = {
+
+        moduleId,
+
+        submoduleId:
+          submodule.submoduleId,
+
+        label:
+          submodule.label,
+
+        configuredPermission:
+          configuredSubmodulePermission,
+
+        effectivePermission:
+          effectiveSubmodulePermission,
+
+      };
+
+    }
+
+
+    resolvedModules[
+      moduleId
+    ] = {
+
+      moduleId,
+
+      name:
+        module.name
+        ??
+        null,
+
+      category:
+        module.category
+        ??
+        null,
+
+      routeKey:
+        module.routeKey
+        ??
+        null,
+
+      moduleStatus:
+        module.status
+        ??
+        null,
+
+      planEnabled:
+        Boolean(
+          module.planEnabled
+        ),
+
+      brandOverride:
+        String(
+          module.brandOverride
+          ||
+          'default'
+        ),
+
+      brandEnabled,
+
+      configuredPermission,
+
+      effectivePermission,
+
+      submodules:
+        resolvedSubmodules,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // 6. SNAPSHOT
+  // ==========================================================
+
+  return {
+
+    userId,
+
+    membershipId,
+
+    workspaceId,
+
+    brandId,
+
+    role,
+
+    subscriptionConfigured:
+      Boolean(
+        subscription.configured
+      ),
+
+    planId:
+      subscription.plan?.planId
+      ??
+      null,
+
+    planName:
+      subscription.plan?.name
+      ??
+      null,
+
+    modules:
+      resolvedModules,
+
+  };
+
+}
+
+
+// ============================================================
+// GET MODULE PERMISSION
+//
+// Unknown module = disabled.
+// ============================================================
+
+export function getGrowthOSEffectiveModulePermission(
+
+  access:
+    GrowthOSEffectiveAccessSnapshot,
+
+  moduleId:
+    string
+
+):
+  GrowthOSEffectivePermission {
+
+  const normalizedModuleId =
+    String(
+      moduleId
+      ||
+      ''
+    ).trim();
+
+
+  if (!normalizedModuleId) {
+
+    return 'disabled';
+
+  }
+
+
+  return (
+    access.modules[
+      normalizedModuleId
+    ]?.effectivePermission
+    ??
+    'disabled'
+  );
+
+}
+
+
+// ============================================================
+// GET SUBMODULE PERMISSION
+//
+// Unknown module/submodule = disabled.
+// ============================================================
+
+export function getGrowthOSEffectiveSubmodulePermission(
+
+  access:
+    GrowthOSEffectiveAccessSnapshot,
+
+  moduleId:
+    string,
+
+  submoduleId:
+    string
+
+):
+  GrowthOSEffectivePermission {
+
+  const normalizedModuleId =
+    String(
+      moduleId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedSubmoduleId =
+    String(
+      submoduleId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !normalizedModuleId
+    ||
+    !normalizedSubmoduleId
+  ) {
+
+    return 'disabled';
+
+  }
+
+
+  return (
+    access.modules[
+      normalizedModuleId
+    ]
+      ?.submodules[
+        normalizedSubmoduleId
+      ]
+      ?.effectivePermission
+    ??
+    'disabled'
+  );
+
+}
+
+
+// ============================================================
+// CHECK ACCESS
+//
+// required:
+// viewer → viewer OR editor passes
+// editor → editor only
+// ============================================================
+
+export function hasGrowthOSAccess({
+
+  access,
+
+  moduleId,
+
+  submoduleId,
+
+  required =
+    'viewer',
+
+}: {
+
+  access:
+    GrowthOSEffectiveAccessSnapshot;
+
+  moduleId:
+    string;
+
+  submoduleId?:
+    string;
+
+  required?:
+    Exclude<
+      GrowthOSEffectivePermission,
+      'disabled'
+    >;
+
+}) {
+
+  const actualPermission =
+    submoduleId
+
+      ? getGrowthOSEffectiveSubmodulePermission(
+          access,
+          moduleId,
+          submoduleId
+        )
+
+      : getGrowthOSEffectiveModulePermission(
+          access,
+          moduleId
+        );
+
+
+  return (
+    permissionRank(
+      actualPermission
+    )
+    >=
+    permissionRank(
+      required
+    )
+  );
+
+}
+
+===== REQUEST AUTH =====
+import 'server-only';
+
+import type {
+  NextRequest,
+} from 'next/server';
+
+import {
+  SESSION_COOKIE_NAME,
+} from './config';
+
+import {
+  verifyGrowthOsSession,
+  type GrowthOsSessionRole,
+  type GrowthOsSessionAuthMethod,
+} from './session';
+
+import {
+  getBearerToken,
+  verifyShopifyIdToken,
+} from './shopify';
+
+import {
+  getActiveBrandMembershipFast,
+} from './user-store';
+
+
+// ============================================================
+// AUTH IDENTITY
+//
+// Canonical request identity.
+//
+// Public/password sessions now carry:
+//
+// workspaceId
+// brandId
+// role
+// authMethod
+//
+// Shopify bearer authentication remains supported while we
+// migrate it to dynamic integration-account resolution in
+// AUTH 5.
+// ============================================================
+
+export type AuthIdentity = {
+
+  authSource:
+    'shopify'
+    |
+    'public';
+
+  userId:
+    string;
+
+  email?:
+    string;
+
+  // ----------------------------------------------------------
+  // CURRENT ACTIVE GROWTH OS CONTEXT
+  // ----------------------------------------------------------
+
+  workspaceId?:
+    string;
+
+  brandId?:
+    string;
+
+  role?:
+    GrowthOsSessionRole;
+
+  authMethod?:
+    GrowthOsSessionAuthMethod;
+
+  // ----------------------------------------------------------
+  // TEMPORARY LEGACY COMPATIBILITY
+  // ----------------------------------------------------------
+
+  tenantId:
+    string;
+
+  // ----------------------------------------------------------
+  // SHOPIFY IDENTITY
+  // ----------------------------------------------------------
+
+  shopId?:
+    string;
+
+  shopDomain?:
+    string;
+
+  sessionId?:
+    string;
+
+};
+
+
+// ============================================================
+// AUTHENTICATE
+//
+// Priority:
+//
+// Shopify Bearer token
+//        ↓
+// Growth OS signed session cookie
+// ============================================================
+
+export async function authenticateRequest(
+  request: NextRequest
+):
+
+  Promise<
+    AuthIdentity | null
+  > {
+
+
+  // ==========================================================
+  // 1. SHOPIFY ADMIN AUTH
+  //
+  // AUTH 5 will replace its remaining legacy tenant lookup
+  // with integration_accounts.
+  // ==========================================================
+
+  const bearerToken =
+    getBearerToken(
+      request.headers.get(
+        'authorization'
+      )
+    );
+
+
+  if (bearerToken) {
+
+    try {
+
+      const identity =
+        await verifyShopifyIdToken(
+          bearerToken
+        );
+
+
+      return {
+
+        authSource:
+          'shopify',
+
+        userId:
+          identity.userId,
+
+        tenantId:
+          identity.tenantId,
+
+        authMethod:
+          'shopify',
+
+        shopId:
+          identity.shopId,
+
+        shopDomain:
+          identity.shopDomain,
+
+        sessionId:
+          identity.sessionId,
+
+      };
+
+    } catch (
+      error
+    ) {
+
+      console.error(
+        'SHOPIFY_REQUEST_AUTH_FAILED',
+        error
+      );
+
+
+      return null;
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // 2. GROWTH OS SESSION COOKIE
+  // ==========================================================
+
+  const sessionToken =
+    request
+      .cookies
+      .get(
+        SESSION_COOKIE_NAME
+      )
+      ?.value;
+
+
+  if (!sessionToken) {
+
+    return null;
+
+  }
+
+
+  try {
+
+  const session =
+  await verifyGrowthOsSession(
+    sessionToken
+  );
+
+
+// ==========================================================
+// SHOPIFY-LAUNCHED GROWTH OS SESSION
+//
+// Shopify installation sessions use a synthetic Shopify user
+// identity and do not require a normal brand_memberships row.
+// ==========================================================
+
+if (
+  session.authMethod ===
+    'shopify'
+) {
+
+  return {
+
+    authSource:
+      'public',
+
+    userId:
+      session.userId,
+
+    email:
+      session.email,
+
+    workspaceId:
+      session.workspaceId,
+
+    brandId:
+      session.brandId,
+
+    role:
+      session.role,
+
+    authMethod:
+      session.authMethod,
+
+    tenantId:
+      session.tenantId,
+
+  };
+
+}
+
+
+// ==========================================================
+// PASSWORD SESSION → LIVE ACCESS CHECK
+//
+// Session proves identity.
+//
+// Control plane proves CURRENT authorization.
+// ==========================================================
+
+const membership =
+  await getActiveBrandMembershipFast(
+
+    session.userId,
+
+    session.workspaceId,
+
+    session.brandId
+
+  );
+
+
+if (!membership) {
+
+  return null;
+
+}
+
+
+// ==========================================================
+// RETURN LIVE ROLE
+//
+// Do NOT trust session.role because it may have changed since
+// login.
+// ==========================================================
+
+return {
+
+  authSource:
+    'public',
+
+  userId:
+    session.userId,
+
+  email:
+    session.email,
+
+  workspaceId:
+    membership.workspace_id,
+
+  brandId:
+    membership.brand_id,
+
+  role:
+    membership.role,
+
+  authMethod:
+    session.authMethod,
+
+  tenantId:
+    session.tenantId,
+
+};
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      'PUBLIC_REQUEST_AUTH_FAILED',
+      error
+    );
+
+
+    return null;
+
+  }
+
+}
+
+
+// ============================================================
+// REQUIRE AUTH
+// ============================================================
+
+export async function requireRequestAuth(
+  request: NextRequest
+):
+
+  Promise<
+    AuthIdentity
+  > {
+
+  const identity =
+    await authenticateRequest(
+      request
+    );
+
+
+  if (!identity) {
+
+    throw new Error(
+      'UNAUTHENTICATED'
+    );
+
+  }
+
+
+  return identity;
+
+}
+
+===== APP SIDEBAR TYPES / NAVIGATION =====
+'use client';
+
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+
+import {
+  ChevronDown,
+  CircleGauge,
+  GitBranch,
+  Megaphone,
+  PackageSearch,
+  Repeat2,
+  Search,
+  Settings,
+} from 'lucide-react';
+
+import {
+  getGrowthOSSubmodules,
+} from '@/lib/auth/submodule-registry';
+
+
+// ============================================================
+// TYPES
+// ============================================================
+
+type Props = {
+
+  activeTab:
+    string;
+
+  activeSubTabs:
+    Record<
+      string,
+      string
+    >;
+
+  setActiveTab:
+    (
+      tab:
+        string
+    ) => void;
+
+  setActiveSubTab:
+    (
+      module:
+        string,
+      subTab:
+        string
+    ) => void;
+
+  // ----------------------------------------------------------
+  // TRUE  = fixed sidebar
+  // FALSE = cursor / hover sidebar
+  // ----------------------------------------------------------
+
+  sidebarOpen:
+    boolean;
+
+  setSidebarOpen:
+    (
+      open:
+        boolean
+    ) => void;
+
+};
+
+
+type NavigationItem = {
+
+  name:
+    string;
+
+  label:
+    string;
+
+  icon:
+    typeof CircleGauge;
+
+  // ----------------------------------------------------------
+  // Static module identity only.
+  //
+  // IMPORTANT:
+  // AppSidebar does NOT calculate entitlement.
+  //
+  // This ID will later be matched against the access response
+  // coming from the server/control plane.
+  // ----------------------------------------------------------
+
+  moduleId:
+    string |
+    null;
+
+  children:
+    string[];
+
+};
+
+
+type NavigationGroup = {
+
+  label:
+    string;
+
+  items:
+    NavigationItem[];
+
+};
+
+
+// ============================================================
+// PERSONAL SIDEBAR PREFERENCE
+// ============================================================
+
+const SIDEBAR_MODE_KEY =
+  'growth_os_sidebar_mode_v1';
+
+
+// ============================================================
+// NAVIGATION
+//
+// IMPORTANT:
+//
+// Module identity is defined here.
+//
+// Submodule identity / labels come from:
+//
+// lib/auth/submodule-registry.ts
+//
+// Therefore AppSidebar no longer maintains a duplicate
+// hardcoded submodule catalog.
+// ============================================================
+
+const groups:
+  NavigationGroup[] = [
+
+
+  // ==========================================================
+  // WORKSPACE
+  // ==========================================================
+
+  {
+
+    label:
+      'Workspace',
+
+    items: [
+
+      {
+
+        name:
+          'CEO Summary',
+
+        label:
+          'Command Center',
+
+        icon:
+          CircleGauge,
+
+        moduleId:
+          'command-center',
+
+        children:
+          [],
+
+      },
+
+    ],
+
+  },
+
+
+  // ==========================================================
+  // GROWTH
+  // ==========================================================
+
+  {
+
+    label:
+      'Growth',
+
+    items: [
+
+      {
+
+        name:
+          'Meta OS',
+
+        label:
+          'Meta',
+
+        icon:
+          Megaphone,
+
+        moduleId:
+          'meta',
+
+        children:
+          getGrowthOSSubmodules(
+            'meta'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
+
+      {
+
+        name:
+          'Google OS',
+
+        label:
+          'Google',
+
+        icon:
+          Search,
+
+        moduleId:
+          'google',
+
+        children:
+          getGrowthOSSubmodules(
+            'google'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
+
+      {
+
+        name:
+          'Attribution OS',
+
+        label:
+          'Attribution',
+
+        icon:
+          GitBranch,
+
+        moduleId:
+          'attribution',
+
+        children:
+          getGrowthOSSubmodules(
+            'attribution'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
+    ],
+
+  },
+
+
+  // ==========================================================
+  // CUSTOMERS
+  // ==========================================================
+
+  {
+
+    label:
+      'Customers',
+
+    items: [
+
+      {
+
+        name:
+          'Retention OS',
+
+        label:
+          'Retention',
+
+        icon:
+          Repeat2,
+
+        moduleId:
+          'retention',
+
+        children:
+          getGrowthOSSubmodules(
+            'retention'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
+    ],
+
+  },
+
+
+  // ==========================================================
+  // COMMERCE
+  // ==========================================================
+
+  {
+
+    label:
+      'Commerce',
+
+    items: [
+
+      {
+
+        name:
+          'Product OS',
+
+        label:
+          'Product',
+
+        icon:
+          PackageSearch,
+
+        moduleId:
+          'product',
+
+        children:
+          getGrowthOSSubmodules(
+            'product'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
+    ],
+
+  },
+
+];
+
+
+// ============================================================
+// MAIN
+// ============================================================
+
+export default function AppSidebar({
+
+  activeTab,
+
+  activeSubTabs,
+
+  setActiveTab,
+
+  setActiveSubTab,
+
+  sidebarOpen,
+
+  setSidebarOpen,
+
+}: Props) {
+
+
+  // ==========================================================
+  // HOVER STATE
+  // ==========================================================
+
+  const [
+    hovered,
+    setHovered,
+  ] =
+    useState(
+      false
+    );
+
+
+  const openTimer =
+    useRef<
+      ReturnType<
+        typeof setTimeout
+      >
+      |
+      null
+    >(
+      null
+    );
+
+===== APP SIDEBAR RENDERING =====
+                  {/* =========================================
+                      GROUP LABEL
+                  ========================================= */}
+
+                  <div
+                    className={`
+                      mb-2
+                      h-[12px]
+
+                      whitespace-nowrap
+
+                      px-3
+
+                      text-[9px]
+                      font-bold
+                      uppercase
+                      tracking-[0.17em]
+
+                      text-slate-600
+
+                      transition-opacity
+                      duration-150
+
+                      ${
+                        expanded
+
+                          ? 'opacity-100'
+
+                          : 'opacity-0'
+                      }
+                    `}
+                  >
+                    {group.label}
+                  </div>
+
+
+                  {/* =========================================
+                      ITEMS
+                  ========================================= */}
+
+                  <div className="space-y-1">
+
+                    {group.items.map(
+                      item => {
+
+                        const Icon =
+                          item.icon;
+
+
+                        const active =
+                          activeTab ===
+                            item.name;
+
+
+                        const activeSubTab =
+                          activeSubTabs[
+                            item.name
+                          ];
+
+
+                        return (
+
+                          <div
+                            key={
+                              item.name
+                            }
+                          >
+
+
+                            {/* =================================
+                                MODULE BUTTON
+                            ================================= */}
+
+                            <button
+
+                              type="button"
+
+                              title={
+                                item.label
+                              }
+
+                              onClick={() =>
+                                selectModule(
+                                  item.name
+                                )
+                              }
+
+                              className={`
+                                flex
+                                h-[34px]
+                                w-full
+                                items-center
+
+                                rounded-xl
+
+                                transition-all
+                                duration-150
+
+                                ${
+                                  expanded
+
+                                    ? `
+                                      gap-3
+                                      px-3
+                                    `
+
+                                    : `
+                                      justify-center
+                                    `
+                                }
+
+                                ${
+                                  active
+
+                                    ? `
+                                      bg-white
+
+                                      text-slate-950
+
+                                      shadow-sm
+                                    `
+
+                                    : `
+                                      text-slate-400
+
+                                      hover:bg-white/[0.06]
+                                      hover:text-white
+                                    `
+                                }
+                              `}
+                            >
+
+                              <Icon
+
+                                size={
+                                  16
+                                }
+
+                                strokeWidth={
+                                  active
+
+                                    ? 2.3
+
+                                    : 1.8
+                                }
+
+                                className="shrink-0"
+
+                              />
+
+
+                              {expanded && (
+
+                                <>
+
+                                  <span
+                                    className="
+                                      min-w-0
+                                      flex-1
+
+                                      truncate
+
+                                      text-left
+                                      text-[12px]
+                                      font-semibold
+                                    "
+                                  >
+                                    {item.label}
+                                  </span>
+
+
+                                  {item.children.length >
+                                    0 && (
+
+                                    <ChevronDown
+
+                                      size={
+                                        13
+                                      }
+
+                                      className={`
+                                        shrink-0
+
+                                        transition-transform
+                                        duration-150
+
+                                        ${
+                                          active
+
+                                            ? 'rotate-180'
+
+                                            : ''
+                                        }
+                                      `}
+
+                                    />
+
+                                  )}
+
+                                </>
+
+                              )}
+
+                            </button>
+
+
+                            {/* =================================
+                                SUB NAVIGATION
+                            ================================= */}
+
+                            {expanded
+                              &&
+                              active
+                              &&
+                              item.children.length >
+                                0 && (
+
+                              <div
+                                className="
+                                  ml-[22px]
+                                  mt-1
+
+                                  border-l
+                                  border-white/10
+
+                                  pl-3
+                                "
+                              >
+
+                                <div className="space-y-0.5">
+
+                                  {item.children.map(
+                                    subTab => {
+
+                                      const selected =
+                                        activeSubTab ===
+                                          subTab;
+
+
+                                      return (
+
+                                        <button
+
+                                          key={
+                                            subTab
+                                          }
+
+                                          type="button"
+
+                                          onClick={() =>
+                                            setActiveSubTab(
+                                              item.name,
+                                              subTab
+                                            )
+                                          }
+
+                                          className={`
+                                            relative
+
+                                            flex
+                                            min-h-[28px]
+                                            w-full
+                                            items-center
+
+                                            rounded-lg
+
+                                            px-2.5
+                                            py-1.5
+
+                                            text-left
+                                            text-[10px]
+                                            font-medium
+
+                                            transition-colors
+                                            duration-150
+
+                                            ${
+                                              selected
+
+                                                ? `
+                                                  bg-white/[0.08]
+
+                                                  text-white
+                                                `
+
+                                                : `
+                                                  text-slate-500
+
+                                                  hover:bg-white/[0.04]
+                                                  hover:text-slate-200
+                                                `
+                                            }
+                                          `}
+                                        >
+
+                                          {selected && (
+
+                                            <span
+                                              className="
+                                                absolute
+
+                                                -left-[13px]
+
+                                                h-4
+                                                w-[2px]
+
+                                                rounded-full
+
+                                                bg-violet-400
+                                              "
+                                            />
+
+                                          )}
+
+
+                                          {subTab}
+
+                                        </button>
+
+                                      );
+
+                                    }
+                                  )}
+
+                                </div>
+
+                              </div>
+
+                            )}
+
+                          </div>
+
+                        );
+
+                      }
+                    )}
+
+                  </div>
+
+                </div>
+
+              )
+            )}
+
+          </div>
+
+
+          {/* =================================================
+              PERSONAL SETTINGS
+          ================================================= */}
+
+          <div
+            className="
+              shrink-0
+
+              border-t
+              border-white/5
+
+              p-2
+            "
+
+===== DASHBOARD STATE =====
+'use client';
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import DateControl
+  from './DateControl';
+
+import CeoSummary
+  from './CeoSummary';
+
+import GoogleOS
+  from './GoogleOS';
+
+import MetaOS
+  from './MetaOS';
+
+import ProductOS
+  from './ProductOS';
+
+import RetentionOS
+  from './RetentionOS';
+
+import AttributionOS
+  from './AttributionOS';
+
+import AppSidebar
+  from './AppSidebar';
+
+import AppHeader
+  from './AppHeader';
+
+import GrowthSettings
+  from './settings/GrowthSettings';
+
+import {
+  Activity,
+  History,
+} from 'lucide-react';
+
+
+type Row = any;
+
+
+/* ============================================================
+   HELPERS
+============================================================ */
+
+const pctChange = (
+  current: number,
+  previous: number
+) => {
+
+  if (
+    !previous ||
+    previous === 0
+  ) {
+
+    return 0;
+
+  }
+
+
+  return (
+    (
+      Number(
+        current || 0
+      )
+      -
+      Number(
+        previous || 0
+      )
+    )
+    /
+    Number(
+      previous || 0
+    )
+  ) * 100;
+
+};
+
+
+const safeDivide = (
+  a: any,
+  b: any
+) => {
+
+  const numerator =
+    Number(
+      a || 0
+    );
+
+
+  const denominator =
+    Number(
+      b || 0
+    );
+
+
+  if (!denominator) {
+
+    return 0;
+
+  }
+
+
+  return (
+    numerator /
+    denominator
+  );
+
+};
+
+
+const sum = (
+  rows: Row[],
+  key: string
+) => {
+
+  return rows.reduce(
+    (
+      total,
+      row
+    ) =>
+      total
+      +
+      Number(
+        row?.[key] || 0
+      ),
+    0
+  );
+
+};
+
+
+/* ============================================================
+   DASHBOARD
+============================================================ */
+
+export default function GrowthOSDashboard() {
+
+
+  /* ==========================================================
+     DATE FORMATTER
+  ========================================================== */
+
+  const formatDate = (
+    date: Date
+  ) =>
+    date
+      .toISOString()
+      .split('T')[0];
+
+
+  /* ==========================================================
+     GLOBAL NAVIGATION
+  ========================================================== */
+
+  const [
+    activeTab,
+    setActiveTab,
+  ] = useState(
+    'CEO Summary'
+  );
+
+
+  /* ==========================================================
+     SUBTAB STATE
+
+     Each OS remembers where the user was.
+  ========================================================== */
+
+  const [
+    activeSubTabs,
+    setActiveSubTabs,
+  ] = useState<
+    Record<
+      string,
+      string
+    >
+  >({
+
+    'Meta OS':
+      'Settings',
+
+    'Google OS':
+      'Settings',
+
+    'Attribution OS':
+      'Overview',
+
+    'Retention OS':
+      'Mission Control',
+
+    'Product OS':
+      'Overview',
+
+  });
+
+
+  const setActiveSubTab = (
+    module: string,
+    subTab: string
+  ) => {
+
+    setActiveSubTabs(
+      previous => ({
+
+        ...previous,
+
+        [module]:
+          subTab,
+
+      })
+    );
+
+  };
+
+
+  /* ==========================================================
+     SIDEBAR
+  ========================================================== */
+
+  const [
+    sidebarOpen,
+    setSidebarOpen,
+  ] = useState(
+    false
+  );
+
+
+  /* ==========================================================
+     INITIAL DATE RANGE
+
+     Default = Last 30 Days
+  ========================================================== */
+
+  const initialEndDate =
+    new Date();
+
+
+  const initialStartDate =
+    new Date();
+
+
+  initialStartDate.setDate(
+    initialEndDate.getDate()
+    -
+    29
+  );
+
+
+  const initialCompareEndDate =
+    new Date(
+      initialStartDate
+    );
+
+
+  initialCompareEndDate.setDate(
+    initialStartDate.getDate()
+    -
+    1
+  );
+
+
+  const initialCompareStartDate =
+    new Date(
+
+===== DASHBOARD SIDEBAR WIRING =====
+        data,
+        compareData,
+      ]
+    );
+
+
+  /* ==========================================================
+     DATE CONTROL VISIBILITY
+
+     Date controls belong on analytical OS pages.
+     They are not required on platform administration pages.
+  ========================================================== */
+
+  const showDateControl =
+    [
+
+      'CEO Summary',
+      'Meta OS',
+      'Google OS',
+      'Attribution OS',
+      'Retention OS',
+      'Product OS',
+
+    ].includes(
+      activeTab
+    );
+
+
+  /* ==========================================================
+     UI
+  ========================================================== */
+
+  return (
+
+    <main className="min-h-screen bg-[#f5f6f8]">
+
+
+      <div className="flex min-h-screen">
+
+
+        {/* ====================================================
+            GLOBAL SIDEBAR
+        ==================================================== */}
+
+        <AppSidebar
+
+          activeTab={
+            activeTab
+          }
+
+          activeSubTabs={
+            activeSubTabs
+          }
+
+          setActiveTab={
+            setActiveTab
+          }
+
+          setActiveSubTab={
+            setActiveSubTab
+          }
+
+          sidebarOpen={
+            sidebarOpen
+          }
+
+          setSidebarOpen={
+            setSidebarOpen
+          }
+
+        />
+
+
+        {/* ====================================================
+            APPLICATION
+        ==================================================== */}
+
+        <section className="min-w-0 flex-1">
+
+
+          {/* ==================================================
+              GLOBAL HEADER
+          ================================================== */}
+
+          <AppHeader
+
+            activeTab={
+              activeTab
+            }
+
+            actions={
+
+              showDateControl
+
+                ? (
+
+                    <DateControl
+
+                      start={
+                        start
+
+===== DASHBOARD MODULE RENDERING =====
+              max-w-[1880px]
+
+              px-3
+              py-2.5
+
+              md:px-3
+              xl:px-3
+            "
+          >
+
+            <div className="text-slate-950">
+
+
+              {/* ==============================================
+                  COMMAND CENTER
+              ============================================== */}
+
+              {activeTab ===
+                'CEO Summary' && (
+
+                <CeoSummary
+
+                  metrics={
+                    metrics
+                  }
+
+                  data={
+                    data
+                  }
+
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  META OS
+              ============================================== */}
+
+              {activeTab ===
+                'Meta OS' && (
+
+                <MetaOS
+
+                  activeMetaTab={
+                    activeSubTabs[
+                      'Meta OS'
+                    ]
+                  }
+
+                  start={
+                    start
+                  }
+
+                  end={
+                    end
+                  }
+
+                  compareStart={
+                    compareStart
+                  }
+
+                  compareEnd={
+                    compareEnd
+                  }
+
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  GOOGLE OS
+              ============================================== */}
+
+              {activeTab ===
+                'Google OS' && (
+
+                <GoogleOS
+
+                  startDate={
+                    start
+                  }
+
+                  endDate={
+                    end
+                  }
+
+                  compareStartDate={
+                    compareStart
+                  }
+
+                  compareEndDate={
+                    compareEnd
+                  }
+
+                  activeGoogleTab={
+                    activeSubTabs[
+                      'Google OS'
+                    ]
+                  }
+
+
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  ATTRIBUTION OS
+              ============================================== */}
+
+              {activeTab ===
+                'Attribution OS' && (
+
+                <AttributionOS
+
+                  startDate={
+                    start
+                  }
+
+                  endDate={
+                    end
+                  }
+
+                  compareStartDate={
+                    compareStart
+                  }
+
+                  compareEndDate={
+                    compareEnd
+                  }
+
+                  activeTab={
+                    activeSubTabs[
+                      'Attribution OS'
+                    ]
+                  }
+
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  RETENTION OS
+              ============================================== */}
+
+              {activeTab ===
+                'Retention OS' && (
+
+                <RetentionOS
+
+                  selectedDate={
+                    end
+                  }
+
+                  activeTab={
+                    activeSubTabs[
+                      'Retention OS'
+                    ]
+                  }
+
+                  
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  PRODUCT OS
+              ============================================== */}
+
+              {activeTab ===
+                'Product OS' && (
+
+                <ProductOS
+
+                  startDate={
+                    start
+                  }
+
+                  endDate={
+                    end
+                  }
+
+                  compareStartDate={
+                    compareStart
+                  }
+
+                  compareEndDate={
+                    compareEnd
+                  }
+
+                  activeTab={
+                    activeSubTabs[
+                      'Product OS'
+                    ]
+                  }
+
+                
+                />
+
+              )}
+
+              
+              {/* ==============================================
+                  GLOBAL SETTINGS
+              ============================================== */}
+
+              {activeTab ===
+                'Settings' && (
+
+                <GrowthSettings />
+
+              )}
+
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+    </main>
+
+  );
+
+}
+
+
+/* ============================================================
+   PLATFORM PLACEHOLDER
+============================================================ */
+
+function PlatformPlaceholder({
+
+  icon:
+    Icon,
+
+  eyebrow,
+
+  title,
+
+  description,
+
+  status,
+
+
+===== API ROUTE INVENTORY =====
+app\api\admin\brands\subscription\route.ts
+app\api\admin\clients\route.ts
+app\api\admin\control-plane\bootstrap\route.ts
+app\api\admin\data-health\route.ts
+app\api\admin\integrations\route.ts
+app\api\admin\modules\route.ts
+app\api\admin\overview\route.ts
+app\api\admin\plans\route.ts
+app\api\admin\sync-history\route.ts
+app\api\admin\system\route.ts
+app\api\admin\users\route.ts
+app\api\admin\warehouse\audit\route.ts
+app\api\admin\warehouse\lineage\route.ts
+app\api\admin\warehouse\runtime-lineage\route.ts
+app\api\attribution-os\campaigns\route.ts
+app\api\attribution-os\channels\route.ts
+app\api\attribution-os\creatives\route.ts
+app\api\attribution-os\data-quality\route.ts
+app\api\attribution-os\journeys\route.ts
+app\api\attribution-os\models\route.ts
+app\api\attribution-os\new-repeat\route.ts
+app\api\attribution-os\overview\route.ts
+app\api\auth\brands\route.ts
+app\api\auth\effective-access\route.ts
+app\api\auth\login\route.ts
+app\api\auth\logout\route.ts
+app\api\auth\me\route.ts
+app\api\auth\shopify\bootstrap\route.ts
+app\api\auth\shopify\launch\route.ts
+app\api\auth\shopify\resolve-shop\route.ts
+app\api\auth\switch-brand\route.ts
+app\api\ceo-summary\route.ts
+app\api\google-os\campaign\route.ts
+app\api\google-os\channel-mix\route.ts
+app\api\google-os\overview\route.ts
+app\api\google-os\search-terms\route.ts
+app\api\integrations\meta\accounts\route.ts
+app\api\integrations\meta\callback\route.ts
+app\api\integrations\meta\connect\route.ts
+app\api\integrations\meta\select-account\route.ts
+app\api\integrations\route.ts
+app\api\integrations\setup\complete\route.ts
+app\api\integrations\shopify\callback\route.ts
+app\api\integrations\shopify\install\route.ts
+app\api\integrations\shopify\webhooks\app-uninstalled\route.ts
+app\api\integrations\shopify\webhooks\customers\route.ts
+app\api\integrations\shopify\webhooks\orders\route.ts
+app\api\meta-os\route.ts
+app\api\product-os\demand-trends\route.ts
+app\api\product-os\forecasting\route.ts
+app\api\product-os\overview\route.ts
+app\api\product-os\seasonality\route.ts
+app\api\product-os\sku-performance\route.ts
+app\api\retention-os\action-log\route.ts
+app\api\retention-os\action-tracker\audience\route.ts
+app\api\retention-os\action-tracker\export\route.ts
+app\api\retention-os\action-tracker\export-whatsapp\route.ts
+app\api\retention-os\action-tracker\prepare\route.ts
+app\api\retention-os\action-tracker\route.ts
+app\api\retention-os\action-tracker\template-preview\route.ts
+app\api\retention-os\action-tracker\templates\route.ts
+app\api\retention-os\action-tracker\template-select\route.ts
+app\api\retention-os\confidence-change-log\route.ts
+app\api\retention-os\confidence-suggestions\route.ts
+app\api\retention-os\customer-journey\route.ts
+app\api\retention-os\customer-journey-summary\route.ts
+app\api\retention-os\daily-execution-plan\route.ts
+app\api\retention-os\daily-planner\route.ts
+app\api\retention-os\forecast\route.ts
+app\api\retention-os\global-settings\route.ts
+app\api\retention-os\hypotheses\route.ts
+app\api\retention-os\journey-health-settings\route.ts
+app\api\retention-os\journey-settings\route.ts
+app\api\retention-os\learning-candidates\route.ts
+app\api\retention-os\learning-log\route.ts
+app\api\retention-os\learning-summary\route.ts
+app\api\retention-os\mapped-products\route.ts
+app\api\retention-os\mission-control\route.ts
+app\api\retention-os\opportunities\route.ts
+app\api\retention-os\opportunity-settings\route.ts
+app\api\retention-os\pattern-actions\route.ts
+app\api\retention-os\patterns\route.ts
+app\api\retention-os\product-master\route.ts
+app\api\retention-os\routine-master\route.ts
+app\api\retention-os\settings-health\route.ts
+app\api\retention-os\summary\route.ts
+app\api\retention-os\unmapped-products\route.ts
+app\api\system\development-connections\route.ts
+app\api\system\integration-bootstrap\route.ts
+app\api\system\providers\route.ts
+app\api\system\shopify\backfill-orchestrate\route.ts
+app\api\system\shopify\customer-history-probe\route.ts
+app\api\system\shopify\customers-sync-test\route.ts
+app\api\system\shopify\history-bootstrap-commit\route.ts
+app\api\system\shopify\history-bootstrap-inspect\route.ts
+app\api\system\shopify\orders-backfill-test\route.ts
+app\api\system\shopify\orders-sync-test\route.ts
+app\api\system\shopify\orders-webhook-bootstrap\route.ts
+app\api\system\shopify\queue-test\route.ts
+app\api\system\sync-test\route.ts
+app\api\system\tenant-context\route.ts
+app\api\workspace\subscription\route.ts
+app\api\workspace\users\access\route.ts
+app\api\workspace\users\modules\route.ts
+app\api\workspace\users\route.ts
+app\api\workspace\users\submodules\route.ts
+
+===== EXISTING AUTH CALLS IN APIs =====
+
+Path                                                                                                         LineNumber Line                                                     
+----                                                                                                         ---------- ----                                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                        63     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                        65         admin.workspaceId                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                        71     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                        73         admin.brandId                                    
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                        80       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                        82       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       110         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       111         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       286     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       288         admin.workspaceId                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       294     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       296         admin.brandId                                    
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       303       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       305       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       373         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\admin\brands\subscription\route.ts                       375         brandId,                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                       7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                      56       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                      96         !identity.workspaceId                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                      98         !identity.brandId                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     111           identity.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     113           identity.brandId                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     125           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     126             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     128           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     129             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     137             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     138               tenant.workspaceId,                        
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     143             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     144               tenant.brandId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     216               workspaceId:                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     217                 tenant.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     222               brandId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     223                 tenant.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     245                   identity.workspaceId ===               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     246                     tenant.workspaceId                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     250                   identity.brandId ===                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     251                     tenant.brandId                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     273         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     274           identity.workspaceId                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     278         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\brands\route.ts                                     279           identity.brandId                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                             7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                            31 // workspaceId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                            32 // brandId                                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                            67       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                           121         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                           122           access.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                           124         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\effective-access\route.ts                           125           access.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\login\route.ts                                      304       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\login\route.ts                                      307       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\login\route.ts                                      385         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\login\route.ts                                      388         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                           7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                          41 // Browser does NOT provide workspaceId / brandId here.  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                          57       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                          87     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                          89         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                          95     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                          97         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         125       workspaceId                                        
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         127       brandId                                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         132           workspaceId,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         133           brandId                                        
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         238         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         239           tenant?.workspaceId                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         241           workspaceId                                    
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         255         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         256           tenant?.brandId                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         258           brandId                                        
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         358         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         359           identity.workspaceId                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         363         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\me\route.ts                                         364           identity.brandId                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             346     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             355     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             383       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             385       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             411         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             413         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             534       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             535         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             537       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\launch\route.ts                             538         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       308       tenant.workspaceId !==                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       311       tenant.brandId !==                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       331         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       333         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       402         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       403           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       405         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       406           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       477         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       478           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       480         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       481           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       568           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       569             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       571           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\shopify\resolve-shop\route.ts                       572             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                                 7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                                35 // workspaceId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                                36 // brandId                                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                                50 // Browser cannot gain access merely by changing brandId.
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                                64       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               157     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               159         body?.workspaceId                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               165     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               167         body?.brandId                                    
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               174       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               176       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               186             'workspaceId and brandId are required',      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               217             workspaceId                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               222             brandId                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               284       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               285         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               287       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               288         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               313         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               314           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               322         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\auth\switch-brand\route.ts                               323           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                     42 // workspaceId + brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                     85         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                     87         tenant.brandId                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                    279           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                    280             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                    285           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\route.ts                                    286             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\accounts\route.ts                       90         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\accounts\route.ts                       92         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\accounts\route.ts                      208           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\accounts\route.ts                      209             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\accounts\route.ts                      211           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\accounts\route.ts                      212             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      321       tenant.workspaceId !==                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      324       tenant.brandId !==                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      398         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      399           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      401         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      402           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      468       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      469         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      471       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\callback\route.ts                      472         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\connect\route.ts                       155       tenant.workspaceId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\connect\route.ts                       162       tenant.brandId,                                    
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                163         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                165         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                361         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                362           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                364         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                365           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                411         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                412           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                414         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                415           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                525         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                526           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                528         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\meta\select-account\route.ts                529           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                       7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                      95       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     103       !identity.workspaceId                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     105       !identity.brandId                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     230         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     233         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     268       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     269         identity.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     271       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     272         identity.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     326             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     327               identity.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     329             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     330               identity.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     346             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     347               identity.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     349             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     350               identity.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     400             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     401               identity.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     403             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     404               identity.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     433             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     434               identity.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     436             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     437               identity.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     453             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     454               identity.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     456             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     457               identity.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     507             workspaceId:                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     508               identity.workspaceId,                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     510             brandId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\setup\complete\route.ts                     511               identity.brandId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   332         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   333           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   335         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   336           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   393           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   394             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   396           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   397             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   486       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   487         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   489       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\callback\route.ts                   490         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         511       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         516       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         595           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         596             job.workspaceId,                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         598           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         599             job.brandId,                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         632         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         633           job.workspaceId,                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         635         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\customers\route.ts         636           job.brandId,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            485       workspaceId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            490       brandId:                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            565           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            566             job.workspaceId,                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            568           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            569             job.brandId,                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            598         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            599           job.workspaceId,                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            601         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\integrations\shopify\webhooks\orders\route.ts            602           job.brandId,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\retention-os\action-tracker\route.ts                     112         brand_id = @brandId                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\retention-os\action-tracker\route.ts                     124           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\retention-os\daily-planner\route.ts                       31           brand_id = @brandId                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\retention-os\daily-planner\route.ts                      133           @brandId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\retention-os\daily-planner\route.ts                      156         brandId: BRAND_ID,                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts              94         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts              95           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts              97         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts              98           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts             127         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts             128           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts             130         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\backfill-orchestrate\route.ts             131           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customer-history-probe\route.ts            81         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customer-history-probe\route.ts            83         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customer-history-probe\route.ts           145         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customer-history-probe\route.ts           146           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customer-history-probe\route.ts           148         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customer-history-probe\route.ts           149           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts               82         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts               84         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              150         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              152         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              227         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              228           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              230         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              231           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              288         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              289           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              291         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\customers-sync-test\route.ts              292           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-commit\route.ts         107         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-commit\route.ts         108           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-commit\route.ts         110         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-commit\route.ts         111           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-inspect\route.ts        104         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-inspect\route.ts        105           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-inspect\route.ts        107         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\history-bootstrap-inspect\route.ts        108           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             126         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             128         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             190         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             192         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             268         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             269           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             271         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             272           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             312         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             313           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             315         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-backfill-test\route.ts             316           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 317         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 319         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 381         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 383         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 456         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 457           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 459         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 460           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 538           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 539             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 541           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-sync-test\route.ts                 542             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-webhook-bootstrap\route.ts          70         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-webhook-bootstrap\route.ts          71           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-webhook-bootstrap\route.ts          73         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\orders-webhook-bootstrap\route.ts          74           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                        72         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                        74         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       109         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       111         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       162         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       163           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       165         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       166           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       204           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       205             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       207           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\shopify\queue-test\route.ts                       208             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\sync-test\route.ts                                164         tenant.workspaceId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\sync-test\route.ts                                166         tenant.brandId,                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\sync-test\route.ts                                245         workspaceId:                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\sync-test\route.ts                                246           tenant.workspaceId,                            
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\sync-test\route.ts                                248         brandId:                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\sync-test\route.ts                                249           tenant.brandId,                                
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\tenant-context\route.ts                            27 // workspaceId + brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\tenant-context\route.ts                            77           workspaceId:                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\tenant-context\route.ts                            78             tenant.workspaceId,                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\tenant-context\route.ts                            86           brandId:                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\system\tenant-context\route.ts                            87             tenant.brandId,                              
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                            7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                           55       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                           85     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                           87         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                           93     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                           95         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                          102       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                          104       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                          132         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\subscription\route.ts                          133         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                  13   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                  99 // workspaceId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 100 // brandId                                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 127       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 157     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 159         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 165     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 167         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 174       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 176       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 204         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 205         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 252         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 254         brandId,                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 423       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 453     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 455         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 461     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 463         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 470       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 472       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 500         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 501         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 909         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                 910         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1060     workspaceId,                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1062     brandId,                                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1227       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1255     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1257         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1263     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1265         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1272       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1274       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1300         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1301         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1731         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1733         brandId,                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1898         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                1900         brandId,                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2003         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2004         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2282       workspaceId,                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2284       brandId,                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2435       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2463     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2465         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2471     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2473         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2480       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2482       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2508         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2509         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2806           workspaceId,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\route.ts                                2809           brandId,                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                            7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           50       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           74     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           76         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           82     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           84         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           91       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                           93       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                          144         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\access\route.ts                          145         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                           7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                          44 // workspaceId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                          45 // brandId                                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                          71       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                          99     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         101         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         107     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         109         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         116       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         118       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         144         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         145         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         389         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         390         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         722         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\modules\route.ts                         724         brandId,                                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                        7   authenticateRequest,                                   
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                       50 // workspaceId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                       51 // brandId                                               
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                       82       await authenticateRequest(                         
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      110     const workspaceId =                                  
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      112         identity.workspaceId                             
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      118     const brandId =                                      
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      120         identity.brandId                                 
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      127       !workspaceId                                       
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      129       !brandId                                           
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      155         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      156         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      398         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      399         brandId                                          
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      966         workspaceId,                                     
+F:\Sunil\Tools and software\growthos-ceo-dashboard\app\api\workspace\users\submodules\route.ts                      968         brandId,                                         
+
+
+
+
+===== MODULE / SUBMODULE REGISTRY =====
+// ============================================================
+// GROWTH OS SUBMODULE REGISTRY
+//
+// Canonical stable IDs for user-access permissions.
+//
+// IMPORTANT:
+//
+// Labels may change in the UI.
+// submoduleId must remain stable once used in permissions.
+// ============================================================
+
+export type GrowthOSSubmoduleDefinition = {
+
+  moduleId:
+    string;
+
+  submoduleId:
+    string;
+
+  label:
+    string;
+
+};
+
+
+// ============================================================
+// REGISTRY
+// ============================================================
+
+export const GROWTHOS_SUBMODULES:
+  GrowthOSSubmoduleDefinition[] = [
+
+  // ==========================================================
+  // META
+  // ==========================================================
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'overview',
+    label: 'Overview',
+  },
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'campaign-analysis',
+    label: 'Campaign Analysis',
+  },
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'ad-set-analysis',
+    label: 'Ad Set Analysis',
+  },
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'creative-analysis',
+    label: 'Creative Analysis',
+  },
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'funnel-analysis',
+    label: 'Funnel Analysis',
+  },
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'alerts-recommendations',
+    label: 'Alerts & Recommendations',
+  },
+
+  {
+    moduleId: 'meta',
+    submoduleId: 'settings',
+    label: 'Settings',
+  },
+
+
+  // ==========================================================
+  // GOOGLE
+  // ==========================================================
+
+  {
+    moduleId: 'google',
+    submoduleId: 'overview',
+    label: 'Overview',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'channel-mix',
+    label: 'Channel Mix',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'campaign',
+    label: 'Campaign',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'ad-group',
+    label: 'Ad Group',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'search-terms',
+    label: 'Search Terms',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'keywords',
+    label: 'Keywords',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'funnel',
+    label: 'Funnel',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'alerts',
+    label: 'Alerts',
+  },
+
+  {
+    moduleId: 'google',
+    submoduleId: 'settings',
+    label: 'Settings',
+  },
+
+
+  // ==========================================================
+  // ATTRIBUTION
+  // ==========================================================
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'overview',
+    label: 'Overview',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'journey-explorer',
+    label: 'Journey Explorer',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'channels',
+    label: 'Channels',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'campaigns',
+    label: 'Campaigns',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'creatives',
+    label: 'Creatives',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'new-vs-repeat',
+    label: 'New vs Repeat',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'attribution-models',
+    label: 'Attribution Models',
+  },
+
+  {
+    moduleId: 'attribution',
+    submoduleId: 'data-quality',
+    label: 'Data Quality',
+  },
+
+
+  // ==========================================================
+  // RETENTION
+  // ==========================================================
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'mission-control',
+    label: 'Mission Control',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'daily-planner',
+    label: 'Daily Planner',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'opportunity-bank',
+    label: 'Opportunity Bank',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'pattern-discovery',
+    label: 'Pattern Discovery',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'hypothesis-lab',
+    label: 'Hypothesis Lab',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'action-tracker',
+    label: 'Action Tracker',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'learning-loop',
+    label: 'Learning Loop',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'customer-journey',
+    label: 'Customer Journey',
+  },
+
+  {
+    moduleId: 'retention',
+    submoduleId: 'settings',
+    label: 'Settings',
+  },
+
+
+  // ==========================================================
+  // PRODUCT
+  // ==========================================================
+
+  {
+    moduleId: 'product',
+    submoduleId: 'overview',
+    label: 'Overview',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'sku-performance',
+    label: 'SKU Performance',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'demand-trends',
+    label: 'Demand Trends',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'inventory-health',
+    label: 'Inventory Health',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'forecasting',
+    label: 'Forecasting',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'seasonality',
+    label: 'Seasonality',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'insights',
+    label: 'Insights',
+  },
+
+  {
+    moduleId: 'product',
+    submoduleId: 'settings',
+    label: 'Settings',
+  },
+
+];
+
+
+// ============================================================
+// READ MODULE SUBMODULES
+// ============================================================
+
+export function getGrowthOSSubmodules(
+  moduleId: string
+) {
+
+  const normalizedModuleId =
+    String(
+      moduleId
+      ||
+      ''
+    ).trim();
+
+
+  return GROWTHOS_SUBMODULES.filter(
+    item =>
+      item.moduleId ===
+        normalizedModuleId
+  );
+
+}
+
+
+// ============================================================
+// VALIDATE MODULE + SUBMODULE
+// ============================================================
+
+export function isGrowthOSSubmodule(
+  moduleId: string,
+  submoduleId: string
+) {
+
+  const normalizedModuleId =
+    String(
+      moduleId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedSubmoduleId =
+    String(
+      submoduleId
+      ||
+      ''
+    ).trim();
+
+
+  return GROWTHOS_SUBMODULES.some(
+    item =>
+      item.moduleId ===
+        normalizedModuleId
+      &&
+      item.submoduleId ===
+        normalizedSubmoduleId
+  );
+
+}
+
+
+// ============================================================
+// FIND SUBMODULE
+// ============================================================
+
+export function getGrowthOSSubmodule(
+  moduleId: string,
+  submoduleId: string
+) {
+
+  return (
+    GROWTHOS_SUBMODULES.find(
+      item =>
+        item.moduleId ===
+          moduleId
+        &&
+        item.submoduleId ===
+          submoduleId
+    )
+    ??
+    null
+  );
+
+}

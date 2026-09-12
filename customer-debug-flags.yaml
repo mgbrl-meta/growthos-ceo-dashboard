@@ -1,0 +1,1 @@
+message-filter: 'attributes.eventType="shopify.customer.webhook"'

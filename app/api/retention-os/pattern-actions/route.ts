@@ -1,3 +1,12 @@
+import {
+  requireGrowthOSApiAccess,
+  runtimeAccessErrorResponse,
+} from '@/lib/auth/runtime-guard';
+
+import {
+  requireLegacyBrillareDataScope,
+} from '@/lib/tenancy/legacy-data-guard';
+
 import { NextResponse } from 'next/server';
 
 import { bigquery } from '@/lib/bigquery';
@@ -75,6 +84,45 @@ const SELECT_FIELDS = `
 `;
 
 export async function GET(request: Request) {
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        request
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const url = new URL(request.url);
     const workflowType =
@@ -132,6 +180,45 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
+
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        request
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const body = (await request.json()) as CreatePatternWorkflowBody;
 

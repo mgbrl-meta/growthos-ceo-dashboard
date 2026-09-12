@@ -1,46 +1,75 @@
+import {
+  requireGrowthOSApiAccess,
+  runtimeAccessErrorResponse,
+} from '@/lib/auth/runtime-guard';
+
+import {
+  requireLegacyBrillareDataScope,
+} from '@/lib/tenancy/legacy-data-guard';
+
 import { NextResponse } from 'next/server';
 import { bigquery } from '@/lib/bigquery';
 
 const PROJECT = 'shopify-colab';
 const DATASET = 'brillare_shopify';
+const SOURCE_TABLE = 'retention_unmapped_products_tbl';
 const LOCATION = 'asia-southeast1';
 
-const SETTINGS_HEALTH_TABLE = 'retention_settings_health_tbl';
-const LEARNING_CANDIDATES_TABLE = 'retention_learning_candidates_tbl';
+export async function GET(req: Request) {
 
-const ACTION_LOG_TABLE = 'retention_action_log';
-const LEARNING_LOG_TABLE = 'retention_learning_log';
+  // ==========================================================
+  // RUNTIME ACCESS ENFORCEMENT
+  // ==========================================================
 
-export async function GET() {
+  try {
+
+    const runtimeAccess =
+      await requireGrowthOSApiAccess(
+        req
+      );
+
+
+    requireLegacyBrillareDataScope(
+      runtimeAccess.brandId
+    );
+
+  } catch (
+    accessError:
+      unknown
+  ) {
+
+    const accessResponse =
+      runtimeAccessErrorResponse(
+        accessError
+      );
+
+
+    if (accessResponse) {
+
+      return accessResponse;
+
+    }
+
+
+    throw accessError;
+
+  }
+
   try {
     const query = `
       SELECT
-        h.unmapped_products,
-        h.mapped_products,
-        h.routine_products,
-        h.opportunity_settings,
-        h.live_opportunities,
+        sku,
+        product_title,
+        orders,
+        customers,
+        revenue,
+        last_sold_at
 
-        (
-          SELECT COUNT(*)
-          FROM \`${PROJECT}.${DATASET}.${ACTION_LOG_TABLE}\`
-        ) AS actions,
+      FROM \`${PROJECT}.${DATASET}.${SOURCE_TABLE}\`
 
-        (
-          SELECT COUNT(*)
-          FROM \`${PROJECT}.${DATASET}.${LEARNING_LOG_TABLE}\`
-        ) AS learnings,
+      ORDER BY revenue DESC
 
-        (
-          SELECT COUNT(*)
-          FROM \`${PROJECT}.${DATASET}.${LEARNING_CANDIDATES_TABLE}\`
-        ) AS learning_candidates,
-
-        CURRENT_TIMESTAMP() AS generated_at
-
-      FROM \`${PROJECT}.${DATASET}.${SETTINGS_HEALTH_TABLE}\` AS h
-
-      LIMIT 1
+      LIMIT 100
     `;
 
     const [rows] = await bigquery.query({
@@ -48,19 +77,14 @@ export async function GET() {
       location: LOCATION,
     });
 
-    return NextResponse.json(rows[0] || {});
+    return NextResponse.json(rows);
   } catch (error) {
-    console.error('Retention OS summary API error:', error);
+    console.error('Unmapped products API error:', error);
 
     return NextResponse.json(
       {
-        error: 'Failed to load Retention OS summary',
-        sources: {
-          settingsHealth: SETTINGS_HEALTH_TABLE,
-          learningCandidates: LEARNING_CANDIDATES_TABLE,
-          actionLog: ACTION_LOG_TABLE,
-          learningLog: LEARNING_LOG_TABLE,
-        },
+        error: 'Failed to load unmapped products snapshot table',
+        sourceTable: SOURCE_TABLE,
       },
       { status: 500 }
     );

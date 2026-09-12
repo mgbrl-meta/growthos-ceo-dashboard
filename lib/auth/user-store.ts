@@ -1302,6 +1302,247 @@ export async function upsertBrandMembership(
 
 }
 
+// ============================================================
+// FAST ACTIVE BRAND MEMBERSHIP
+//
+// HOT RUNTIME AUTH READ.
+//
+// NO:
+//
+// - schema creation
+// - bootstrap
+// - migrations
+//
+// Verifies:
+//
+// user is active
+// membership is active
+// workspace + brand match
+//
+// Returns the LIVE role so request authorization does not
+// trust a stale role stored in the session cookie.
+// ============================================================
+
+export async function getActiveBrandMembershipFast(
+  userId: string,
+  workspaceId: string,
+  brandId: string
+):
+
+  Promise<
+    StoredBrandMembership | null
+  > {
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedUserId =
+    String(
+      userId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedWorkspaceId =
+    String(
+      workspaceId
+      ||
+      ''
+    ).trim();
+
+
+  const normalizedBrandId =
+    String(
+      brandId
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !normalizedUserId
+    ||
+    !normalizedWorkspaceId
+    ||
+    !normalizedBrandId
+  ) {
+
+    return null;
+
+  }
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        WITH latest_membership AS
+        (
+
+          SELECT
+            *
+
+          FROM
+            \`${projectId}.${DATASET_ID}.brand_memberships\`
+
+          WHERE
+
+            user_id =
+              @user_id
+
+            AND workspace_id =
+              @workspace_id
+
+            AND brand_id =
+              @brand_id
+
+          QUALIFY
+
+            ROW_NUMBER() OVER
+            (
+
+              PARTITION BY
+                user_id,
+                workspace_id,
+                brand_id
+
+              ORDER BY
+                updated_at DESC,
+                created_at DESC,
+                membership_id DESC
+
+            ) = 1
+
+        ),
+
+        latest_user AS
+        (
+
+          SELECT
+            *
+
+          FROM
+            \`${projectId}.${DATASET_ID}.users\`
+
+          WHERE
+            user_id =
+              @user_id
+
+          QUALIFY
+
+            ROW_NUMBER() OVER
+            (
+
+              PARTITION BY
+                user_id
+
+              ORDER BY
+                updated_at DESC,
+                created_at DESC
+
+            ) = 1
+
+        )
+
+        SELECT
+
+          m.membership_id,
+
+          m.user_id,
+
+          m.workspace_id,
+
+          m.brand_id,
+
+          m.role,
+
+          m.status,
+
+          m.is_default,
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            m.created_at
+          )
+            AS created_at,
+
+          FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%SZ',
+            m.updated_at
+          )
+            AS updated_at
+
+        FROM
+          latest_membership
+          AS m
+
+        INNER JOIN
+          latest_user
+          AS u
+
+        ON
+          u.user_id =
+            m.user_id
+
+        WHERE
+
+          m.status =
+            'active'
+
+          AND u.status =
+            'active'
+
+        LIMIT 1
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        user_id:
+          normalizedUserId,
+
+        workspace_id:
+          normalizedWorkspaceId,
+
+        brand_id:
+          normalizedBrandId,
+
+      },
+
+      types: {
+
+        user_id:
+          'STRING',
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows?.[0]
+    ??
+    null
+  ) as
+    StoredBrandMembership
+    | null;
+
+}
+
 
 // ============================================================
 // LIST ACTIVE BRAND MEMBERSHIPS

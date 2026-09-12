@@ -15,12 +15,16 @@ import {
   CheckCircle2,
   CreditCard,
   EllipsisVertical,
+  KeyRound,
   LayoutDashboard,
+  LogOut,
+  MonitorSmartphone,
   PanelLeft,
   Plug,
   RotateCcw,
   Save,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   Users,
   UserRound,
@@ -29,6 +33,10 @@ import {
 
 import AppIntegrations
   from './integrations/AppIntegrations';
+
+import {
+  GROWTHOS_SUBMODULES,
+} from '@/lib/auth/submodule-registry';
 
 
 // ============================================================
@@ -41,6 +49,7 @@ type SettingsTab =
   | 'Modules'
   | 'Integrations'
   | 'Users & Access'
+  | 'Security'
   | 'My Preferences';
 
 
@@ -82,6 +91,24 @@ type UserPreferences = {
     DefaultDateRange;
 
 };
+
+
+// ============================================================
+// USER ACCESS TYPES
+// ============================================================
+
+type WorkspaceUserRole =
+  | 'owner'
+  | 'admin'
+  | 'analyst'
+  | 'viewer';
+
+
+type UserAccessPermission =
+  | 'inherit'
+  | 'viewer'
+  | 'editor'
+  | 'disabled';
 
 
 // ============================================================
@@ -452,6 +479,17 @@ const SETTINGS_TABS:
 
     icon:
       Users,
+  },
+
+  {
+    id:
+      'Security',
+
+    label:
+      'Security',
+
+    icon:
+      ShieldCheck,
   },
 
   {
@@ -1591,6 +1629,18 @@ export default function GrowthSettings() {
 
 
           {activeTab ===
+            'Security' && (
+
+            <SecuritySettings
+              authContext={
+                authContext
+              }
+            />
+
+          )}
+
+
+          {activeTab ===
             'My Preferences' && (
 
             <PreferenceSettings
@@ -2657,7 +2707,7 @@ function UserAccessSettings({
 
 
   // ==========================================================
-  // ADD USER STATE
+  // ADD USER / PROVISIONING STATE
   // ==========================================================
 
   const [
@@ -2688,29 +2738,60 @@ function UserAccessSettings({
 
 
   const [
-    newUserPassword,
-    setNewUserPassword,
+    newUserRole,
+    setNewUserRole,
   ] =
-    useState(
-      ''
+    useState<WorkspaceUserRole>(
+      'viewer'
     );
 
 
   const [
-    newUserRole,
-    setNewUserRole,
+    provisioningMembershipId,
+    setProvisioningMembershipId,
   ] =
     useState<
-      'owner'
-      |
-      'admin'
-      |
-      'analyst'
-      |
-      'viewer'
+      string |
+      null
     >(
-      'viewer'
+      null
     );
+
+
+  const [
+    provisioningUserId,
+    setProvisioningUserId,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    modulePermissions,
+    setModulePermissions,
+  ] =
+    useState<
+      Record<
+        string,
+        UserAccessPermission
+      >
+    >({});
+
+
+  const [
+    submodulePermissions,
+    setSubmodulePermissions,
+  ] =
+    useState<
+      Record<
+        string,
+        UserAccessPermission
+      >
+    >({});
 
 
   const [
@@ -2729,6 +2810,24 @@ function UserAccessSettings({
     useState(
       ''
     );
+
+    // ==========================================================
+  // ACCESS FORM MODE
+  // ==========================================================
+
+  const [
+    accessFormMode,
+    setAccessFormMode,
+  ] =
+    useState<
+      'add'
+      |
+      'edit'
+      |
+      'resume'
+    >(
+      'add'
+    );  
 
 
   // ==========================================================
@@ -2752,36 +2851,7 @@ function UserAccessSettings({
       null
     );
 
-
-  const [
-    editingUserId,
-    setEditingUserId,
-  ] =
-    useState<
-      string |
-      null
-    >(
-      null
-    );
-
-
-  const [
-    editRole,
-    setEditRole,
-  ] =
-    useState<
-      'owner'
-      |
-      'admin'
-      |
-      'analyst'
-      |
-      'viewer'
-    >(
-      'viewer'
-    );
-
-
+ 
   const [
     userActionSavingId,
     setUserActionSavingId,
@@ -2804,7 +2874,739 @@ function UserAccessSettings({
 
 
   // ==========================================================
-  // ADD WORKSPACE USER
+  // PROVISIONING HELPERS
+  // ==========================================================
+
+  const activeModules =
+    (
+      subscriptionContext?.modules
+      ||
+      []
+    ).filter(
+      module =>
+        module.status ===
+          'active'
+    );
+
+
+  function defaultModulePermission(
+
+    module:
+      WorkspaceSubscriptionResponse['modules'][number],
+
+    role:
+      WorkspaceUserRole
+
+  ):
+    UserAccessPermission {
+
+    if (!module.enabled) {
+
+      return 'disabled';
+
+    }
+
+
+    if (
+      role ===
+        'viewer'
+    ) {
+
+      return 'viewer';
+
+    }
+
+
+    return 'editor';
+
+  }
+
+
+  function buildInitialModulePermissions(
+    role:
+      WorkspaceUserRole
+  ) {
+
+    const next:
+      Record<
+        string,
+        UserAccessPermission
+      > = {};
+
+
+    for (
+      const module
+      of activeModules
+    ) {
+
+      next[
+        module.moduleId
+      ] =
+        defaultModulePermission(
+          module,
+          role
+        );
+
+    }
+
+
+    return next;
+
+  }
+
+
+  function buildInitialSubmodulePermissions(
+
+    nextModulePermissions:
+      Record<
+        string,
+        UserAccessPermission
+      >
+
+  ) {
+
+    const next:
+      Record<
+        string,
+        UserAccessPermission
+      > = {};
+
+
+    const moduleMap =
+      new Map(
+        activeModules.map(
+          module => [
+            module.moduleId,
+            module,
+          ]
+        )
+      );
+
+
+    for (
+      const submodule
+      of GROWTHOS_SUBMODULES
+    ) {
+
+      const module =
+        moduleMap.get(
+          submodule.moduleId
+        );
+
+
+      if (
+        !module
+        ||
+        !module.enabled
+        ||
+        nextModulePermissions[
+          submodule.moduleId
+        ] ===
+          'disabled'
+      ) {
+
+        continue;
+
+      }
+
+
+      next[
+        `${submodule.moduleId}:${submodule.submoduleId}`
+      ] =
+        'inherit';
+
+    }
+
+
+    return next;
+
+  }
+
+
+  function resetProvisioningDraft() {
+
+    setNewUserName(
+      ''
+    );
+
+
+    setNewUserEmail(
+      ''
+    );
+
+
+    setNewUserRole(
+      'viewer'
+    );
+
+
+    setProvisioningMembershipId(
+      null
+    );
+
+
+    setProvisioningUserId(
+      null
+    );
+
+
+    const nextModulePermissions =
+      buildInitialModulePermissions(
+        'viewer'
+      );
+
+
+    setModulePermissions(
+      nextModulePermissions
+    );
+
+
+    setSubmodulePermissions(
+      buildInitialSubmodulePermissions(
+        nextModulePermissions
+      )
+    );
+
+
+    setUserCreateError(
+      ''
+    );
+
+  }
+
+
+    function openAddUserForm() {
+
+    resetProvisioningDraft();
+
+
+    setAccessFormMode(
+      'add'
+    );
+
+
+    setUserActionError(
+      ''
+    );
+
+
+    setShowAddUser(
+      true
+    );
+
+  }
+
+
+  function closeAddUserForm() {
+
+    resetProvisioningDraft();
+
+
+    setShowAddUser(
+      false
+    );
+
+  }
+
+
+  function handleNewUserRoleChange(
+    role:
+      WorkspaceUserRole
+  ) {
+
+    const nextModulePermissions =
+      buildInitialModulePermissions(
+        role
+      );
+
+
+    setNewUserRole(
+      role
+    );
+
+
+    setModulePermissions(
+      nextModulePermissions
+    );
+
+
+    setSubmodulePermissions(
+      buildInitialSubmodulePermissions(
+        nextModulePermissions
+      )
+    );
+
+  }
+
+
+  function updateModulePermission(
+
+    moduleId:
+      string,
+
+    permission:
+      UserAccessPermission
+
+  ) {
+
+    const previousPermission =
+      modulePermissions[
+        moduleId
+      ];
+
+
+    setModulePermissions(
+      previous => ({
+        ...previous,
+        [moduleId]:
+          permission,
+      })
+    );
+
+
+    const moduleSubmodules =
+      GROWTHOS_SUBMODULES.filter(
+        submodule =>
+          submodule.moduleId ===
+            moduleId
+      );
+
+
+    setSubmodulePermissions(
+      previous => {
+
+        const next = {
+          ...previous,
+        };
+
+
+        for (
+          const submodule
+          of moduleSubmodules
+        ) {
+
+          const key =
+            `${moduleId}:${submodule.submoduleId}`;
+
+
+          if (
+            permission ===
+              'disabled'
+          ) {
+
+            next[
+              key
+            ] =
+              'disabled';
+
+
+            continue;
+
+          }
+
+
+          if (
+            previousPermission ===
+              'disabled'
+            ||
+            !next[
+              key
+            ]
+            ||
+            (
+              permission ===
+                'viewer'
+              &&
+              next[
+                key
+              ] ===
+                'editor'
+            )
+          ) {
+
+            next[
+              key
+            ] =
+              'inherit';
+
+          }
+
+        }
+
+
+        return next;
+
+      }
+    );
+
+  }
+
+  async function openEditUserAccess(
+  user:
+    NonNullable<
+      WorkspaceUsersResponse['users']
+    >[number]
+) {
+
+  try {
+
+    setUserActionError(
+      ''
+    );
+
+
+    setUserCreateError(
+      ''
+    );
+
+
+    setUserActionSavingId(
+      user.userId
+    );
+
+
+    const response =
+      await fetch(
+        `/api/workspace/users/access?membershipId=${encodeURIComponent(
+          user.membershipId
+        )}`,
+        {
+          cache:
+            'no-store',
+
+          credentials:
+            'same-origin',
+        }
+      );
+
+
+    const json =
+      await readApiJson(
+        response,
+        'User access API'
+      );
+
+
+    if (
+      !response.ok
+      ||
+      !json?.ok
+    ) {
+
+      throw new Error(
+        String(
+          json?.error
+          ||
+          'Unable to load user access'
+        )
+      );
+
+    }
+
+
+    const normalizedRole:
+      WorkspaceUserRole =
+        (
+          user.role ===
+            'owner'
+          ||
+          user.role ===
+            'admin'
+          ||
+          user.role ===
+            'analyst'
+          ||
+          user.role ===
+            'viewer'
+        )
+          ? user.role
+          : 'viewer';
+
+
+    // ========================================================
+    // CURRENT MODULE PERMISSIONS
+    // ========================================================
+
+    const nextModulePermissions =
+      buildInitialModulePermissions(
+        normalizedRole
+      );
+
+
+    for (
+      const item
+      of json.modulePermissions
+      ||
+      []
+    ) {
+
+      nextModulePermissions[
+        String(
+          item.moduleId
+        )
+      ] =
+        item.permission as
+          UserAccessPermission;
+
+    }
+
+
+    // ========================================================
+    // CURRENT SUBMODULE PERMISSIONS
+    // ========================================================
+
+    const nextSubmodulePermissions =
+      buildInitialSubmodulePermissions(
+        nextModulePermissions
+      );
+
+
+    for (
+      const item
+      of json.submodulePermissions
+      ||
+      []
+    ) {
+
+      nextSubmodulePermissions[
+        `${item.moduleId}:${item.submoduleId}`
+      ] =
+        item.permission as
+          UserAccessPermission;
+
+    }
+
+
+    setNewUserName(
+      user.fullName
+      ||
+      ''
+    );
+
+
+    setNewUserEmail(
+      user.email
+      ||
+      ''
+    );
+
+
+    setNewUserRole(
+      normalizedRole
+    );
+
+
+    setProvisioningMembershipId(
+      user.membershipId
+    );
+
+
+    setProvisioningUserId(
+      user.userId
+    );
+
+
+    setModulePermissions(
+      nextModulePermissions
+    );
+
+
+    setSubmodulePermissions(
+      nextSubmodulePermissions
+    );
+
+
+    setAccessFormMode(
+      'edit'
+    );
+    
+    setActionMenu(
+      null
+    );
+
+
+    setShowAddUser(
+      true
+    );
+
+  } catch (
+    accessError:
+      any
+  ) {
+
+    console.error(
+      'GROWTH_OS_USER_ACCESS_LOAD_ERROR',
+      accessError
+    );
+
+
+    setUserActionError(
+      String(
+        accessError?.message
+        ||
+        'Unable to load user access'
+      )
+    );
+
+  } finally {
+
+    setUserActionSavingId(
+      null
+    );
+
+  }
+
+}
+
+
+  function friendlyProvisioningError(
+    apiError:
+      string
+  ) {
+
+    const errors:
+      Record<
+        string,
+        string
+      > = {
+
+      VALID_EMAIL_REQUIRED:
+        'Enter a valid email address.',
+
+      VALID_ROLE_REQUIRED:
+        'Select a valid user role.',
+
+      PASSWORD_MINIMUM_10_CHARACTERS:
+        'Passwords must be at least 10 characters.',
+
+      USER_ALREADY_HAS_ACCESS:
+        'This user already has active access to the current brand.',
+
+      USER_LIMIT_REACHED:
+        'Your current plan user limit has been reached.',
+
+      USER_NOT_ACTIVE:
+        'This Growth OS user is currently inactive.',
+
+      SUBSCRIPTION_REQUIRED:
+        'An active Growth OS subscription is required.',
+
+      USER_MANAGEMENT_ACCESS_REQUIRED:
+        'Only an active Owner or Admin can manage users.',
+
+      OWNER_ROLE_REQUIRED:
+        'Only an Owner can grant the Owner role.',
+
+      ACTIVE_BRAND_REQUIRED:
+        'An active Growth OS brand is required.',
+
+      UNAUTHENTICATED:
+        'Your session has expired. Please sign in again.',
+
+      INVALID_REQUEST_BODY:
+        'The request could not be processed.',
+
+      MODULE_PERMISSIONS_REQUIRED:
+        'Configure module access before activation.',
+
+      INVALID_MODULE_PERMISSION:
+        'One or more module permissions are invalid.',
+
+      MODULE_NOT_FOUND:
+        'A selected module is no longer available.',
+
+      MODULE_NOT_ACTIVE:
+        'A selected module is no longer active.',
+
+      MODULE_NOT_AVAILABLE_FOR_BRAND:
+        'A permission cannot exceed the modules available to this brand.',
+
+      SUBMODULE_PERMISSIONS_REQUIRED:
+        'Configure submodule access before activation.',
+
+      INVALID_SUBMODULE_PERMISSION:
+        'One or more submodule permissions are invalid.',
+
+      SUBMODULE_NOT_FOUND:
+        'A selected submodule is no longer available.',
+
+      PARENT_MODULE_DISABLED:
+        'A disabled module cannot grant access to its submodules.',
+
+      SUBMODULE_PERMISSION_EXCEEDS_MODULE:
+        'A submodule permission cannot exceed its parent module permission.',
+
+      USER_MODULE_ACCESS_REQUIRED:
+        'Complete module access before activating this user.',
+
+      USER_SUBMODULE_ACCESS_REQUIRED:
+        'Complete submodule access before activating this user.',
+
+      WORKSPACE_MEMBERSHIP_NOT_FOUND:
+        'The selected workspace membership could not be found.',
+
+      WORKSPACE_USER_NOT_FOUND:
+        'This user no longer belongs to the current brand.',
+
+      CANNOT_MODIFY_SELF_ACCESS:
+        'You cannot modify your own access from this screen.',
+
+    };
+
+
+    return (
+      errors[
+        apiError
+      ]
+      ||
+      apiError
+      ||
+      'Unable to configure user access.'
+    );
+
+  }
+
+
+  async function readApiJson(
+    response:
+      Response,
+
+    label:
+      string
+  ) {
+
+    const raw =
+      await response.text();
+
+
+    try {
+
+      return JSON.parse(
+        raw
+      );
+
+    } catch {
+
+      throw new Error(
+        `${label} returned HTTP ${response.status} instead of JSON`
+      );
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // ADD / RESUME + CONFIGURE + ACTIVATE USER
+  //
+  // One-screen UX.
+  //
+  // Backend safety remains multi-step:
+  //
+  // 1. create/resume INACTIVE membership
+  // 2. save module permissions
+  // 3. save submodule permissions
+  // 4. activate
   // ==========================================================
 
   async function addWorkspaceUser() {
@@ -2833,6 +3635,7 @@ function UserAccessSettings({
         'Email address is required.'
       );
 
+
       return;
 
     }
@@ -2848,6 +3651,22 @@ function UserAccessSettings({
       setUserCreateError(
         'Enter a valid email address.'
       );
+
+
+      return;
+
+    }
+
+
+    if (
+      activeModules.length ===
+        0
+    ) {
+
+      setUserCreateError(
+        'No active Growth OS modules are available for this brand.'
+      );
+
 
       return;
 
@@ -2866,9 +3685,216 @@ function UserAccessSettings({
       );
 
 
-      const response =
+      let membershipId =
+        provisioningMembershipId;
+
+
+      let userId =
+        provisioningUserId;
+
+
+      let effectiveRole:
+        WorkspaceUserRole =
+          newUserRole;
+
+
+      // ======================================================
+      // 1. CREATE OR RESUME IDENTITY / MEMBERSHIP
+      // ======================================================
+
+      if (
+        !membershipId
+        ||
+        !userId
+      ) {
+
+        const response =
+          await fetch(
+            '/api/workspace/users',
+            {
+
+              method:
+                'POST',
+
+              cache:
+                'no-store',
+
+              credentials:
+                'same-origin',
+
+              headers: {
+
+                'Content-Type':
+                  'application/json',
+
+              },
+
+              body:
+                JSON.stringify({
+
+                  fullName,
+
+                  email,
+
+                  role:
+                    newUserRole,
+
+                }),
+
+            }
+          );
+
+
+        const json =
+          await readApiJson(
+            response,
+            'Users API'
+          );
+
+
+        if (
+          !response.ok
+          ||
+          !json?.ok
+        ) {
+
+          throw new Error(
+            friendlyProvisioningError(
+              String(
+                json?.error
+                ||
+                'Unable to add user'
+              )
+            )
+          );
+
+        }
+
+
+        membershipId =
+          String(
+            json?.user?.membershipId
+            ||
+            ''
+          ).trim();
+
+
+        userId =
+          String(
+            json?.user?.userId
+            ||
+            ''
+          ).trim();
+
+
+        if (
+          !membershipId
+          ||
+          !userId
+        ) {
+
+          throw new Error(
+            'User was created but provisioning identity was not returned.'
+          );
+
+        }
+
+
+        const returnedRole =
+          String(
+            json?.user?.role
+            ||
+            newUserRole
+          );
+
+
+        if (
+          returnedRole ===
+            'owner'
+          ||
+          returnedRole ===
+            'admin'
+          ||
+          returnedRole ===
+            'analyst'
+          ||
+          returnedRole ===
+            'viewer'
+        ) {
+
+          effectiveRole =
+            returnedRole;
+
+        }
+
+
+        setProvisioningMembershipId(
+          membershipId
+        );
+
+
+        setProvisioningUserId(
+          userId
+        );
+
+
+        setNewUserRole(
+          effectiveRole
+        );
+
+
+      }
+
+
+      // ======================================================
+      // 2. MODULE PERMISSIONS
+      // ======================================================
+
+      const defaultModulePermissions =
+        buildInitialModulePermissions(
+          effectiveRole
+        );
+
+
+      const resolvedModulePermissions = {
+
+        ...defaultModulePermissions,
+
+        ...modulePermissions,
+
+      };
+
+
+      const modulePermissionPayload =
+        activeModules.map(
+          module => ({
+
+            moduleId:
+              module.moduleId,
+
+            permission:
+              module.enabled
+
+                ? (
+                    resolvedModulePermissions[
+                      module.moduleId
+                    ]
+                    ||
+                    defaultModulePermission(
+                      module,
+                      effectiveRole
+                    )
+                  )
+
+                : 'disabled',
+
+          })
+        );
+
+
+      const moduleResponse =
         await fetch(
-          '/api/workspace/users',
+          '/api/workspace/users/modules',
           {
 
             method:
@@ -2890,15 +3916,10 @@ function UserAccessSettings({
             body:
               JSON.stringify({
 
-                fullName,
+                membershipId,
 
-                email,
-
-                password:
-                  newUserPassword,
-
-                role:
-                  newUserRole,
+                permissions:
+                  modulePermissionPayload,
 
               }),
 
@@ -2906,132 +3927,389 @@ function UserAccessSettings({
         );
 
 
-      const raw =
-        await response.text();
+      const moduleJson =
+        await readApiJson(
+          moduleResponse,
+          'Module access API'
+        );
 
 
-      let json:
-        any;
-
-
-      try {
-
-        json =
-          JSON.parse(
-            raw
-          );
-
-      } catch {
+      if (
+        !moduleResponse.ok
+        ||
+        !moduleJson?.ok
+      ) {
 
         throw new Error(
-          `Users API returned HTTP ${response.status} instead of JSON`
+          friendlyProvisioningError(
+            String(
+              moduleJson?.error
+              ||
+              'Unable to configure module access'
+            )
+          )
         );
 
       }
 
 
+      // ======================================================
+      // 3. SUBMODULE PERMISSIONS
+      // ======================================================
+
+      const activeModuleMap =
+        new Map(
+          activeModules.map(
+            module => [
+              module.moduleId,
+              module,
+            ]
+          )
+        );
+
+
+      const applicableSubmodules =
+        GROWTHOS_SUBMODULES.filter(
+          submodule => {
+
+            const module =
+              activeModuleMap.get(
+                submodule.moduleId
+              );
+
+
+            return Boolean(
+              module
+              &&
+              module.enabled
+              &&
+              resolvedModulePermissions[
+                submodule.moduleId
+              ] !==
+                'disabled'
+            );
+
+          }
+        );
+
+
       if (
-        !response.ok
-        ||
-        !json?.ok
+        applicableSubmodules.length >
+          0
       ) {
 
-        const apiError =
-          String(
-            json?.error
-            ||
-            'Unable to add user'
+        const initialSubmodulePermissions =
+          buildInitialSubmodulePermissions(
+            resolvedModulePermissions
           );
 
 
-        const friendlyErrors:
-          Record<
-            string,
-            string
-          > = {
+        const resolvedSubmodulePermissions = {
 
-          VALID_EMAIL_REQUIRED:
-            'Enter a valid email address.',
+          ...initialSubmodulePermissions,
 
-          VALID_ROLE_REQUIRED:
-            'Select a valid user role.',
-
-          PASSWORD_MINIMUM_10_CHARACTERS:
-            'New users require a password of at least 10 characters.',
-
-          USER_ALREADY_HAS_ACCESS:
-            'This user already has access to the current brand.',
-
-          USER_LIMIT_REACHED:
-            'Your current plan user limit has been reached.',
-
-          USER_NOT_ACTIVE:
-            'This Growth OS user is currently inactive.',
-
-          SUBSCRIPTION_REQUIRED:
-            'An active Growth OS subscription is required.',
-
-          USER_MANAGEMENT_ACCESS_REQUIRED:
-            'Only an active Owner or Admin can add users.',
-
-          OWNER_ROLE_REQUIRED:
-            'Only an Owner can grant the Owner role.',
-
-          ACTIVE_BRAND_REQUIRED:
-            'An active Growth OS brand is required.',
-
-          UNAUTHENTICATED:
-            'Your session has expired. Please sign in again.',
-
-          INVALID_REQUEST_BODY:
-            'The user details could not be processed.',
+          ...submodulePermissions,
 
         };
 
 
-        throw new Error(
-          friendlyErrors[
-            apiError
-          ]
+        const submodulePermissionPayload =
+          applicableSubmodules.map(
+            submodule => {
+
+              const key =
+                `${submodule.moduleId}:${submodule.submoduleId}`;
+
+
+              let permission =
+                resolvedSubmodulePermissions[
+                  key
+                ]
+                ||
+                'inherit';
+
+
+              if (
+                resolvedModulePermissions[
+                  submodule.moduleId
+                ] ===
+                  'viewer'
+                &&
+                permission ===
+                  'editor'
+              ) {
+
+                permission =
+                  'inherit';
+
+              }
+
+
+              return {
+
+                moduleId:
+                  submodule.moduleId,
+
+                submoduleId:
+                  submodule.submoduleId,
+
+                permission,
+
+              };
+
+            }
+          );
+
+
+        const submoduleResponse =
+          await fetch(
+            '/api/workspace/users/submodules',
+            {
+
+              method:
+                'POST',
+
+              cache:
+                'no-store',
+
+              credentials:
+                'same-origin',
+
+              headers: {
+
+                'Content-Type':
+                  'application/json',
+
+              },
+
+              body:
+                JSON.stringify({
+
+                  membershipId,
+
+                  permissions:
+                    submodulePermissionPayload,
+
+                }),
+
+            }
+          );
+
+
+        const submoduleJson =
+          await readApiJson(
+            submoduleResponse,
+            'Submodule access API'
+          );
+
+
+        if (
+          !submoduleResponse.ok
           ||
-          apiError
+          !submoduleJson?.ok
+        ) {
+
+          throw new Error(
+            friendlyProvisioningError(
+              String(
+                submoduleJson?.error
+                ||
+                'Unable to configure submodule access'
+              )
+            )
+          );
+
+        }
+
+      }
+
+            // ======================================================
+      // EDIT MODE COMPLETE
+      //
+      // Existing active user:
+      //
+      // module + submodule permissions have now been saved.
+      // Do NOT run activation again.
+      // ======================================================
+
+      if (
+        accessFormMode ===
+          'edit'
+      ) {
+
+        closeAddUserForm();
+
+
+        await reload();
+
+
+        return;
+
+      }
+
+
+      // ======================================================
+      // 4. ACTIVATE
+      // ======================================================
+
+      const activationResponse =
+        await fetch(
+          '/api/workspace/users',
+          {
+
+            method:
+              'PATCH',
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+
+              'Content-Type':
+                'application/json',
+
+            },
+
+            body:
+              JSON.stringify({
+
+                userId,
+
+                action:
+                  'activate',
+
+              }),
+
+          }
+        );
+
+
+      const activationJson =
+        await readApiJson(
+          activationResponse,
+          'User activation API'
+        );
+
+
+      if (
+        !activationResponse.ok
+        ||
+        !activationJson?.ok
+      ) {
+
+        throw new Error(
+          friendlyProvisioningError(
+            String(
+              activationJson?.error
+              ||
+              'Unable to activate user'
+            )
+          )
         );
 
       }
 
 
       // ======================================================
-      // SUCCESS
+      // 5. INVITE NEW / RESUMED USER
+      //
+      // Existing users who already have a password are simply
+      // left on their current credentials. New users receive a
+      // one-time set-password invitation.
       // ======================================================
 
-      setNewUserName(
-        ''
-      );
+      let inviteWarning =
+        '';
 
 
-      setNewUserEmail(
-        ''
-      );
+      if (
+        accessFormMode ===
+          'add'
+        ||
+        accessFormMode ===
+          'resume'
+      ) {
+
+        try {
+
+          const inviteResponse =
+            await fetch(
+              '/api/auth/invite',
+              {
+
+                method:
+                  'POST',
+
+                cache:
+                  'no-store',
+
+                credentials:
+                  'same-origin',
+
+                headers: {
+
+                  'Content-Type':
+                    'application/json',
+
+                },
+
+                body:
+                  JSON.stringify({
+                    userId,
+                  }),
+
+              }
+            );
 
 
-      setNewUserPassword(
-        ''
-      );
+          const inviteJson =
+            await readApiJson(
+              inviteResponse,
+              'Invite API'
+            );
 
 
-      setNewUserRole(
-        'viewer'
-      );
+          if (
+            !inviteResponse.ok
+            ||
+            !inviteJson?.ok
+          ) {
+
+            inviteWarning =
+              'User access was activated, but the invitation email could not be sent. You can retry the invite after email delivery is configured.';
+
+          }
+
+        } catch {
+
+          inviteWarning =
+            'User access was activated, but the invitation email could not be sent.';
+
+        }
+
+      }
 
 
-      setShowAddUser(
-        false
-      );
+      // ======================================================
+      // COMPLETE
+      // ======================================================
+
+      closeAddUserForm();
 
 
-      // Reload canonical server user list.
+      await reload();
 
-      reload();
+
+      if (inviteWarning) {
+
+        setUserActionError(
+          inviteWarning
+        );
+
+      }
 
 
     } catch (
@@ -3039,8 +4317,10 @@ function UserAccessSettings({
         any
     ) {
 
-      console.error(
-        'GROWTH_OS_WORKSPACE_USER_CREATE_ERROR',
+      // Expected validation / provisioning failures are shown
+      // inline rather than promoted to a Next.js error overlay.
+      console.warn(
+        'GROWTH_OS_WORKSPACE_USER_PROVISIONING',
         createError
       );
 
@@ -3049,7 +4329,7 @@ function UserAccessSettings({
         String(
           createError?.message
           ||
-          'Unable to add user'
+          'Unable to configure user access'
         )
       );
 
@@ -3301,40 +4581,7 @@ function UserAccessSettings({
   // SAVE ROLE
   // ==========================================================
 
-  async function saveWorkspaceUserRole() {
-
-    if (!editingUserId) {
-
-      return;
-
-    }
-
-
-    const success =
-      await patchWorkspaceUserAccess(
-        editingUserId,
-        {
-
-          action:
-            'role',
-
-          role:
-            editRole,
-
-        }
-      );
-
-
-    if (success) {
-
-      setEditingUserId(
-        null
-      );
-
-    }
-
-  }
-
+  
 
   // ==========================================================
   // SUSPEND / REACTIVATE
@@ -3375,18 +4622,261 @@ function UserAccessSettings({
   }
 
 
-  async function activateWorkspaceUser(
-    userId:
-      string
+    // ==========================================================
+  // RESUME INCOMPLETE USER PROVISIONING
+  // ==========================================================
+
+  function resumeWorkspaceUserSetup(
+    user:
+      NonNullable<
+        WorkspaceUsersResponse['users']
+      >[number]
   ) {
 
-    await patchWorkspaceUserAccess(
-      userId,
-      {
-        action:
-          'activate',
-      }
+    const normalizedRole:
+      WorkspaceUserRole =
+        (
+          user.role ===
+            'owner'
+          ||
+          user.role ===
+            'admin'
+          ||
+          user.role ===
+            'analyst'
+          ||
+          user.role ===
+            'viewer'
+        )
+
+          ? user.role
+
+          : 'viewer';
+
+
+    const nextModulePermissions =
+      buildInitialModulePermissions(
+        normalizedRole
+      );
+
+
+    setUserActionError(
+      ''
     );
+
+
+    setUserCreateError(
+      ''
+    );
+
+
+    setNewUserName(
+      user.fullName
+      ||
+      ''
+    );
+
+
+    setNewUserEmail(
+      user.email
+      ||
+      ''
+    );
+
+
+    setNewUserRole(
+      normalizedRole
+    );
+
+
+    setProvisioningMembershipId(
+      user.membershipId
+    );
+
+
+    setProvisioningUserId(
+      user.userId
+    );
+
+
+    setModulePermissions(
+      nextModulePermissions
+    );
+
+
+    setSubmodulePermissions(
+      buildInitialSubmodulePermissions(
+        nextModulePermissions
+      )
+    );
+
+    setAccessFormMode(
+      'resume'
+    );
+
+
+    setShowAddUser(
+      true
+    );
+
+
+    setActionMenu(
+      null
+    );
+
+  }
+
+
+  // ==========================================================
+  // ACTIVATE / RESUME USER ACCESS
+  //
+  // Suspended users with complete permissions reactivate
+  // immediately.
+  //
+  // Incomplete users reopen the one-screen access form.
+  // ==========================================================
+
+  async function activateWorkspaceUser(
+    user:
+      NonNullable<
+        WorkspaceUsersResponse['users']
+      >[number]
+  ) {
+
+    if (
+      userActionSavingId
+    ) {
+
+      return;
+
+    }
+
+
+    try {
+
+      setUserActionSavingId(
+        user.userId
+      );
+
+
+      setUserActionError(
+        ''
+      );
+
+
+      const response =
+        await fetch(
+          '/api/workspace/users',
+          {
+
+            method:
+              'PATCH',
+
+            cache:
+              'no-store',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+
+              'Content-Type':
+                'application/json',
+
+            },
+
+            body:
+              JSON.stringify({
+
+                userId:
+                  user.userId,
+
+                action:
+                  'activate',
+
+              }),
+
+          }
+        );
+
+
+      const json =
+        await readApiJson(
+          response,
+          'User activation API'
+        );
+
+
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
+
+        const apiError =
+          String(
+            json?.error
+            ||
+            'Unable to activate user access'
+          );
+
+
+        if (
+          apiError ===
+            'USER_MODULE_ACCESS_REQUIRED'
+          ||
+          apiError ===
+            'USER_SUBMODULE_ACCESS_REQUIRED'
+        ) {
+
+          resumeWorkspaceUserSetup(
+            user
+          );
+
+
+          return;
+
+        }
+
+
+        throw new Error(
+          getUserActionErrorMessage(
+            apiError
+          )
+        );
+
+      }
+
+
+      await reload();
+
+
+    } catch (
+      actionError:
+        any
+    ) {
+
+      console.warn(
+        'GROWTH_OS_WORKSPACE_USER_ACTIVATE',
+        actionError
+      );
+
+
+      setUserActionError(
+        String(
+          actionError?.message
+          ||
+          'Unable to activate user access'
+        )
+      );
+
+    } finally {
+
+      setUserActionSavingId(
+        null
+      );
+
+    }
 
   }
 
@@ -3693,23 +5183,7 @@ function UserAccessSettings({
 
       : null;
 
-
-  const editingUser =
-    editingUserId
-
-      ? (
-          users.find(
-            user =>
-              user.userId ===
-                editingUserId
-          )
-          ||
-          null
-        )
-
-      : null;
-
-
+  
   // ==========================================================
   // UI
   // ==========================================================
@@ -3786,15 +5260,17 @@ function UserAccessSettings({
           onClick={
             () => {
 
-              setUserCreateError(
-                ''
-              );
+              if (
+                showAddUser
+              ) {
 
+                closeAddUserForm();
 
-              setShowAddUser(
-                current =>
-                  !current
-              );
+              } else {
+
+                openAddUserForm();
+
+              }
 
             }
           }
@@ -3833,7 +5309,7 @@ function UserAccessSettings({
 
 
       {/* =====================================================
-          ADD USER FORM
+          ADD USER — ONE-SCREEN PROVISIONING
       ===================================================== */}
 
       {showAddUser &&
@@ -3846,214 +5322,878 @@ function UserAccessSettings({
           "
         >
 
-          <div>
+          <div
+            className="
+              flex
+              flex-col
+              gap-3
 
-            <h3 className="gos-section-title">
-              Add User
-            </h3>
+              lg:flex-row
+              lg:items-start
+              lg:justify-between
+            "
+          >
+
+            <div>
+
+              <h3 className="gos-section-title">
+                {accessFormMode ===
+                  'edit'
+
+                  ? 'Edit User Access'
+
+                  : accessFormMode ===
+                      'resume'
+
+                    ? 'Resume User Setup'
+
+                    : 'Add User'}
+              </h3>
 
 
-            <p
-              className="
-                mt-1
+              <p
+                className="
+                  mt-1
+                  max-w-3xl
 
-                text-[9px]
-                leading-4
+                  text-[9px]
+                  leading-4
 
-                text-slate-500
-              "
-            >
-              Add a person to the current authenticated brand.
-            </p>
+                  text-slate-500
+                "
+              >
+                Configure identity, role, module access and submodule access in one place. Growth OS creates or resumes an inactive membership first and activates it only after every permission is saved successfully.
+              </p>
+
+            </div>
+
+
+            {accessFormMode ===
+              'resume'
+              &&provisioningMembershipId && (
+
+              <span
+                className="
+                  shrink-0
+
+                  rounded-full
+
+                  border
+                  border-amber-200
+
+                  bg-amber-50
+
+                  px-2.5
+                  py-1
+
+                  text-[8px]
+                  font-semibold
+
+                  text-amber-700
+                "
+              >
+                Incomplete setup
+              </span>
+
+            )}
 
           </div>
 
+
+          {/* ===============================================
+              USER DETAILS
+          =============================================== */}
 
           <div
             className="
               mt-4
 
-              grid
-              grid-cols-1
-              gap-3
+              rounded-[10px]
 
-              md:grid-cols-2
+              border
+              border-slate-200
+
+              bg-slate-50
+
+              p-3
             "
           >
 
+            <div>
 
-            {/* FULL NAME */}
+              <p className="text-[10px] font-semibold text-slate-900">
+                User Details
+              </p>
 
-            <FormField label="Full Name">
+              <p className="mt-0.5 text-[8px] leading-4 text-slate-500">
+                Create the Growth OS identity and assign the workspace role.
+              </p>
 
-              <input
+            </div>
 
-                type="text"
 
-                value={
-                  newUserName
-                }
+            <div
+              className="
+                mt-3
 
-                onChange={
-                  event =>
-                    setNewUserName(
-                      event.target.value
+                grid
+                grid-cols-1
+                gap-3
+
+                md:grid-cols-2
+              "
+            >
+
+
+              {/* FULL NAME */}
+
+              <FormField label="Full Name">
+
+                <input
+
+                  type="text"
+
+                  value={
+                    newUserName
+                  }
+
+                  disabled={
+                    userSaving
+                  }
+
+                  onChange={
+                    event =>
+                      setNewUserName(
+                        event.target.value
+                      )
+                  }
+
+                  placeholder="e.g. Rahul Sharma"
+
+                  autoComplete="name"
+
+                  className="gos-input w-full"
+                />
+
+              </FormField>
+
+
+              {/* EMAIL */}
+
+              <FormField label="Email">
+
+                <input
+
+                  type="email"
+
+                  value={
+                    newUserEmail
+                  }
+
+                  disabled={
+                    userSaving
+                    ||
+                    Boolean(
+                      provisioningMembershipId
                     )
-                }
+                  }
 
-                placeholder="e.g. Rahul Sharma"
+                  onChange={
+                    event =>
+                      setNewUserEmail(
+                        event.target.value
+                      )
+                  }
 
-                autoComplete="name"
+                  placeholder="user@company.com"
 
-                className="gos-input w-full"
-              />
+                  autoComplete="email"
 
-            </FormField>
+                  className="gos-input w-full"
+                />
+
+              </FormField>
 
 
-            {/* EMAIL */}
+              <div className="rounded-[8px] border border-violet-100 bg-violet-50 px-3 py-2 text-[9px] leading-5 text-violet-700">
+                New users receive a secure email invitation and set their own password.
+              </div>
 
-            <FormField label="Email">
 
-              <input
+              {/* ROLE */}
 
-                type="email"
+              <FormField label="Role">
 
-                value={
-                  newUserEmail
-                }
+                <select
 
-                onChange={
-                  event =>
-                    setNewUserEmail(
-                      event.target.value
+                  value={
+                    newUserRole
+                  }
+
+                  disabled={
+                    userSaving
+                    ||
+                    Boolean(
+                      provisioningMembershipId
                     )
-                }
+                  }
 
-                placeholder="user@company.com"
+                  onChange={
+                    event =>
+                      handleNewUserRoleChange(
+                        event.target.value as
+                          WorkspaceUserRole
+                      )
+                  }
 
-                autoComplete="email"
+                  className="gos-input w-full"
+                >
 
-                className="gos-input w-full"
-              />
-
-            </FormField>
-
-
-            {/* PASSWORD */}
-
-            <FormField label="Initial Password">
-
-              <input
-
-                type="password"
-
-                value={
-                  newUserPassword
-                }
-
-                onChange={
-                  event =>
-                    setNewUserPassword(
-                      event.target.value
-                    )
-                }
-
-                placeholder="Minimum 10 characters"
-
-                autoComplete="new-password"
-
-                className="gos-input w-full"
-              />
-
-
-              <span
-                className="
-                  mt-1
-                  block
-
-                  text-[8px]
-                  leading-4
-
-                  text-slate-400
-                "
-              >
-                Required only when the email does not already have a Growth OS account.
-              </span>
-
-            </FormField>
-
-
-            {/* ROLE */}
-
-            <FormField label="Role">
-
-              <select
-
-                value={
-                  newUserRole
-                }
-
-                onChange={
-                  event =>
-                    setNewUserRole(
-                      event.target.value as
-                        'owner'
-                        |
-                        'admin'
-                        |
-                        'analyst'
-                        |
-                        'viewer'
-                    )
-                }
-
-                className="gos-input w-full"
-              >
-
-                <option value="viewer">
-                  Viewer
-                </option>
-
-                <option value="analyst">
-                  Analyst
-                </option>
-
-                <option value="admin">
-                  Admin
-                </option>
-
-                {canGrantOwner && (
-
-                  <option value="owner">
-                    Owner
+                  <option value="viewer">
+                    Viewer
                   </option>
 
-                )}
+                  <option value="analyst">
+                    Analyst
+                  </option>
 
-              </select>
+                  <option value="admin">
+                    Admin
+                  </option>
+
+                  {canGrantOwner && (
+
+                    <option value="owner">
+                      Owner
+                    </option>
+
+                  )}
+
+                </select>
 
 
-              <span
-                className="
-                  mt-1
-                  block
+                <span
+                  className="
+                    mt-1
+                    block
 
-                  text-[8px]
-                  leading-4
+                    text-[8px]
+                    leading-4
 
-                  text-slate-400
-                "
-              >
-                Admin can manage users. Only an Owner can grant Owner access.
-              </span>
+                    text-slate-400
+                  "
+                >
+                  Admin can manage users. Only an Owner can grant Owner access.
+                </span>
 
-            </FormField>
+              </FormField>
+
+            </div>
 
           </div>
 
 
-          {/* ERROR */}
+          {/* ===============================================
+              MODULE ACCESS
+          =============================================== */}
+
+          <div
+            className="
+              mt-3
+
+              rounded-[10px]
+
+              border
+              border-slate-200
+
+              bg-white
+
+              p-3
+            "
+          >
+
+            <div
+              className="
+                flex
+                items-start
+                justify-between
+                gap-3
+              "
+            >
+
+              <div>
+
+                <p className="text-[10px] font-semibold text-slate-900">
+                  Module Access
+                </p>
+
+                <p className="mt-0.5 text-[8px] leading-4 text-slate-500">
+                  Choose the maximum access this user receives inside each Growth OS module.
+                </p>
+
+              </div>
+
+
+              <span
+                className="
+                  shrink-0
+
+                  rounded-full
+
+                  border
+                  border-slate-200
+
+                  bg-slate-50
+
+                  px-2
+                  py-1
+
+                  text-[8px]
+                  font-semibold
+
+                  text-slate-500
+                "
+              >
+                {activeModules.length} modules
+              </span>
+
+            </div>
+
+
+            {activeModules.length ===
+              0 ? (
+
+              <div
+                className="
+                  mt-3
+
+                  rounded-lg
+
+                  border
+                  border-amber-200
+
+                  bg-amber-50
+
+                  px-3
+                  py-2.5
+                "
+              >
+                <p className="text-[9px] font-semibold text-amber-800">
+                  No active modules are available for this brand.
+                </p>
+              </div>
+
+            ) : (
+
+              <div
+                className="
+                  mt-3
+
+                  grid
+                  grid-cols-1
+                  gap-2
+
+                  lg:grid-cols-2
+                "
+              >
+
+                {activeModules.map(
+                  module => {
+
+                    const permission =
+                      modulePermissions[
+                        module.moduleId
+                      ]
+                      ||
+                      defaultModulePermission(
+                        module,
+                        newUserRole
+                      );
+
+
+                    return (
+
+                      <div
+                        key={
+                          module.moduleId
+                        }
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+
+                          rounded-[9px]
+
+                          border
+                          border-slate-200
+
+                          bg-slate-50
+
+                          px-3
+                          py-2.5
+                        "
+                      >
+
+                        <div className="min-w-0">
+
+                          <div className="flex items-center gap-2">
+
+                            <p
+                              className="
+                                truncate
+
+                                text-[9px]
+                                font-semibold
+
+                                text-slate-800
+                              "
+                            >
+                              {module.name ||
+                                module.moduleId}
+                            </p>
+
+
+                            <ModuleBadge
+                              available={
+                                module.enabled
+                              }
+                            />
+
+                          </div>
+
+
+                          {module.description && (
+
+                            <p
+                              className="
+                                mt-1
+                                max-w-[420px]
+
+                                text-[8px]
+                                leading-4
+
+                                text-slate-500
+                              "
+                            >
+                              {module.description}
+                            </p>
+
+                          )}
+
+                        </div>
+
+
+                        <select
+
+                          value={
+                            permission
+                          }
+
+                          disabled={
+                            userSaving
+                            ||
+                            !module.enabled
+                          }
+
+                          onChange={
+                            event =>
+                              updateModulePermission(
+                                module.moduleId,
+                                event.target.value as
+                                  UserAccessPermission
+                              )
+                          }
+
+                          className="
+                            h-8
+                            min-w-[104px]
+                            shrink-0
+
+                            rounded-[7px]
+
+                            border
+                            border-slate-200
+
+                            bg-white
+
+                            px-2
+
+                            text-[8px]
+                            font-semibold
+
+                            text-slate-700
+
+                            outline-none
+
+                            disabled:bg-slate-100
+                            disabled:text-slate-400
+                          "
+                        >
+
+                          <option value="viewer">
+                            Viewer
+                          </option>
+
+                          <option value="editor">
+                            Editor
+                          </option>
+
+                          <option value="disabled">
+                            Disabled
+                          </option>
+
+                        </select>
+
+                      </div>
+
+                    );
+
+                  }
+                )}
+
+              </div>
+
+            )}
+
+          </div>
+
+
+          {/* ===============================================
+              SUBMODULE ACCESS
+          =============================================== */}
+
+          <div
+            className="
+              mt-3
+
+              rounded-[10px]
+
+              border
+              border-slate-200
+
+              bg-white
+
+              p-3
+            "
+          >
+
+            <div>
+
+              <p className="text-[10px] font-semibold text-slate-900">
+                Submodule Access
+              </p>
+
+              <p className="mt-0.5 text-[8px] leading-4 text-slate-500">
+                Fine-tune individual screens. Inherit uses the permission selected for the parent module.
+              </p>
+
+            </div>
+
+
+            <div className="mt-3 space-y-3">
+
+              {activeModules.map(
+                module => {
+
+                  const parentPermission =
+                    modulePermissions[
+                      module.moduleId
+                    ]
+                    ||
+                    defaultModulePermission(
+                      module,
+                      newUserRole
+                    );
+
+
+                  const submodules =
+                    GROWTHOS_SUBMODULES.filter(
+                      submodule =>
+                        submodule.moduleId ===
+                          module.moduleId
+                    );
+
+
+                  if (
+                    !module.enabled
+                    ||
+                    parentPermission ===
+                      'disabled'
+                    ||
+                    submodules.length ===
+                      0
+                  ) {
+
+                    return null;
+
+                  }
+
+
+                  return (
+
+                    <div
+
+                      key={
+                        module.moduleId
+                      }
+
+                      className="
+                        overflow-hidden
+
+                        rounded-[9px]
+
+                        border
+                        border-slate-200
+                      "
+                    >
+
+                      <div
+                        className="
+                          flex
+                          items-center
+                          justify-between
+                          gap-3
+
+                          border-b
+                          border-slate-200
+
+                          bg-slate-50
+
+                          px-3
+                          py-2
+                        "
+                      >
+
+                        <div>
+
+                          <p className="text-[9px] font-semibold text-slate-800">
+                            {module.name ||
+                              module.moduleId}
+                          </p>
+
+                          <p className="mt-0.5 text-[8px] text-slate-500">
+                            Parent access: {formatRole(
+                              parentPermission
+                            )}
+                          </p>
+
+                        </div>
+
+
+                        <span className="text-[8px] font-medium text-slate-400">
+                          {submodules.length} screens
+                        </span>
+
+                      </div>
+
+
+                      <div
+                        className="
+                          grid
+                          grid-cols-1
+                          gap-px
+
+                          bg-slate-200
+
+                          md:grid-cols-2
+                        "
+                      >
+
+                        {submodules.map(
+                          submodule => {
+
+                            const key =
+                              `${submodule.moduleId}:${submodule.submoduleId}`;
+
+
+                            const value =
+                              submodulePermissions[
+                                key
+                              ]
+                              ||
+                              'inherit';
+
+
+                            return (
+
+                              <div
+
+                                key={
+                                  key
+                                }
+
+                                className="
+                                  flex
+                                  min-h-[42px]
+                                  items-center
+                                  justify-between
+                                  gap-3
+
+                                  bg-white
+
+                                  px-3
+                                  py-2
+                                "
+                              >
+
+                                <span className="text-[8px] font-medium text-slate-600">
+                                  {submodule.label}
+                                </span>
+
+
+                                <select
+
+                                  value={
+                                    parentPermission ===
+                                      'viewer'
+                                    &&
+                                    value ===
+                                      'editor'
+
+                                      ? 'inherit'
+
+                                      : value
+                                  }
+
+                                  disabled={
+                                    userSaving
+                                  }
+
+                                  onChange={
+                                    event =>
+                                      setSubmodulePermissions(
+                                        previous => ({
+                                          ...previous,
+                                          [key]:
+                                            event.target.value as
+                                              UserAccessPermission,
+                                        })
+                                      )
+                                  }
+
+                                  className="
+                                    h-7
+                                    min-w-[92px]
+
+                                    rounded-[7px]
+
+                                    border
+                                    border-slate-200
+
+                                    bg-white
+
+                                    px-1.5
+
+                                    text-[8px]
+                                    font-semibold
+
+                                    text-slate-700
+
+                                    outline-none
+                                  "
+                                >
+
+                                  <option value="inherit">
+                                    Inherit
+                                  </option>
+
+                                  <option value="viewer">
+                                    Viewer
+                                  </option>
+
+                                  {parentPermission !==
+                                    'viewer' && (
+
+                                    <option value="editor">
+                                      Editor
+                                    </option>
+
+                                  )}
+
+                                  <option value="disabled">
+                                    Disabled
+                                  </option>
+
+                                </select>
+
+                              </div>
+
+                            );
+
+                          }
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  );
+
+                }
+              )}
+
+
+              {activeModules.every(
+                module => {
+
+                  const parentPermission =
+                    modulePermissions[
+                      module.moduleId
+                    ]
+                    ||
+                    defaultModulePermission(
+                      module,
+                      newUserRole
+                    );
+
+
+                  return (
+                    !module.enabled
+                    ||
+                    parentPermission ===
+                      'disabled'
+                    ||
+                    GROWTHOS_SUBMODULES.every(
+                      submodule =>
+                        submodule.moduleId !==
+                          module.moduleId
+                    )
+                  );
+
+                }
+              ) && (
+
+                <div
+                  className="
+                    rounded-lg
+
+                    border
+                    border-slate-200
+
+                    bg-slate-50
+
+                    px-3
+                    py-3
+
+                    text-center
+                  "
+                >
+                  <p className="text-[8px] text-slate-500">
+                    No submodules require configuration for the selected module access.
+                  </p>
+                </div>
+
+              )}
+
+            </div>
+
+          </div>
+
+
+          {/* ===============================================
+              ERROR
+          =============================================== */}
 
           {userCreateError && (
 
@@ -4089,7 +6229,36 @@ function UserAccessSettings({
           )}
 
 
-          {/* ACTIONS */}
+          {/* ===============================================
+              SAFETY NOTE
+          =============================================== */}
+
+          <div
+            className="
+              mt-3
+
+              rounded-[9px]
+
+              border
+              border-violet-200
+
+              bg-violet-50
+
+              px-3
+              py-2.5
+            "
+          >
+
+            <p className="text-[8px] leading-4 text-violet-700">
+              The membership remains inactive until module and submodule permissions are successfully stored. If any step fails, Growth OS does not activate partially configured access.
+            </p>
+
+          </div>
+
+
+          {/* ===============================================
+              ACTIONS
+          =============================================== */}
 
           <div
             className="
@@ -4111,18 +6280,7 @@ function UserAccessSettings({
               }
 
               onClick={
-                () => {
-
-                  setUserCreateError(
-                    ''
-                  );
-
-
-                  setShowAddUser(
-                    false
-                  );
-
-                }
+                closeAddUserForm
               }
 
               className="
@@ -4160,6 +6318,9 @@ function UserAccessSettings({
                 userSaving
                 ||
                 !newUserEmail.trim()
+                ||
+                activeModules.length ===
+                  0
               }
 
               onClick={
@@ -4189,8 +6350,27 @@ function UserAccessSettings({
             >
 
               {userSaving
-                ? 'Adding...'
-                : 'Add User'}
+
+                ? (
+                    accessFormMode ===
+                      'edit'
+
+                      ? 'Saving Access...'
+
+                      : 'Saving & Activating...'
+                  )
+
+                : accessFormMode ===
+                    'edit'
+
+                  ? 'Save Access'
+
+                  : accessFormMode ===
+                      'resume'
+
+                  ? 'Save Access & Activate'
+
+                  : 'Add & Activate User'}
 
             </button>
 
@@ -4936,25 +7116,17 @@ function UserAccessSettings({
 
               onClick={() => {
 
-                setEditRole(
-                  actionMenuUser.role as
-                    'owner'
-                    |
-                    'admin'
-                    |
-                    'analyst'
-                    |
-                    'viewer'
-                );
-
-
-                setEditingUserId(
-                  actionMenuUser.userId
-                );
+                const targetUser =
+                  actionMenuUser;
 
 
                 setActionMenu(
                   null
+                );
+
+
+                openEditUserAccess(
+                  targetUser
                 );
 
               }}
@@ -5037,13 +7209,16 @@ function UserAccessSettings({
 
                 onClick={() => {
 
+                  const targetUser =
+                    actionMenuUser;
+
                   setActionMenu(
                     null
                   );
 
 
                   activateWorkspaceUser(
-                    actionMenuUser.userId
+                     targetUser
                   );
 
                 }}
@@ -5069,7 +7244,12 @@ function UserAccessSettings({
                   hover:bg-emerald-50
                 "
               >
-                Reactivate Access
+                {userActionSavingId ===
+                  actionMenuUser.userId
+
+                  ? 'Working...'
+
+                  : 'Reactivate / Resume Setup'}
               </button>
 
             )}
@@ -5126,223 +7306,888 @@ function UserAccessSettings({
 
       )}
 
+      
+      <ServerNotice
+        text="Users and roles are controlled by Growth OS server-side access rules. Browser storage cannot grant or modify workspace access."
+      />
 
-      {/* =====================================================
-          EDIT ACCESS DIALOG
-      ===================================================== */}
+    </div>
 
-      {editingUser && (
+  );
 
-        <div
-          className="
-            fixed
-            inset-0
-            z-[60]
+}
 
-            flex
-            items-center
-            justify-center
 
-            bg-slate-950/20
+// ============================================================
+// SECURITY
+// ============================================================
 
-            p-4
-          "
-        >
+type SecuritySession = {
 
-          <div
-            className="
-              w-full
-              max-w-[430px]
+  sessionId:
+    string;
 
-              rounded-[14px]
+  workspaceId:
+    string;
 
-              border
-              border-slate-200
+  brandId:
+    string;
 
-              bg-white
+  createdAt:
+    string | null;
 
-              p-4
+  lastSeenAt:
+    string | null;
 
-              shadow-2xl
-            "
-          >
+  expiresAt:
+    string | null;
 
-            <div>
+  ipAddress:
+    string | null;
 
-              <h3 className="text-[13px] font-semibold text-slate-950">
-                Edit Access
-              </h3>
+  userAgent:
+    string | null;
 
+  current:
+    boolean;
 
-              <p className="mt-1 break-all text-[9px] text-slate-500">
-                {editingUser.email ||
-                  editingUser.userId}
-              </p>
+};
 
-            </div>
 
+function SecuritySettings({
 
-            <div className="mt-4">
+  authContext,
 
-              <FormField label="Role">
+}: {
 
-                <select
+  authContext:
+    AuthMeResponse |
+    null;
 
-                  value={
-                    editRole
-                  }
+}) {
 
-                  disabled={
-                    userActionSavingId ===
-                      editingUser.userId
-                  }
+  const [
+    currentPassword,
+    setCurrentPassword,
+  ] =
+    useState('');
 
-                  onChange={
-                    event =>
-                      setEditRole(
-                        event.target.value as
-                          'owner'
-                          |
-                          'admin'
-                          |
-                          'analyst'
-                          |
-                          'viewer'
-                      )
-                  }
 
-                  className="gos-input w-full"
-                >
+  const [
+    newPassword,
+    setNewPassword,
+  ] =
+    useState('');
 
-                  <option value="viewer">
-                    Viewer
-                  </option>
 
-                  <option value="analyst">
-                    Analyst
-                  </option>
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] =
+    useState('');
 
-                  <option value="admin">
-                    Admin
-                  </option>
 
-                  {canGrantOwner && (
+  const [
+    passwordSaving,
+    setPasswordSaving,
+  ] =
+    useState(false);
 
-                    <option value="owner">
-                      Owner
-                    </option>
 
-                  )}
+  const [
+    passwordMessage,
+    setPasswordMessage,
+  ] =
+    useState('');
 
-                </select>
 
-              </FormField>
+  const [
+    passwordError,
+    setPasswordError,
+  ] =
+    useState('');
 
-            </div>
 
+  const [
+    sessions,
+    setSessions,
+  ] =
+    useState<SecuritySession[]>([]);
 
-            <div
-              className="
-                mt-4
 
-                flex
-                items-center
-                justify-end
-                gap-2
-              "
-            >
+  const [
+    sessionsLoading,
+    setSessionsLoading,
+  ] =
+    useState(true);
 
-              <button
 
-                type="button"
+  const [
+    sessionsError,
+    setSessionsError,
+  ] =
+    useState('');
 
-                disabled={
-                  userActionSavingId ===
-                    editingUser.userId
-                }
 
-                onClick={() =>
-                  setEditingUserId(
-                    null
-                  )
-                }
+  const [
+    sessionSavingId,
+    setSessionSavingId,
+  ] =
+    useState<string | null>(
+      null
+    );
 
-                className="
-                  rounded-[8px]
 
-                  border
-                  border-slate-200
+  const [
+    logoutAllSaving,
+    setLogoutAllSaving,
+  ] =
+    useState(false);
 
-                  bg-white
 
-                  px-3
-                  py-2
+  const authMethod =
+    authContext?.auth?.method
+    ||
+    null;
 
-                  text-[9px]
-                  font-semibold
 
-                  text-slate-600
+  const passwordManaged =
+    authMethod ===
+      'password';
 
-                  hover:bg-slate-50
 
-                  disabled:opacity-40
-                "
-              >
-                Cancel
-              </button>
+  async function loadSessions() {
 
+    setSessionsLoading(
+      true
+    );
 
-              <button
 
-                type="button"
+    setSessionsError(
+      ''
+    );
 
-                disabled={
-                  userActionSavingId ===
-                    editingUser.userId
-                }
 
-                onClick={
-                  saveWorkspaceUserRole
-                }
+    try {
 
-                className="
-                  rounded-[8px]
+      const response =
+        await fetch(
+          '/api/auth/sessions',
+          {
+            cache:
+              'no-store',
 
-                  bg-slate-950
+            credentials:
+              'same-origin',
+          }
+        );
 
-                  px-4
-                  py-2
 
-                  text-[9px]
-                  font-semibold
+      const json =
+        await response.json();
 
-                  text-white
 
-                  hover:bg-slate-800
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
 
-                  disabled:opacity-40
-                "
-              >
+        throw new Error(
+          json?.error
+          ||
+          'Unable to load sessions'
+        );
 
-                {userActionSavingId ===
-                  editingUser.userId
-                  ? 'Saving...'
-                  : 'Save Access'}
+      }
 
-              </button>
 
-            </div>
+      setSessions(
+        Array.isArray(
+          json?.sessions
+        )
+          ? json.sessions
+          : []
+      );
 
+    } catch (
+      error: any
+    ) {
+
+      setSessionsError(
+        String(
+          error?.message
+          ||
+          'Unable to load active sessions'
+        )
+      );
+
+    } finally {
+
+      setSessionsLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadSessions();
+
+    },
+    []
+  );
+
+
+  async function changePassword() {
+
+    if (
+      passwordSaving
+    ) {
+
+      return;
+
+    }
+
+
+    setPasswordError(
+      ''
+    );
+
+
+    setPasswordMessage(
+      ''
+    );
+
+
+    if (
+      !currentPassword
+    ) {
+
+      setPasswordError(
+        'Enter your current password.'
+      );
+
+
+      return;
+
+    }
+
+
+    if (
+      newPassword.length <
+        10
+    ) {
+
+      setPasswordError(
+        'New password must be at least 10 characters.'
+      );
+
+
+      return;
+
+    }
+
+
+    if (
+      newPassword !==
+        confirmPassword
+    ) {
+
+      setPasswordError(
+        'New passwords do not match.'
+      );
+
+
+      return;
+
+    }
+
+
+    try {
+
+      setPasswordSaving(
+        true
+      );
+
+
+      const response =
+        await fetch(
+          '/api/auth/change-password',
+          {
+            method:
+              'POST',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify({
+                currentPassword,
+                newPassword,
+              }),
+          }
+        );
+
+
+      const json =
+        await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
+
+        const friendly:
+          Record<string, string> = {
+
+          CURRENT_PASSWORD_INVALID:
+            'Current password is incorrect.',
+
+          NEW_PASSWORD_MUST_BE_DIFFERENT:
+            'Choose a password different from your current password.',
+
+          PASSWORD_REQUIREMENTS_NOT_MET:
+            'New password must be at least 10 characters.',
+
+          PASSWORD_LOGIN_NOT_CONFIGURED:
+            'Password login is not configured for this account.',
+
+        };
+
+
+        throw new Error(
+          friendly[
+            String(
+              json?.error
+              ||
+              ''
+            )
+          ]
+          ||
+          json?.error
+          ||
+          'Unable to change password'
+        );
+
+      }
+
+
+      setCurrentPassword(
+        ''
+      );
+
+
+      setNewPassword(
+        ''
+      );
+
+
+      setConfirmPassword(
+        ''
+      );
+
+
+      setPasswordMessage(
+        'Password updated. Other signed-in devices have been signed out.'
+      );
+
+
+      await loadSessions();
+
+    } catch (
+      error: any
+    ) {
+
+      setPasswordError(
+        String(
+          error?.message
+          ||
+          'Unable to change password'
+        )
+      );
+
+    } finally {
+
+      setPasswordSaving(
+        false
+      );
+
+    }
+
+  }
+
+
+  async function logoutCurrent() {
+
+    try {
+
+      await fetch(
+        '/api/auth/logout',
+        {
+          method:
+            'POST',
+
+          credentials:
+            'same-origin',
+        }
+      );
+
+    } finally {
+
+      window.location.assign(
+        '/login'
+      );
+
+    }
+
+  }
+
+
+  async function logoutAll() {
+
+    if (
+      logoutAllSaving
+    ) {
+
+      return;
+
+    }
+
+
+    const confirmed =
+      window.confirm(
+        'Sign out every Growth OS session for your account?'
+      );
+
+
+    if (!confirmed) {
+
+      return;
+
+    }
+
+
+    try {
+
+      setLogoutAllSaving(
+        true
+      );
+
+
+      await fetch(
+        '/api/auth/logout-all',
+        {
+          method:
+            'POST',
+
+          credentials:
+            'same-origin',
+        }
+      );
+
+    } finally {
+
+      window.location.assign(
+        '/login'
+      );
+
+    }
+
+  }
+
+
+  async function revokeSession(
+    sessionId:
+      string,
+    current:
+      boolean
+  ) {
+
+    if (
+      sessionSavingId
+    ) {
+
+      return;
+
+    }
+
+
+    try {
+
+      setSessionSavingId(
+        sessionId
+      );
+
+
+      const response =
+        await fetch(
+          '/api/auth/sessions/revoke',
+          {
+            method:
+              'POST',
+
+            credentials:
+              'same-origin',
+
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify({
+                sessionId,
+              }),
+          }
+        );
+
+
+      const json =
+        await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json?.ok
+      ) {
+
+        throw new Error(
+          json?.error
+          ||
+          'Unable to revoke session'
+        );
+
+      }
+
+
+      if (
+        current
+        ||
+        json?.currentRevoked
+      ) {
+
+        window.location.assign(
+          '/login'
+        );
+
+
+        return;
+
+      }
+
+
+      await loadSessions();
+
+    } catch (
+      error: any
+    ) {
+
+      setSessionsError(
+        String(
+          error?.message
+          ||
+          'Unable to revoke session'
+        )
+      );
+
+    } finally {
+
+      setSessionSavingId(
+        null
+      );
+
+    }
+
+  }
+
+
+  function formatSecurityDate(
+    value:
+      string | null
+  ) {
+
+    if (!value) {
+
+      return '—';
+
+    }
+
+
+    try {
+
+      return new Intl.DateTimeFormat(
+        'en-IN',
+        {
+          dateStyle:
+            'medium',
+
+          timeStyle:
+            'short',
+        }
+      ).format(
+        new Date(
+          value
+        )
+      );
+
+    } catch {
+
+      return value;
+
+    }
+
+  }
+
+
+  return (
+
+    <div className="space-y-3">
+
+      <section className="gos-panel !p-3">
+
+        <div className="flex items-center gap-3">
+
+          <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-violet-50 text-violet-600">
+            <ShieldCheck size={16} />
+          </div>
+
+          <div>
+            <h2 className="text-[14px] font-semibold tracking-[-0.025em] text-slate-950">
+              Security
+            </h2>
+            <p className="mt-0.5 text-[9px] text-slate-500">
+              Manage your password, signed-in devices and account sessions.
+            </p>
           </div>
 
         </div>
 
+      </section>
+
+
+      {!passwordManaged && (
+
+        <section className="gos-panel !p-3">
+          <div className="flex items-start gap-3">
+            <ShieldCheck size={16} className="mt-0.5 text-emerald-600" />
+            <div>
+              <p className="text-[11px] font-semibold text-slate-900">
+                Shopify-managed authentication
+              </p>
+              <p className="mt-1 text-[9px] leading-5 text-slate-500">
+                This session was created from a verified Shopify launch. Password and device controls apply to direct Growth OS password accounts.
+              </p>
+            </div>
+          </div>
+        </section>
+
       )}
 
 
-      <ServerNotice
-        text="Users and roles are controlled by Growth OS server-side access rules. Browser storage cannot grant or modify workspace access."
-      />
+      {passwordManaged && (
+
+        <section className="gos-panel !p-3">
+
+          <div className="flex items-center gap-2">
+            <KeyRound size={15} className="text-violet-600" />
+            <h3 className="text-[12px] font-semibold text-slate-950">
+              Change Password
+            </h3>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
+
+            <FormField label="Current Password">
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={event => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+                className="gos-input w-full"
+              />
+            </FormField>
+
+            <FormField label="New Password">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={event => setNewPassword(event.target.value)}
+                autoComplete="new-password"
+                placeholder="Minimum 10 characters"
+                className="gos-input w-full"
+              />
+            </FormField>
+
+            <FormField label="Confirm New Password">
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={event => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+                className="gos-input w-full"
+              />
+            </FormField>
+
+          </div>
+
+          {passwordError && (
+            <p className="mt-3 text-[9px] font-semibold text-red-700">
+              {passwordError}
+            </p>
+          )}
+
+          {passwordMessage && (
+            <p className="mt-3 text-[9px] font-semibold text-emerald-700">
+              {passwordMessage}
+            </p>
+          )}
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              disabled={passwordSaving}
+              onClick={changePassword}
+              className="rounded-[8px] bg-slate-950 px-4 py-2 text-[9px] font-semibold text-white hover:bg-slate-800 disabled:opacity-40"
+            >
+              {passwordSaving ? 'Updating...' : 'Change Password'}
+            </button>
+          </div>
+
+        </section>
+
+      )}
+
+
+      <section className="gos-panel !p-3">
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <MonitorSmartphone size={15} className="text-violet-600" />
+            <div>
+              <h3 className="text-[12px] font-semibold text-slate-950">
+                Active Sessions
+              </h3>
+              <p className="mt-0.5 text-[9px] text-slate-500">
+                Review devices currently signed in to your Growth OS account.
+              </p>
+            </div>
+          </div>
+
+          {passwordManaged && (
+            <button
+              type="button"
+              onClick={loadSessions}
+              disabled={sessionsLoading}
+              className="rounded-[8px] border border-slate-200 bg-white px-3 py-2 text-[9px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            >
+              Refresh
+            </button>
+          )}
+        </div>
+
+        {sessionsLoading ? (
+          <p className="mt-4 text-[9px] text-slate-500">
+            Loading active sessions...
+          </p>
+        ) : sessionsError ? (
+          <p className="mt-4 text-[9px] font-semibold text-red-700">
+            {sessionsError}
+          </p>
+        ) : sessions.length === 0 ? (
+          <p className="mt-4 text-[9px] text-slate-500">
+            {passwordManaged ? 'No active password sessions found.' : 'Shopify sessions are managed by Shopify.'}
+          </p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {sessions.map(session => (
+              <div
+                key={session.sessionId}
+                className="flex flex-col gap-3 rounded-[10px] border border-slate-200 bg-white px-3 py-3 lg:flex-row lg:items-center lg:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold text-slate-900">
+                      {session.current ? 'Current session' : 'Growth OS session'}
+                    </p>
+                    {session.current && (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[8px] font-semibold text-emerald-700">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 truncate text-[8px] text-slate-500">
+                    {session.userAgent || 'Unknown browser/device'}
+                  </p>
+                  <p className="mt-1 text-[8px] text-slate-400">
+                    Created {formatSecurityDate(session.createdAt)} · IP {session.ipAddress || 'Unknown'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={sessionSavingId === session.sessionId}
+                  onClick={() => revokeSession(session.sessionId, session.current)}
+                  className="shrink-0 rounded-[8px] border border-red-200 bg-white px-3 py-2 text-[9px] font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
+                >
+                  {sessionSavingId === session.sessionId ? 'Signing out...' : 'Sign Out'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </section>
+
+
+      <section className="gos-panel !p-3">
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-[12px] font-semibold text-slate-950">
+              Session Controls
+            </h3>
+            <p className="mt-1 text-[9px] leading-5 text-slate-500">
+              Sign out this browser or invalidate every password session associated with your account.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={logoutCurrent}
+              className="inline-flex items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 py-2 text-[9px] font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <LogOut size={13} />
+              Logout
+            </button>
+
+            {passwordManaged && (
+              <button
+                type="button"
+                disabled={logoutAllSaving}
+                onClick={logoutAll}
+                className="rounded-[8px] bg-red-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-red-700 disabled:opacity-40"
+              >
+                {logoutAllSaving ? 'Signing out...' : 'Sign Out All Devices'}
+              </button>
+            )}
+          </div>
+        </div>
+
+      </section>
 
     </div>
 

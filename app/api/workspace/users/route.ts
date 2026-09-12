@@ -23,8 +23,13 @@ import {
 
 import {
   getGrowthOSWorkspaceSubscriptionSnapshot,
+  listGrowthOSUserModulePermissionsFast,
+  listGrowthOSUserSubmodulePermissionsFast,
 } from '@/lib/admin/control-plane';
 
+import {
+  GROWTHOS_SUBMODULES,
+} from '@/lib/auth/submodule-registry';
 
 export const dynamic =
   'force-dynamic';
@@ -767,57 +772,132 @@ export async function POST(
     // 10. ALREADY HAS ACCESS
     // ========================================================
 
-    const alreadyMember =
-      currentUsers.some(
-        user => {
+    const existingMembership =
+  currentUsers.find(
+    user => {
 
-          if (
-            existingUser
-            &&
-            user.user_id ===
-              existingUser.user_id
-          ) {
+      if (
+        existingUser
+        &&
+        user.user_id ===
+          existingUser.user_id
+      ) {
 
-            return true;
+        return true;
 
-          }
-
-
-          return (
-            String(
-              user.email
-              ||
-              ''
-            )
-              .trim()
-              .toLowerCase()
-            ===
-            email
-          );
-
-        }
-      );
+      }
 
 
-    if (alreadyMember) {
-
-      return NextResponse.json(
-        {
-
-          ok:
-            false,
-
-          error:
-            'USER_ALREADY_HAS_ACCESS',
-
-        },
-        {
-          status:
-            409,
-        }
+      return (
+        String(
+          user.email
+          ||
+          ''
+        )
+          .trim()
+          .toLowerCase()
+        ===
+        email
       );
 
     }
+  );
+
+
+// ========================================================
+// EXISTING ACTIVE MEMBERSHIP
+// ========================================================
+
+if (
+  existingMembership
+  &&
+  existingMembership.membership_status ===
+    'active'
+) {
+
+  return NextResponse.json(
+    {
+
+      ok:
+        false,
+
+      error:
+        'USER_ALREADY_HAS_ACCESS',
+
+    },
+    {
+      status:
+        409,
+    }
+  );
+
+}
+
+
+// ========================================================
+// EXISTING INACTIVE MEMBERSHIP
+//
+// Previous provisioning may have stopped midway.
+//
+// Return the existing membership so the client can resume:
+//
+// module permissions
+// → submodule permissions
+// → activation
+// ========================================================
+
+if (
+  existingMembership
+  &&
+  existingMembership.membership_status ===
+    'inactive'
+) {
+
+  return NextResponse.json({
+
+    ok:
+      true,
+
+    resumed:
+      true,
+
+    user: {
+
+      userId:
+        existingMembership.user_id,
+
+      membershipId:
+        existingMembership.membership_id,
+
+      email:
+        existingMembership.email,
+
+      fullName:
+        existingMembership.full_name,
+
+      role:
+        existingMembership.role,
+
+      userStatus:
+        existingMembership.user_status,
+
+      membershipStatus:
+        existingMembership.membership_status,
+
+    },
+
+    meta: {
+
+      durationMs:
+        Date.now()
+        -
+        startedAt,
+
+    },
+
+  });
+
+}
 
 
     // ========================================================
@@ -908,7 +988,19 @@ export async function POST(
         null;
 
 
-    if (!existingUser) {
+    // New users can now be created without an admin-chosen
+    // password. Security V1 sends an invite after access is
+    // configured and activated so the user sets their own
+    // password.
+    //
+    // A password is still accepted for backward compatibility
+    // with older callers, but it is no longer required.
+
+    if (
+      !existingUser
+      &&
+      password
+    ) {
 
       if (
         password.length <
@@ -971,25 +1063,26 @@ export async function POST(
     // 14. GRANT BRAND MEMBERSHIP
     // ========================================================
 
-    await upsertBrandMembership({
+    const membership =
+  await upsertBrandMembership({
 
-      userId:
-        user.userId,
+    userId:
+      user.userId,
 
-      workspaceId,
+    workspaceId,
 
-      brandId,
+    brandId,
 
-      role:
-        targetRole,
+    role:
+      targetRole,
 
-      status:
-        'active',
+    status:
+      'inactive',
 
-      isDefault:
-        false,
+    isDefault:
+      false,
 
-    });
+  });
 
 
     // ========================================================
@@ -1004,22 +1097,28 @@ export async function POST(
 
         user: {
 
-          userId:
-            user.userId,
+  userId:
+    user.userId,
 
-          email:
-            user.email,
+  membershipId:
+    membership.membershipId,
 
-          fullName:
-            user.fullName,
+  email:
+    user.email,
 
-          role:
-            targetRole,
+  fullName:
+    user.fullName,
 
-          status:
-            'active',
+  role:
+    targetRole,
 
-        },
+  userStatus:
+    'active',
+
+  membershipStatus:
+    'inactive',
+
+},
 
         meta: {
 
@@ -1939,6 +2038,212 @@ export async function PATCH(
       );
 
     }
+
+    // ========================================================
+// MODULE ACCESS MUST BE CONFIGURED BEFORE ACTIVATION
+//
+// Every active module in the Growth OS catalog must have an
+// explicit permission row for this membership.
+//
+// This prevents a newly-created user from becoming active
+// before their access has been deliberately configured.
+// ========================================================
+
+const modulePermissions =
+  await listGrowthOSUserModulePermissionsFast(
+    target.membership_id
+  );
+
+
+const requiredModules =
+  (
+    subscription.modules
+    ||
+    []
+  ).filter(
+    module =>
+      module.status ===
+        'active'
+  );
+
+
+const configuredModuleIds =
+  new Set(
+    modulePermissions.map(
+      permission =>
+        permission.module_id
+    )
+  );
+
+
+const missingModules =
+  requiredModules.filter(
+    module =>
+      !configuredModuleIds.has(
+        module.moduleId
+      )
+  );
+
+
+if (
+  missingModules.length >
+    0
+) {
+
+  return NextResponse.json(
+    {
+
+      ok:
+        false,
+
+      error:
+        'USER_MODULE_ACCESS_REQUIRED',
+
+      missingModules:
+        missingModules.map(
+          module => ({
+
+            moduleId:
+              module.moduleId,
+
+            name:
+              module.name,
+
+          })
+        ),
+
+    },
+    {
+      status:
+        409,
+    }
+  );
+
+}
+
+// ========================================================
+// SUBMODULE ACCESS MUST BE CONFIGURED BEFORE ACTIVATION
+//
+// Applicable submodules:
+//
+// brand module is active + enabled
+// AND
+// user parent module is not disabled
+//
+// Every applicable submodule must have an explicit row.
+// ========================================================
+
+const submodulePermissions =
+  await listGrowthOSUserSubmodulePermissionsFast(
+    target.membership_id
+  );
+
+
+const modulePermissionMap =
+  new Map(
+    modulePermissions.map(
+      permission => [
+
+        permission.module_id,
+
+        permission.permission,
+
+      ]
+    )
+  );
+
+
+const applicableModuleIds =
+  new Set(
+    (
+      subscription.modules
+      ||
+      []
+    )
+      .filter(
+        module =>
+          module.status ===
+            'active'
+          &&
+          module.enabled
+          &&
+          modulePermissionMap.get(
+            module.moduleId
+          ) !==
+            'disabled'
+      )
+      .map(
+        module =>
+          module.moduleId
+      )
+  );
+
+
+const requiredSubmodules =
+  GROWTHOS_SUBMODULES.filter(
+    submodule =>
+      applicableModuleIds.has(
+        submodule.moduleId
+      )
+  );
+
+
+const configuredSubmodules =
+  new Set(
+    submodulePermissions.map(
+      permission =>
+        `${permission.module_id}:${permission.submodule_id}`
+    )
+  );
+
+
+const missingSubmodules =
+  requiredSubmodules.filter(
+    submodule =>
+      !configuredSubmodules.has(
+        `${submodule.moduleId}:${submodule.submoduleId}`
+      )
+  );
+
+
+if (
+  missingSubmodules.length >
+    0
+) {
+
+  return NextResponse.json(
+    {
+
+      ok:
+        false,
+
+      error:
+        'USER_SUBMODULE_ACCESS_REQUIRED',
+
+      missingSubmodules:
+        missingSubmodules.map(
+          submodule => ({
+
+            moduleId:
+              submodule.moduleId,
+
+            submoduleId:
+              submodule.submoduleId,
+
+            label:
+              submodule.label,
+
+          })
+        ),
+
+    },
+    {
+      status:
+        409,
+    }
+  );
+
+}
 
 
     const maxUsers =

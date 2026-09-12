@@ -95,8 +95,12 @@ export type GrowthOSModuleOverride =
 
 export type GrowthOSUserModulePermission =
   | 'inherit'
-  | 'enabled'
+  | 'viewer'
+  | 'editor'
   | 'disabled';
+
+export type GrowthOSUserSubmodulePermission =
+  GrowthOSUserModulePermission;  
 
 
 // ============================================================
@@ -238,6 +242,31 @@ export type StoredGrowthOSUserModulePermission = {
 
   permission:
     GrowthOSUserModulePermission;
+
+  created_at:
+    string | null;
+
+  updated_at:
+    string | null;
+
+};
+
+export type StoredGrowthOSUserSubmodulePermission = {
+
+  permission_id:
+    string;
+
+  membership_id:
+    string;
+
+  module_id:
+    string;
+
+  submodule_id:
+    string;
+
+  permission:
+    GrowthOSUserSubmodulePermission;
 
   created_at:
     string | null;
@@ -908,6 +937,54 @@ async function ensureUserModulePermissionsTable() {
 
 }
 
+// ============================================================
+// ENSURE USER SUBMODULE PERMISSIONS TABLE
+// ============================================================
+
+async function ensureUserSubmodulePermissionsTable() {
+
+  const projectId =
+    requireProjectId();
+
+
+  await bigquery.query({
+
+    query: `
+
+      CREATE TABLE IF NOT EXISTS
+        \`${projectId}.${DATASET_ID}.user_submodule_permissions\`
+      (
+
+        permission_id STRING NOT NULL,
+
+        membership_id STRING NOT NULL,
+
+        module_id STRING NOT NULL,
+
+        submodule_id STRING NOT NULL,
+
+        permission STRING NOT NULL,
+
+        created_at TIMESTAMP,
+
+        updated_at TIMESTAMP
+
+      )
+
+      CLUSTER BY
+        membership_id,
+        module_id,
+        submodule_id
+
+    `,
+
+    location:
+      LOCATION,
+
+  });
+
+}
+
 
 // ============================================================
 // SEED MODULE CATALOG
@@ -1487,6 +1564,7 @@ export async function ensureGrowthOSAdminControlPlane() {
 
       await ensureUserModulePermissionsTable();
 
+      await ensureUserSubmodulePermissionsTable();
 
       await seedModules();
 
@@ -2731,6 +2809,199 @@ export async function upsertGrowthOSBrandModuleOverride(
 
 
 // ============================================================
+// LIST USER MODULE PERMISSIONS — FAST RUNTIME READ
+//
+// NO schema creation / bootstrap / migrations.
+// ============================================================
+
+export async function listGrowthOSUserModulePermissionsFast(
+  membershipId: string
+):
+
+  Promise<
+    StoredGrowthOSUserModulePermission[]
+  > {
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedMembershipId =
+    String(
+      membershipId
+      ||
+      ''
+    ).trim();
+
+
+  if (!normalizedMembershipId) {
+
+    throw new Error(
+      'membershipId is required'
+    );
+
+  }
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT
+
+          permission_id,
+
+          membership_id,
+
+          module_id,
+
+          permission,
+
+          created_at,
+
+          updated_at
+
+        FROM
+          \`${projectId}.${DATASET_ID}.user_module_permissions\`
+
+        WHERE
+          membership_id =
+            @membership_id
+
+        ORDER BY
+          module_id
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        membership_id:
+          normalizedMembershipId,
+
+      },
+
+      types: {
+
+        membership_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows
+    ||
+    []
+  ) as StoredGrowthOSUserModulePermission[];
+
+}
+
+// ============================================================
+// LIST USER SUBMODULE PERMISSIONS — FAST RUNTIME READ
+// ============================================================
+
+export async function listGrowthOSUserSubmodulePermissionsFast(
+  membershipId: string
+):
+
+  Promise<
+    StoredGrowthOSUserSubmodulePermission[]
+  > {
+
+  const projectId =
+    requireProjectId();
+
+
+  const normalizedMembershipId =
+    String(
+      membershipId
+      ||
+      ''
+    ).trim();
+
+
+  if (!normalizedMembershipId) {
+
+    throw new Error(
+      'membershipId is required'
+    );
+
+  }
+
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT
+
+          permission_id,
+
+          membership_id,
+
+          module_id,
+
+          submodule_id,
+
+          permission,
+
+          created_at,
+
+          updated_at
+
+        FROM
+          \`${projectId}.${DATASET_ID}.user_submodule_permissions\`
+
+        WHERE
+          membership_id =
+            @membership_id
+
+        ORDER BY
+          module_id,
+          submodule_id
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        membership_id:
+          normalizedMembershipId,
+
+      },
+
+      types: {
+
+        membership_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  return (
+    rows
+    ||
+    []
+  ) as StoredGrowthOSUserSubmodulePermission[];
+
+}
+
+// ============================================================
 // UPSERT USER MODULE PERMISSION
 // ============================================================
 
@@ -2748,8 +3019,6 @@ export async function upsertGrowthOSUserModulePermission(
 
   }
 ) {
-
-  await ensureGrowthOSAdminControlPlane();
 
 
   const projectId =
@@ -2770,6 +3039,32 @@ export async function upsertGrowthOSUserModulePermission(
       ||
       ''
     ).trim();
+
+  const permission =
+    input.permission;
+
+
+  const allowedPermissions:
+    GrowthOSUserModulePermission[] =
+      [
+        'inherit',
+        'viewer',
+        'editor',
+        'disabled',
+      ];
+
+
+  if (
+    !allowedPermissions.includes(
+      permission
+    )
+  ) {
+
+    throw new Error(
+      'Invalid user module permission'
+    );
+
+  }  
 
 
   if (
@@ -2807,8 +3102,6 @@ export async function upsertGrowthOSUserModulePermission(
           membership_id =
             @membership_id
 
-          AND status =
-            'active'
 
         LIMIT 1
 
@@ -2839,7 +3132,7 @@ export async function upsertGrowthOSUserModulePermission(
   ) {
 
     throw new Error(
-      'Active Growth OS membership does not exist'
+      'Growth OS membership does not exist'
     );
 
   }
@@ -2958,8 +3251,7 @@ export async function upsertGrowthOSUserModulePermission(
       module_id:
         moduleId,
 
-      permission:
-        input.permission,
+      permission,
 
     },
 
@@ -2990,8 +3282,345 @@ export async function upsertGrowthOSUserModulePermission(
 
     moduleId,
 
+    permission,
+
+  };
+
+}
+
+// ============================================================
+// UPSERT USER SUBMODULE PERMISSION
+//
+// FAST CONTROL-PLANE WRITE.
+//
+// Membership may be ACTIVE or INACTIVE.
+//
+// This allows permissions to be configured before a newly
+// created user's brand membership is activated.
+// ============================================================
+
+export async function upsertGrowthOSUserSubmodulePermission(
+  input: {
+
+    membershipId:
+      string;
+
+    moduleId:
+      string;
+
+    submoduleId:
+      string;
+
     permission:
-      input.permission,
+      GrowthOSUserSubmodulePermission;
+
+  }
+) {
+
+  const projectId =
+    requireProjectId();
+
+
+  const membershipId =
+    String(
+      input.membershipId
+      ||
+      ''
+    ).trim();
+
+
+  const moduleId =
+    String(
+      input.moduleId
+      ||
+      ''
+    ).trim();
+
+
+  const submoduleId =
+    String(
+      input.submoduleId
+      ||
+      ''
+    ).trim();
+
+
+  const permission =
+    input.permission;
+
+
+  const allowedPermissions:
+    GrowthOSUserSubmodulePermission[] =
+      [
+        'inherit',
+        'viewer',
+        'editor',
+        'disabled',
+      ];
+
+
+  if (
+    !allowedPermissions.includes(
+      permission
+    )
+  ) {
+
+    throw new Error(
+      'Invalid user submodule permission'
+    );
+
+  }
+
+
+  if (
+    !membershipId
+    ||
+    !moduleId
+    ||
+    !submoduleId
+  ) {
+
+    throw new Error(
+      'membershipId, moduleId and submoduleId are required'
+    );
+
+  }
+
+
+  // ==========================================================
+  // VERIFY MEMBERSHIP EXISTS
+  //
+  // Do NOT require status = active.
+  //
+  // New users are deliberately configured while their
+  // membership is inactive.
+  // ==========================================================
+
+  const [
+    membershipRows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT
+          membership_id
+
+        FROM
+          \`${projectId}.${DATASET_ID}.brand_memberships\`
+
+        WHERE
+          membership_id =
+            @membership_id
+
+        LIMIT 1
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        membership_id:
+          membershipId,
+
+      },
+
+      types: {
+
+        membership_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  if (
+    !membershipRows?.length
+  ) {
+
+    throw new Error(
+      'Growth OS membership does not exist'
+    );
+
+  }
+
+
+  // ==========================================================
+  // DETERMINISTIC PERMISSION ID
+  // ==========================================================
+
+  const permissionId =
+    deterministicId(
+      'subperm',
+      [
+        membershipId,
+        moduleId,
+        submoduleId,
+      ]
+    );
+
+
+  // ==========================================================
+  // UPSERT
+  // ==========================================================
+
+  await bigquery.query({
+
+    query: `
+
+      MERGE
+        \`${projectId}.${DATASET_ID}.user_submodule_permissions\`
+        AS target
+
+      USING
+      (
+
+        SELECT
+
+          @permission_id
+            AS permission_id,
+
+          @membership_id
+            AS membership_id,
+
+          @module_id
+            AS module_id,
+
+          @submodule_id
+            AS submodule_id,
+
+          @permission
+            AS permission
+
+      )
+      AS source
+
+
+      ON
+
+        target.membership_id =
+          source.membership_id
+
+        AND target.module_id =
+          source.module_id
+
+        AND target.submodule_id =
+          source.submodule_id
+
+
+      WHEN MATCHED THEN
+
+        UPDATE SET
+
+          permission_id =
+            source.permission_id,
+
+          permission =
+            source.permission,
+
+          updated_at =
+            CURRENT_TIMESTAMP()
+
+
+      WHEN NOT MATCHED THEN
+
+        INSERT
+        (
+
+          permission_id,
+
+          membership_id,
+
+          module_id,
+
+          submodule_id,
+
+          permission,
+
+          created_at,
+
+          updated_at
+
+        )
+
+        VALUES
+        (
+
+          source.permission_id,
+
+          source.membership_id,
+
+          source.module_id,
+
+          source.submodule_id,
+
+          source.permission,
+
+          CURRENT_TIMESTAMP(),
+
+          CURRENT_TIMESTAMP()
+
+        )
+
+    `,
+
+    location:
+      LOCATION,
+
+    params: {
+
+      permission_id:
+        permissionId,
+
+      membership_id:
+        membershipId,
+
+      module_id:
+        moduleId,
+
+      submodule_id:
+        submoduleId,
+
+      permission,
+
+    },
+
+    types: {
+
+      permission_id:
+        'STRING',
+
+      membership_id:
+        'STRING',
+
+      module_id:
+        'STRING',
+
+      submodule_id:
+        'STRING',
+
+      permission:
+        'STRING',
+
+    },
+
+  });
+
+
+  return {
+
+    permissionId,
+
+    membershipId,
+
+    moduleId,
+
+    submoduleId,
+
+    permission,
 
   };
 

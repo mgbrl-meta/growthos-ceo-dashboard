@@ -10,12 +10,21 @@ import {
   ChevronDown,
   CircleGauge,
   GitBranch,
+  LogOut,
   Megaphone,
   PackageSearch,
   Repeat2,
   Search,
   Settings,
 } from 'lucide-react';
+
+import {
+  getGrowthOSSubmodules,
+} from '@/lib/auth/submodule-registry';
+
+import type {
+  ClientEffectiveAccess,
+} from '@/lib/auth/client-effective-access';
 
 
 // ============================================================
@@ -60,6 +69,9 @@ type Props = {
       open:
         boolean
     ) => void;
+
+  access:
+  ClientEffectiveAccess;  
 
 };
 
@@ -116,6 +128,17 @@ const SIDEBAR_MODE_KEY =
 
 // ============================================================
 // NAVIGATION
+//
+// IMPORTANT:
+//
+// Module identity is defined here.
+//
+// Submodule identity / labels come from:
+//
+// lib/auth/submodule-registry.ts
+//
+// Therefore AppSidebar no longer maintains a duplicate
+// hardcoded submodule catalog.
 // ============================================================
 
 const groups:
@@ -182,17 +205,13 @@ const groups:
         moduleId:
           'meta',
 
-        children: [
-
-          'Overview',
-          'Campaign Analysis',
-          'Ad Set Analysis',
-          'Creative Analysis',
-          'Funnel Analysis',
-          'Alerts & Recommendations',
-          'Settings',
-
-        ],
+        children:
+          getGrowthOSSubmodules(
+            'meta'
+          ).map(
+            item =>
+              item.label
+          ),
 
       },
 
@@ -211,19 +230,13 @@ const groups:
         moduleId:
           'google',
 
-        children: [
-
-          'Overview',
-          'Channel Mix',
-          'Campaign',
-          'Ad Group',
-          'Search Terms',
-          'Keywords',
-          'Funnel',
-          'Alerts',
-          'Settings',
-
-        ],
+        children:
+          getGrowthOSSubmodules(
+            'google'
+          ).map(
+            item =>
+              item.label
+          ),
 
       },
 
@@ -242,18 +255,13 @@ const groups:
         moduleId:
           'attribution',
 
-        children: [
-
-          'Overview',
-          'Journey Explorer',
-          'Channels',
-          'Campaigns',
-          'Creatives',
-          'New vs Repeat',
-          'Attribution Models',
-          'Data Quality',
-
-        ],
+        children:
+          getGrowthOSSubmodules(
+            'attribution'
+          ).map(
+            item =>
+              item.label
+          ),
 
       },
 
@@ -287,19 +295,13 @@ const groups:
         moduleId:
           'retention',
 
-        children: [
-
-          'Mission Control',
-          'Daily Planner',
-          'Opportunity Bank',
-          'Pattern Discovery',
-          'Hypothesis Lab',
-          'Action Tracker',
-          'Learning Loop',
-          'Customer Journey',
-          'Settings',
-
-        ],
+        children:
+          getGrowthOSSubmodules(
+            'retention'
+          ).map(
+            item =>
+              item.label
+          ),
 
       },
 
@@ -333,18 +335,13 @@ const groups:
         moduleId:
           'product',
 
-        children: [
-
-          'Overview',
-          'SKU Performance',
-          'Demand Trends',
-          'Inventory Health',
-          'Forecasting',
-          'Seasonality',
-          'Insights',
-          'Settings',
-
-        ],
+        children:
+          getGrowthOSSubmodules(
+            'product'
+          ).map(
+            item =>
+              item.label
+          ),
 
       },
 
@@ -373,6 +370,8 @@ export default function AppSidebar({
 
   setSidebarOpen,
 
+  access,
+
 }: Props) {
 
 
@@ -383,6 +382,15 @@ export default function AppSidebar({
   const [
     hovered,
     setHovered,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    loggingOut,
+    setLoggingOut,
   ] =
     useState(
       false
@@ -435,54 +443,54 @@ export default function AppSidebar({
   // ==========================================================
 
   function applySidebarMode(
-  mode:
-    string |
-    null
-) {
-
-  // ==========================================================
-  // EXPLICIT HOVER MODE
-  // ==========================================================
-
-  if (
-    mode ===
-      'cursor'
+    mode:
+      string |
+      null
   ) {
 
+    // ========================================================
+    // EXPLICIT HOVER MODE
+    // ========================================================
+
+    if (
+      mode ===
+        'cursor'
+    ) {
+
+      setSidebarOpen(
+        false
+      );
+
+
+      return;
+
+    }
+
+
+    // ========================================================
+    // DEFAULT = FIXED
+    //
+    // Covers:
+    //
+    // fixed
+    // null
+    // missing localStorage
+    // invalid / old preference values
+    //
+    // A fresh browser should never unexpectedly open as only
+    // the collapsed icon rail.
+    // ========================================================
+
     setSidebarOpen(
-      false
+      true
     );
 
 
-    return;
+    setHovered(
+      false
+    );
 
   }
-
-
-  // ==========================================================
-  // DEFAULT = FIXED
-  //
-  // Covers:
-  //
-  // fixed
-  // null
-  // missing localStorage
-  // invalid / old preference values
-  //
-  // A fresh browser should never unexpectedly open as only
-  // the collapsed icon rail.
-  // ==========================================================
-
-  setSidebarOpen(
-    true
-  );
-
-
-  setHovered(
-    false
-  );
-
-}
 
 
   // ==========================================================
@@ -553,7 +561,7 @@ export default function AppSidebar({
 
         if (
           event.key !==
-          SIDEBAR_MODE_KEY
+            SIDEBAR_MODE_KEY
         ) {
 
           return;
@@ -847,6 +855,159 @@ export default function AppSidebar({
     setActiveTab(
       module
     );
+
+  }
+
+  
+
+
+  // ==========================================================
+  // EFFECTIVE NAVIGATION
+  //
+  // Server/control-plane access is already resolved before it
+  // reaches this component.
+  //
+  // This component only hides denied modules/submodules.
+  //
+  // IMPORTANT:
+  // This is UX enforcement only.
+  // API/server guards remain the security boundary.
+  // ==========================================================
+
+  const visibleGroups =
+    groups
+      .map(
+        group => ({
+
+          ...group,
+
+          items:
+            group.items
+              .filter(
+                item => {
+
+                  if (!item.moduleId) {
+
+                    return true;
+
+                  }
+
+
+                  return (
+                    access.modules[
+                      item.moduleId
+                    ]
+                      ?.effectivePermission
+                    !==
+                    'disabled'
+                  );
+
+                }
+              )
+              .map(
+                item => {
+
+                  if (!item.moduleId) {
+
+                    return item;
+
+                  }
+
+
+                  const moduleAccess =
+                    access.modules[
+                      item.moduleId
+                    ];
+
+
+                  const visibleChildren =
+                    item.children.filter(
+                      label => {
+
+                        const matchingSubmodule =
+                          Object.values(
+                            moduleAccess
+                              ?.submodules
+                            ||
+                            {}
+                          )
+                            .find(
+                              submodule =>
+                                submodule.label ===
+                                  label
+                            );
+
+
+                        return (
+                          Boolean(
+                            matchingSubmodule
+                          )
+                          &&
+                          matchingSubmodule
+                            ?.effectivePermission
+                          !==
+                          'disabled'
+                        );
+
+                      }
+                    );
+
+
+                  return {
+
+                    ...item,
+
+                    children:
+                      visibleChildren,
+
+                  };
+
+                }
+              ),
+
+        })
+      )
+      .filter(
+        group =>
+          group.items.length >
+          0
+      );
+
+
+  async function logout() {
+
+    if (loggingOut) {
+
+      return;
+
+    }
+
+
+    try {
+
+      setLoggingOut(
+        true
+      );
+
+
+      await fetch(
+        '/api/auth/logout',
+        {
+          method:
+            'POST',
+
+          credentials:
+            'same-origin',
+        }
+      );
+
+    } finally {
+
+      window.location.assign(
+        '/login'
+      );
+
+    }
 
   }
 
@@ -1175,7 +1336,7 @@ export default function AppSidebar({
             "
           >
 
-            {groups.map(
+            {visibleGroups.map(
               group => (
 
                 <div
@@ -1240,7 +1401,7 @@ export default function AppSidebar({
 
                         const active =
                           activeTab ===
-                          item.name;
+                            item.name;
 
 
                         const activeSubTab =
@@ -1425,7 +1586,7 @@ export default function AppSidebar({
 
                                       const selected =
                                         activeSubTab ===
-                                        subTab;
+                                          subTab;
 
 
                                       return (
@@ -1638,6 +1799,69 @@ export default function AppSidebar({
                   Settings
                 </span>
 
+              )}
+
+            </button>
+
+
+            <button
+
+              type="button"
+
+              title="Logout"
+
+              disabled={
+                loggingOut
+              }
+
+              onClick={
+                logout
+              }
+
+              className={`
+                mt-1
+                flex
+                h-[34px]
+                w-full
+                items-center
+
+                rounded-xl
+
+                text-slate-400
+
+                transition-colors
+                duration-150
+
+                hover:bg-white/[0.06]
+                hover:text-white
+
+                disabled:opacity-40
+
+                ${
+                  expanded
+
+                    ? `
+                      gap-3
+                      px-3
+                    `
+
+                    : `
+                      justify-center
+                    `
+                }
+              `}
+            >
+
+              <LogOut
+                size={16}
+                strokeWidth={1.8}
+                className="shrink-0"
+              />
+
+              {expanded && (
+                <span className="text-[12px] font-semibold">
+                  {loggingOut ? 'Signing out...' : 'Logout'}
+                </span>
               )}
 
             </button>

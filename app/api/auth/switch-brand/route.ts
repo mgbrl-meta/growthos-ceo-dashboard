@@ -19,6 +19,10 @@ import {
   setGrowthOsSessionCookie,
 } from '@/lib/auth/session';
 
+import {
+  updateGrowthOSSecuritySessionContext,
+} from '@/lib/auth/security-store';
+
 
 export const dynamic =
   'force-dynamic';
@@ -273,10 +277,49 @@ export async function POST(
     // change according to membership.
     // ========================================================
 
+    if (!identity.authSessionId) {
+
+      return NextResponse.json(
+        {
+          ok:
+            false,
+
+          error:
+            'SECURITY_SESSION_REQUIRED',
+        },
+        {
+          status:
+            401,
+        }
+      );
+
+    }
+
+
+    await updateGrowthOSSecuritySessionContext({
+
+      sessionId:
+        identity.authSessionId,
+
+      userId:
+        identity.userId,
+
+      workspaceId:
+        tenant.workspaceId,
+
+      brandId:
+        tenant.brandId,
+
+    });
+
+
     await setGrowthOsSessionCookie({
 
       userId:
         identity.userId,
+
+      sessionId:
+        identity.authSessionId,
 
       email:
         identity.email,

@@ -16,6 +16,11 @@ import {
   setGrowthOsSessionCookie,
 } from '@/lib/auth/session';
 
+import {
+  createGrowthOSSecuritySession,
+  revokeGrowthOSSecuritySession,
+} from '@/lib/auth/security-store';
+
 
 export const dynamic =
   'force-dynamic';
@@ -293,30 +298,95 @@ export async function POST(
     // brand_memberships
     // ========================================================
 
-    await setGrowthOsSessionCookie({
+    const forwardedFor =
+      request.headers.get(
+        'x-forwarded-for'
+      );
 
-      userId:
+
+    const ipAddress =
+      forwardedFor
+        ?.split(',')[0]
+        ?.trim()
+      ||
+      request.headers.get(
+        'x-real-ip'
+      )
+      ||
+      null;
+
+
+    const userAgent =
+      request.headers.get(
+        'user-agent'
+      );
+
+
+    const securitySession =
+      await createGrowthOSSecuritySession({
+
+        userId:
+          user.user_id,
+
+        workspaceId:
+          membership.workspace_id,
+
+        brandId:
+          membership.brand_id,
+
+        authMethod:
+          'password',
+
+        ipAddress,
+
+        userAgent,
+
+      });
+
+
+    try {
+
+      await setGrowthOsSessionCookie({
+
+        userId:
+          user.user_id,
+
+        sessionId:
+          securitySession.sessionId,
+
+        email:
+          user.email,
+
+        workspaceId:
+          membership.workspace_id,
+
+        brandId:
+          membership.brand_id,
+
+        role:
+          membership.role,
+
+        authMethod:
+          'password',
+
+        authSource:
+          'public',
+
+      });
+
+    } catch (
+      error
+    ) {
+
+      await revokeGrowthOSSecuritySession(
         user.user_id,
+        securitySession.sessionId
+      );
 
-      email:
-        user.email,
 
-      workspaceId:
-        membership.workspace_id,
+      throw error;
 
-      brandId:
-        membership.brand_id,
-
-      role:
-        membership.role,
-
-      authMethod:
-        'password',
-
-      authSource:
-        'public',
-
-    });
+    }
 
 
     // ========================================================
