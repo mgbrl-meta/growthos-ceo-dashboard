@@ -6,6 +6,14 @@ import {
 import bcrypt from 'bcryptjs';
 
 import {
+  getDefaultBrandMembership,
+} from '@/lib/auth/user-store';
+
+import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
+import {
   consumeGrowthOSAuthToken,
   resolveGrowthOSAuthToken,
   revokeGrowthOSAuthTokens,
@@ -149,6 +157,52 @@ export async function POST(
     await revokeGrowthOSAuthTokens(
       resolved.user_id
     );
+
+
+    try {
+
+      const membership =
+        await getDefaultBrandMembership(
+          resolved.user_id
+        );
+
+
+      if (membership) {
+
+        await writeGrowthOSAuditEventSafe({
+          request,
+          workspaceId:
+            membership.workspace_id,
+          brandId:
+            membership.brand_id,
+          category:
+            'security',
+          action:
+            'security.invite_accepted',
+          actorUserId:
+            resolved.user_id,
+          actorEmail:
+            resolved.email,
+          actorRole:
+            membership.role,
+          targetType:
+            'user',
+          targetId:
+            resolved.user_id,
+          targetLabel:
+            resolved.email,
+        });
+
+      }
+
+    } catch (auditContextError) {
+
+      console.warn(
+        'GROWTHOS_SECURITY_AUDIT_CONTEXT_SKIPPED',
+        auditContextError
+      );
+
+    }
 
 
     return NextResponse.json({

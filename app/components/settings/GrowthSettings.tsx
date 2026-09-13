@@ -10,11 +10,15 @@ import {
 
 import {
   AlertCircle,
+  Bell,
   Boxes,
   CalendarDays,
+  ClipboardCheck,
+  Database,
   CheckCircle2,
   CreditCard,
   EllipsisVertical,
+  History,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -34,9 +38,31 @@ import {
 import AppIntegrations
   from './integrations/AppIntegrations';
 
+import BillingSettingsV1
+  from './BillingSettingsV1';
+
+import AuditLogSettings
+  from './AuditLogSettings';
+
+import DataAccountSettings
+  from './DataAccountSettings';
+
+import NotificationSettings
+  from './NotificationSettings';
+
+import CommercialReadinessSettings
+  from './CommercialReadinessSettings';
+
 import {
   GROWTHOS_SUBMODULES,
 } from '@/lib/auth/submodule-registry';
+
+import {
+  DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES,
+  readGrowthOSPersonalPreferences,
+  resetGrowthOSPersonalPreferences,
+  writeGrowthOSPersonalPreferences,
+} from '@/lib/preferences/client-preferences';
 
 
 // ============================================================
@@ -50,7 +76,11 @@ type SettingsTab =
   | 'Integrations'
   | 'Users & Access'
   | 'Security'
-  | 'My Preferences';
+  | 'Notifications'
+  | 'Audit Log'
+  | 'Data & Account'
+  | 'My Preferences'
+  | 'Launch Readiness';
 
 
 type SidebarMode =
@@ -376,36 +406,23 @@ type WorkspaceUsersResponse = {
 
 
 // ============================================================
-// STORAGE
-//
-// PERSONAL UI PREFERENCES ONLY.
-//
-// NO BUSINESS DATA IS STORED HERE.
-// ============================================================
-
-const USER_PREFERENCES_KEY =
-  'growth_os_user_preferences_v1';
-
-
-const SIDEBAR_MODE_KEY =
-  'growth_os_sidebar_mode_v1';
-
-
-// ============================================================
 // DEFAULT PERSONAL PREFERENCES
+//
+// Storage/runtime behavior is centralized in:
+// lib/preferences/client-preferences.ts
 // ============================================================
 
 const DEFAULT_PREFERENCES:
   UserPreferences = {
 
   tableDensity:
-    'compact',
+    DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES.tableDensity,
 
   defaultLandingPage:
-    'CEO Summary',
+    DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES.defaultLandingPage,
 
   defaultDateRange:
-    '30',
+    DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES.defaultDateRange,
 
 };
 
@@ -494,6 +511,39 @@ const SETTINGS_TABS:
 
   {
     id:
+      'Notifications',
+
+    label:
+      'Notifications',
+
+    icon:
+      Bell,
+  },
+
+  {
+    id:
+      'Audit Log',
+
+    label:
+      'Audit Log',
+
+    icon:
+      History,
+  },
+
+  {
+    id:
+      'Data & Account',
+
+    label:
+      'Data & Account',
+
+    icon:
+      Database,
+  },
+
+  {
+    id:
       'My Preferences',
 
     label:
@@ -501,6 +551,17 @@ const SETTINGS_TABS:
 
     icon:
       UserRound,
+  },
+
+  {
+    id:
+      'Launch Readiness',
+
+    label:
+      'Launch Readiness',
+
+    icon:
+      ClipboardCheck,
   },
 
 ];
@@ -741,59 +802,46 @@ export default function GrowthSettings() {
 
   // ==========================================================
   // LOAD PERSONAL PREFERENCES
+  //
+  // Preferences are scoped to the authenticated Growth OS user.
+  // Legacy unscoped localStorage values are migrated once by the
+  // shared preference helper.
   // ==========================================================
 
   useEffect(
     () => {
 
+      if (authLoading) {
+        return;
+      }
+
+
       try {
 
-        const storedSidebarMode =
-          window.localStorage.getItem(
-            SIDEBAR_MODE_KEY
+        const stored =
+          readGrowthOSPersonalPreferences(
+            authContext?.user?.userId
+            ?? null
           );
 
 
-        if (
-          storedSidebarMode ===
-            'fixed'
-          ||
-          storedSidebarMode ===
-            'cursor'
-        ) {
-
-          setSidebarMode(
-            storedSidebarMode
-          );
-
-        }
+        setSidebarMode(
+          stored.sidebarMode
+        );
 
 
-        const storedPreferences =
-          window.localStorage.getItem(
-            USER_PREFERENCES_KEY
-          );
+        setPreferences({
 
+          tableDensity:
+            stored.tableDensity,
 
-        if (
-          storedPreferences
-        ) {
+          defaultLandingPage:
+            stored.defaultLandingPage,
 
-          const parsed =
-            JSON.parse(
-              storedPreferences
-            ) as Partial<UserPreferences>;
+          defaultDateRange:
+            stored.defaultDateRange,
 
-
-          setPreferences({
-
-            ...DEFAULT_PREFERENCES,
-
-            ...parsed,
-
-          });
-
-        }
+        });
 
       } catch (
         error
@@ -812,7 +860,10 @@ export default function GrowthSettings() {
       );
 
     },
-    []
+    [
+      authLoading,
+      authContext?.user?.userId,
+    ]
   );
 
 
@@ -1142,43 +1193,23 @@ export default function GrowthSettings() {
 
     try {
 
-      window.localStorage.setItem(
-        SIDEBAR_MODE_KEY,
-        sidebarMode
-      );
+      writeGrowthOSPersonalPreferences(
+        authContext?.user?.userId
+        ?? null,
+        {
 
+          sidebarMode,
 
-      window.localStorage.setItem(
-        USER_PREFERENCES_KEY,
-        JSON.stringify(
-          preferences
-        )
-      );
+          tableDensity:
+            preferences.tableDensity,
 
+          defaultLandingPage:
+            preferences.defaultLandingPage,
 
-      window.dispatchEvent(
+          defaultDateRange:
+            preferences.defaultDateRange,
 
-        new CustomEvent(
-          'growth-os-sidebar-mode-updated',
-          {
-            detail:
-              sidebarMode,
-          }
-        )
-
-      );
-
-
-      window.dispatchEvent(
-
-        new CustomEvent(
-          'growth-os-user-preferences-updated',
-          {
-            detail:
-              preferences,
-          }
-        )
-
+        }
       );
 
 
@@ -1215,66 +1246,36 @@ export default function GrowthSettings() {
 
   function resetPreferences() {
 
-    const nextSidebarMode:
-      SidebarMode =
-        'fixed';
-
-
-    const nextPreferences:
-      UserPreferences = {
-        ...DEFAULT_PREFERENCES,
-      };
-
-
-    setSidebarMode(
-      nextSidebarMode
-    );
-
-
-    setPreferences(
-      nextPreferences
-    );
-
-
     try {
 
-      window.localStorage.setItem(
-        SIDEBAR_MODE_KEY,
-        nextSidebarMode
+      const next =
+        resetGrowthOSPersonalPreferences(
+          authContext?.user?.userId
+          ?? null
+        );
+
+
+      setSidebarMode(
+        next.sidebarMode
       );
 
 
-      window.localStorage.setItem(
-        USER_PREFERENCES_KEY,
-        JSON.stringify(
-          nextPreferences
-        )
-      );
+      setPreferences({
+
+        tableDensity:
+          next.tableDensity,
+
+        defaultLandingPage:
+          next.defaultLandingPage,
+
+        defaultDateRange:
+          next.defaultDateRange,
+
+      });
 
 
-      window.dispatchEvent(
-
-        new CustomEvent(
-          'growth-os-sidebar-mode-updated',
-          {
-            detail:
-              nextSidebarMode,
-          }
-        )
-
-      );
-
-
-      window.dispatchEvent(
-
-        new CustomEvent(
-          'growth-os-user-preferences-updated',
-          {
-            detail:
-              nextPreferences,
-          }
-        )
-
+      setSaved(
+        false
       );
 
     } catch (
@@ -1385,7 +1386,7 @@ export default function GrowthSettings() {
                 text-slate-500
               "
             >
-              Review your workspace, subscription, modules, connections, access and personal preferences.
+              Review your workspace, subscription, access, security, notifications, data controls and personal preferences.
             </p>
 
           </div>
@@ -1641,6 +1642,30 @@ export default function GrowthSettings() {
 
 
           {activeTab ===
+            'Notifications' && (
+
+            <NotificationSettings />
+
+          )}
+
+
+          {activeTab ===
+            'Audit Log' && (
+
+            <AuditLogSettings />
+
+          )}
+
+
+          {activeTab ===
+            'Data & Account' && (
+
+            <DataAccountSettings />
+
+          )}
+
+
+          {activeTab ===
             'My Preferences' && (
 
             <PreferenceSettings
@@ -1674,6 +1699,14 @@ export default function GrowthSettings() {
               }
 
             />
+
+          )}
+
+
+          {activeTab ===
+            'Launch Readiness' && (
+
+            <CommercialReadinessSettings />
 
           )}
 
@@ -1723,14 +1756,6 @@ function WorkspaceSettings({
 
   const context =
     authContext?.activeContext;
-
-
-  const user =
-    authContext?.user;
-
-
-  const auth =
-    authContext?.auth;
 
 
   if (
@@ -1799,9 +1824,8 @@ function WorkspaceSettings({
       <section className="gos-panel !p-3.5">
 
         <h3 className="gos-section-title">
-          Workspace Identity
+          Workspace Details
         </h3>
-
 
         <div
           className="
@@ -1826,52 +1850,6 @@ function WorkspaceSettings({
           />
 
           <ServerValue
-            label="Workspace ID"
-            value={context.workspaceId}
-            mono
-          />
-
-          <ServerValue
-            label="Brand ID"
-            value={context.brandId}
-            mono
-          />
-
-          <ServerValue
-            label="Workspace Slug"
-            value={context.workspaceSlug}
-          />
-
-          <ServerValue
-            label="Brand Slug"
-            value={context.brandSlug}
-          />
-
-        </div>
-
-      </section>
-
-
-      <section className="gos-panel !p-3.5">
-
-        <h3 className="gos-section-title">
-          Business Configuration
-        </h3>
-
-
-        <div
-          className="
-            mt-3
-
-            grid
-            grid-cols-1
-            gap-2
-
-            md:grid-cols-2
-          "
-        >
-
-          <ServerValue
             label="Currency"
             value={context.currency}
           />
@@ -1893,56 +1871,6 @@ function WorkspaceSettings({
           />
 
         </div>
-
-      </section>
-
-
-      <section className="gos-panel !p-3.5">
-
-        <h3 className="gos-section-title">
-          Current User
-        </h3>
-
-
-        <div
-          className="
-            mt-3
-
-            grid
-            grid-cols-1
-            gap-2
-
-            md:grid-cols-2
-          "
-        >
-
-          <ServerValue
-            label="Email"
-            value={user?.email}
-          />
-
-          <ServerValue
-            label="Name"
-            value={user?.fullName}
-          />
-
-          <ServerValue
-            label="User ID"
-            value={user?.userId}
-            mono
-          />
-
-          <ServerValue
-            label="Authentication"
-            value={formatAuthMethod(auth?.method)}
-          />
-
-        </div>
-
-
-        <ServerNotice
-          text="Workspace identity comes from the authenticated session and Growth OS control plane."
-        />
 
       </section>
 
@@ -1985,347 +1913,14 @@ function PlanBillingSettings({
 
 }) {
 
-
-  if (
-    loading
-  ) {
-
-    return (
-
-      <LoadingPanel
-        title="Plan & Billing"
-        text="Loading workspace subscription..."
-      />
-
-    );
-
-  }
-
-
-  if (
-    error
-  ) {
-
-    return (
-
-      <ErrorPanel
-
-        title="Unable to load subscription"
-
-        error={
-          error
-        }
-
-        reload={
-          reload
-        }
-
-      />
-
-    );
-
-  }
-
-
-  if (
-    !subscriptionContext?.configured
-    ||
-    !subscriptionContext.plan
-    ||
-    !subscriptionContext.subscription
-  ) {
-
-    return (
-
-      <div className="space-y-3">
-
-        <SectionHeader
-          icon={WalletCards}
-          title="Plan & Billing"
-          description="Review your current Growth OS plan, capacity, usage and upgrades."
-        />
-
-
-        <section className="gos-panel !p-4">
-
-          <p className="text-[10px] font-semibold text-slate-800">
-            Subscription not configured
-          </p>
-
-          <p className="mt-1 text-[9px] text-slate-500">
-            Your Growth OS administrator has not assigned a commercial plan to this brand.
-          </p>
-
-        </section>
-
-      </div>
-
-    );
-
-  }
-
-
-  const {
-    plan,
-    subscription,
-  } =
-    subscriptionContext;
-
-
   return (
 
-    <div className="space-y-3">
-
-
-      <SectionHeader
-
-        icon={
-          WalletCards
-        }
-
-        title="Plan & Billing"
-
-        description="Review your current Growth OS plan, capacity and commercial access."
-
-      />
-
-
-      <section
-        className="
-          grid
-          grid-cols-2
-          gap-2
-
-          xl:grid-cols-4
-        "
-      >
-
-        <MetricCard
-          label="Current Plan"
-          value={plan.name}
-        />
-
-        <MetricCard
-          label="Monthly Allowance"
-          value={formatOrderLimit(
-            plan.effectiveMonthlyOrderLimit
-          )}
-        />
-
-        <MetricCard
-          label="User Allowance"
-          value={
-            plan.maxUsers ===
-              null
-
-              ? 'Unlimited'
-
-              : `${formatNumber(
-                  plan.maxUsers
-                )} users`
-          }
-        />
-
-        <MetricCard
-          label="Subscription"
-          value={
-            formatRole(
-              subscription.status
-            )
-            ||
-            '—'
-          }
-          tone="green"
-        />
-
-      </section>
-
-
-      <section className="gos-panel !p-3.5">
-
-        <div
-          className="
-            flex
-            flex-col
-            gap-3
-
-            sm:flex-row
-            sm:items-center
-            sm:justify-between
-          "
-        >
-
-          <div>
-
-            <h3 className="gos-section-title">
-              {plan.name}
-            </h3>
-
-
-            <p
-              className="
-                mt-1
-                max-w-2xl
-
-                text-[9px]
-                leading-4
-
-                text-slate-500
-              "
-            >
-              {plan.description ||
-                'Growth OS commercial plan.'}
-            </p>
-
-          </div>
-
-
-          <button
-
-            type="button"
-
-            disabled
-
-            title="Plan comparison will be connected next"
-
-            className="
-              h-8
-              shrink-0
-
-              rounded-[8px]
-
-              border
-              border-slate-200
-
-              bg-slate-100
-
-              px-3
-
-              text-[9px]
-              font-semibold
-
-              text-slate-400
-            "
-          >
-            Compare Plans
-          </button>
-
-        </div>
-
-
-        <div
-          className="
-            mt-3
-
-            grid
-            grid-cols-1
-            gap-2
-
-            md:grid-cols-2
-          "
-        >
-
-          <ServerValue
-            label="Plan ID"
-            value={plan.planId}
-            mono
-          />
-
-          <ServerValue
-            label="Plan Status"
-            value={formatRole(plan.status)}
-            status={
-              plan.status ===
-                'active'
-
-                ? 'green'
-
-                : undefined
-            }
-          />
-
-          <ServerValue
-            label="Base Order Limit"
-            value={formatOrderLimit(
-              plan.monthlyOrderLimit
-            )}
-          />
-
-          <ServerValue
-            label="Effective Order Limit"
-            value={formatOrderLimit(
-              plan.effectiveMonthlyOrderLimit
-            )}
-          />
-
-          <ServerValue
-            label="Order Limit Rule"
-            value={formatRole(
-              subscription.orderLimitOverrideMode
-            )}
-          />
-
-          <ServerValue
-            label="Last Updated"
-            value={formatTimestamp(
-              subscription.updatedAt
-            )}
-          />
-
-        </div>
-
-      </section>
-
-
-      <section className="gos-panel !p-3.5">
-
-        <h3 className="gos-section-title">
-          Usage & Billing
-        </h3>
-
-
-        <div
-          className="
-            mt-3
-
-            grid
-            grid-cols-1
-            gap-2
-
-            md:grid-cols-2
-          "
-        >
-
-          <ServerValue
-            label="Current Order Usage"
-            value="Not connected yet"
-          />
-
-          <ServerValue
-            label="Billing Cycle"
-            value="Not connected yet"
-          />
-
-          <ServerValue
-            label="Next Renewal"
-            value="Not connected yet"
-          />
-
-          <ServerValue
-            label="Invoices"
-            value="Not connected yet"
-          />
-
-        </div>
-
-
-        <ServerNotice
-          text="Plan entitlement is live. Usage metering, billing cycle, renewal and invoice history will be connected separately rather than showing estimated data."
-        />
-
-      </section>
-
-    </div>
+    <BillingSettingsV1
+      subscriptionContext={subscriptionContext}
+      loading={loading}
+      error={error}
+      reload={reload}
+    />
 
   );
 
@@ -2427,40 +2022,32 @@ function ModuleSettings({
 
         title="Modules"
 
-        description="See which Growth OS capabilities are included in your current plan."
+        description="See the modules included for this workspace and which ones still need setup."
 
       />
 
 
-      <section
-        className="
-          grid
-          grid-cols-2
-          gap-2
+      <section className="gos-panel !p-3.5">
 
-          md:grid-cols-3
-        "
-      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 
-        <MetricCard
-          label="Available Modules"
-          value={formatNumber(modules.length)}
-        />
+          <div>
+            <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+              Current Plan
+            </p>
+            <p className="mt-1 text-[13px] font-semibold text-slate-950">
+              {subscriptionContext?.plan?.name || '—'}
+            </p>
+          </div>
 
-        <MetricCard
-          label="Enabled"
-          value={formatNumber(enabledCount)}
-          tone="green"
-        />
+          <div className="text-[9px] text-slate-500">
+            <span className="font-semibold text-slate-800">{formatNumber(enabledCount)}</span>
+            {' of '}
+            <span className="font-semibold text-slate-800">{formatNumber(modules.length)}</span>
+            {' modules available'}
+          </div>
 
-        <MetricCard
-          label="Plan"
-          value={
-            subscriptionContext?.plan?.name
-            ||
-            '—'
-          }
-        />
+        </div>
 
       </section>
 
@@ -2483,7 +2070,7 @@ function ModuleSettings({
 
 
           <p className="mt-0.5 text-[9px] text-slate-500">
-            Access shown below comes from your server-side plan entitlement.
+            These are the modules currently available to this workspace. Modules that still need connection or setup are marked below.
           </p>
 
         </div>
@@ -2590,45 +2177,15 @@ function ModuleSettings({
                     </div>
 
 
-                    <div
-                      className="
-                        mt-3
+                    {module.setupRequired && (
 
-                        flex
-                        flex-wrap
-                        gap-1.5
-                      "
-                    >
-
-                      {module.category && (
-
-                        <SmallBadge>
-                          {formatRole(
-                            module.category
-                          )}
-                        </SmallBadge>
-
-                      )}
-
-
-                      {module.setupRequired && (
-
+                      <div className="mt-3">
                         <SmallBadge>
                           Setup Required
                         </SmallBadge>
+                      </div>
 
-                      )}
-
-
-                      {module.routeKey && (
-
-                        <SmallBadge>
-                          {module.routeKey}
-                        </SmallBadge>
-
-                      )}
-
-                    </div>
+                    )}
 
                   </div>
 
@@ -2644,9 +2201,6 @@ function ModuleSettings({
       </section>
 
 
-      <ServerNotice
-        text="Module access is read from the Growth OS control plane. The browser cannot enable a module by changing local settings."
-      />
 
     </div>
 
@@ -5205,7 +4759,7 @@ function UserAccessSettings({
 
         title="Users & Access"
 
-        description="Review people who can access the current brand and manage their workspace access."
+        description="Manage the people, roles and module access for this workspace."
 
       />
 
@@ -5230,8 +4784,8 @@ function UserAccessSettings({
           "
         >
           {canManageUsers
-            ? 'Owners and Admins can add users to this brand.'
-            : 'Only an Owner or Admin can add users to this brand.'}
+            ? 'Invite team members and manage who can access this workspace.'
+            : 'Only an Owner or Admin can add users to this workspace.'}
         </p>
 
 
@@ -5362,7 +4916,7 @@ function UserAccessSettings({
                   text-slate-500
                 "
               >
-                Configure identity, role, module access and submodule access in one place. Growth OS creates or resumes an inactive membership first and activates it only after every permission is saved successfully.
+                Add the person you want to invite, choose their role, and select the modules they should be able to access.
               </p>
 
             </div>
@@ -5426,7 +4980,7 @@ function UserAccessSettings({
               </p>
 
               <p className="mt-0.5 text-[8px] leading-4 text-slate-500">
-                Create the Growth OS identity and assign the workspace role.
+                Enter the user details and choose their workspace role.
               </p>
 
             </div>
@@ -6230,33 +5784,6 @@ function UserAccessSettings({
 
 
           {/* ===============================================
-              SAFETY NOTE
-          =============================================== */}
-
-          <div
-            className="
-              mt-3
-
-              rounded-[9px]
-
-              border
-              border-violet-200
-
-              bg-violet-50
-
-              px-3
-              py-2.5
-            "
-          >
-
-            <p className="text-[8px] leading-4 text-violet-700">
-              The membership remains inactive until module and submodule permissions are successfully stored. If any step fails, Growth OS does not activate partially configured access.
-            </p>
-
-          </div>
-
-
-          {/* ===============================================
               ACTIONS
           =============================================== */}
 
@@ -6480,7 +6007,7 @@ function UserAccessSettings({
                 text-slate-500
               "
             >
-              Access is scoped to the current authenticated brand.
+              People who currently have access to this workspace.
             </p>
 
           </div>
@@ -7307,9 +6834,6 @@ function UserAccessSettings({
       )}
 
       
-      <ServerNotice
-        text="Users and roles are controlled by Growth OS server-side access rules. Browser storage cannot grant or modify workspace access."
-      />
 
     </div>
 
@@ -7952,6 +7476,50 @@ function SecuritySettings({
   }
 
 
+
+  function formatSessionDevice(
+    userAgent:
+      string | null
+  ) {
+
+    const ua =
+      String(userAgent || '').toLowerCase();
+
+    if (!ua) {
+      return 'Unknown device';
+    }
+
+    const browser =
+      ua.includes('edg/')
+        ? 'Edge'
+        : ua.includes('chrome/')
+          ? 'Chrome'
+          : ua.includes('firefox/')
+            ? 'Firefox'
+            : ua.includes('safari/')
+              ? 'Safari'
+              : 'Browser';
+
+    const device =
+      ua.includes('iphone')
+        ? 'iPhone'
+        : ua.includes('ipad')
+          ? 'iPad'
+          : ua.includes('android')
+            ? 'Android'
+            : ua.includes('windows')
+              ? 'Windows'
+              : ua.includes('mac os') || ua.includes('macintosh')
+                ? 'Mac'
+                : ua.includes('linux')
+                  ? 'Linux'
+                  : 'Device';
+
+    return `${browser} on ${device}`;
+
+  }
+
+
   return (
 
     <div className="space-y-3">
@@ -7969,7 +7537,7 @@ function SecuritySettings({
               Security
             </h2>
             <p className="mt-0.5 text-[9px] text-slate-500">
-              Manage your password, signed-in devices and account sessions.
+              Manage your sign-in, password and devices currently using your account.
             </p>
           </div>
 
@@ -7985,10 +7553,10 @@ function SecuritySettings({
             <ShieldCheck size={16} className="mt-0.5 text-emerald-600" />
             <div>
               <p className="text-[11px] font-semibold text-slate-900">
-                Shopify-managed authentication
+                Sign-in managed by Shopify
               </p>
               <p className="mt-1 text-[9px] leading-5 text-slate-500">
-                This session was created from a verified Shopify launch. Password and device controls apply to direct Growth OS password accounts.
+                You signed in through Shopify. Password changes are managed through Shopify, while this page still shows the Growth OS sessions available to your account.
               </p>
             </div>
           </div>
@@ -8108,7 +7676,7 @@ function SecuritySettings({
           </p>
         ) : sessions.length === 0 ? (
           <p className="mt-4 text-[9px] text-slate-500">
-            {passwordManaged ? 'No active password sessions found.' : 'Shopify sessions are managed by Shopify.'}
+            {passwordManaged ? 'No active sessions found.' : 'No Growth OS sessions are available to manage here.'}
           </p>
         ) : (
           <div className="mt-4 space-y-2">
@@ -8129,10 +7697,10 @@ function SecuritySettings({
                     )}
                   </div>
                   <p className="mt-1 truncate text-[8px] text-slate-500">
-                    {session.userAgent || 'Unknown browser/device'}
+                    {formatSessionDevice(session.userAgent)}
                   </p>
                   <p className="mt-1 text-[8px] text-slate-400">
-                    Created {formatSecurityDate(session.createdAt)} · IP {session.ipAddress || 'Unknown'}
+                    Last active {formatSecurityDate(session.lastSeenAt || session.createdAt)}{session.ipAddress ? ` · IP ${session.ipAddress}` : ''}
                   </p>
                 </div>
 
@@ -8160,7 +7728,7 @@ function SecuritySettings({
               Session Controls
             </h3>
             <p className="mt-1 text-[9px] leading-5 text-slate-500">
-              Sign out this browser or invalidate every password session associated with your account.
+              Sign out this browser, or sign out all devices using your Growth OS password account.
             </p>
           </div>
 
@@ -8300,7 +7868,7 @@ function PreferenceSettings({
               </h2>
 
               <p className="mt-0.5 text-[9px] text-slate-500">
-                Personal interface preferences that apply only to you.
+                Choose how Growth OS looks and opens for your account.
               </p>
 
             </div>
@@ -8401,7 +7969,7 @@ function PreferenceSettings({
         <SectionHeading
           icon={SlidersHorizontal}
           title="Interface"
-          description="Choose how the Growth OS workspace behaves for you."
+          description="Choose how the interface is displayed for you."
         />
 
 
@@ -8500,7 +8068,7 @@ function PreferenceSettings({
         <SectionHeading
           icon={CalendarDays}
           title="Personal Defaults"
-          description="Choose the initial Growth OS view you prefer."
+          description="Choose the page and date range Growth OS should open with."
         />
 
 

@@ -12,6 +12,10 @@ import {
 } from '@/lib/auth/user-store';
 
 import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
+import {
   getGrowthOSWorkspaceSubscriptionSnapshot,
   upsertGrowthOSUserModulePermission,
   type GrowthOSUserModulePermission,
@@ -685,6 +689,35 @@ export async function POST(
       );
 
     }
+
+
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId,
+      brandId,
+      category:
+        'user_access',
+      action:
+        'user.module_access_updated',
+      actorUserId:
+        identity.userId,
+      actorEmail:
+        identity.email
+        ?? null,
+      actorRole:
+        identity.role
+        ?? null,
+      targetType:
+        'membership',
+      targetId:
+        membershipId,
+      targetLabel:
+        target.email,
+      after: {
+        permissions:
+          normalizedPermissions,
+      },
+    });
 
 
     // ========================================================

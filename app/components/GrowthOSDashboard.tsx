@@ -3,6 +3,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -43,6 +44,15 @@ import type {
 import {
   getGrowthOSSubmodules,
 } from '@/lib/auth/submodule-registry';
+
+import {
+  applyGrowthOSTableDensity,
+  DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES,
+  GROWTH_OS_PREFERENCES_UPDATED_EVENT,
+  readGrowthOSPersonalPreferences,
+  type GrowthOSDefaultDateRange,
+  type GrowthOSPersonalPreferences,
+} from '@/lib/preferences/client-preferences';
 
 import {
   Activity,
@@ -204,6 +214,100 @@ const sum = (
 };
 
 
+function buildRollingDateRange(
+  range:
+    GrowthOSDefaultDateRange
+) {
+
+  const days =
+    Number(
+      range
+    );
+
+
+  const currentEnd =
+    new Date();
+
+
+  const currentStart =
+    new Date(
+      currentEnd
+    );
+
+
+  currentStart.setDate(
+    currentEnd.getDate()
+    -
+    days
+    +
+    1
+  );
+
+
+  const compareEnd =
+    new Date(
+      currentStart
+    );
+
+
+  compareEnd.setDate(
+    currentStart.getDate()
+    -
+    1
+  );
+
+
+  const compareStart =
+    new Date(
+      compareEnd
+    );
+
+
+  compareStart.setDate(
+    compareEnd.getDate()
+    -
+    days
+    +
+    1
+  );
+
+
+  return {
+    currentStart,
+    currentEnd,
+    compareStart,
+    compareEnd,
+  };
+
+}
+
+
+function dateRangeToPreset(
+  range:
+    GrowthOSDefaultDateRange
+) {
+
+  switch (
+    range
+  ) {
+
+    case '7':
+      return 'l7' as const;
+
+    case '14':
+      return 'l14' as const;
+
+    case '90':
+      return 'l90' as const;
+
+    default:
+      return 'l30' as const;
+
+  }
+
+}
+
+
 /* ============================================================
    DASHBOARD
 ============================================================ */
@@ -331,6 +435,45 @@ export default function GrowthOSDashboard() {
   ] =
     useState(
       ''
+    );
+
+
+  /* ==========================================================
+     PERSONAL RUNTIME PREFERENCES
+  ========================================================== */
+
+  const [
+    runtimePreferences,
+    setRuntimePreferences,
+  ] =
+    useState<
+      GrowthOSPersonalPreferences
+    >(
+      DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES
+    );
+
+
+  const [
+    preferencesReady,
+    setPreferencesReady,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    initialLandingResolved,
+    setInitialLandingResolved,
+  ] =
+    useState(
+      false
+    );
+
+
+  const initialLandingAppliedRef =
+    useRef(
+      false
     );
 
 
@@ -572,6 +715,7 @@ export default function GrowthOSDashboard() {
       | 'l7'
       | 'l14'
       | 'l30'
+      | 'l90'
       | 'mtd'
       | 'lastMonth'
   ) => {
@@ -699,6 +843,34 @@ export default function GrowthOSDashboard() {
         today.getDate()
         -
         29
+      );
+
+    }
+
+
+    /* ========================================================
+       LAST 90 DAYS
+    ======================================================== */
+
+    if (
+      preset ===
+      'l90'
+    ) {
+
+      currentEnd =
+        today;
+
+
+      currentStart =
+        new Date(
+          today
+        );
+
+
+      currentStart.setDate(
+        today.getDate()
+        -
+        89
       );
 
     }
@@ -839,6 +1011,177 @@ export default function GrowthOSDashboard() {
     );
 
   };
+
+
+  /* ==========================================================
+     LOAD USER-SCOPED RUNTIME PREFERENCES
+
+     The dashboard waits for these defaults before rendering any
+     analytical module. This prevents an initial 30-day request
+     when the user's saved default is 7 / 14 / 90 days.
+  ========================================================== */
+
+  useEffect(
+    () => {
+
+      if (!effectiveAccess) {
+        return;
+      }
+
+
+      const stored =
+        readGrowthOSPersonalPreferences(
+          effectiveAccess.userId
+        );
+
+
+      setRuntimePreferences(
+        stored
+      );
+
+
+      applyGrowthOSTableDensity(
+        stored.tableDensity
+      );
+
+
+      const range =
+        buildRollingDateRange(
+          stored.defaultDateRange
+        );
+
+
+      setStart(
+        formatDate(
+          range.currentStart
+        )
+      );
+
+
+      setEnd(
+        formatDate(
+          range.currentEnd
+        )
+      );
+
+
+      setCompareStart(
+        formatDate(
+          range.compareStart
+        )
+      );
+
+
+      setCompareEnd(
+        formatDate(
+          range.compareEnd
+        )
+      );
+
+
+      initialLandingAppliedRef.current =
+        false;
+
+
+      setInitialLandingResolved(
+        false
+      );
+
+
+      setPreferencesReady(
+        true
+      );
+
+    },
+    [
+      effectiveAccess?.userId,
+    ]
+  );
+
+
+  /* ==========================================================
+     LIVE PREFERENCE UPDATES
+
+     Interface preferences such as density/sidebar should take
+     effect immediately. Landing/date defaults remain "next open"
+     defaults and therefore do not forcibly navigate or replace a
+     user's current date selection after Save.
+  ========================================================== */
+
+  useEffect(
+    () => {
+
+      function handlePreferencesUpdate(
+        event:
+          Event
+      ) {
+
+        const customEvent =
+          event as CustomEvent<{
+            userId?: string;
+            preferences?: GrowthOSPersonalPreferences;
+          }>;
+
+
+        const detail =
+          customEvent.detail;
+
+
+        if (
+          !detail?.preferences
+        ) {
+          return;
+        }
+
+
+        if (
+          detail.userId
+          && effectiveAccess?.userId
+          && detail.userId !==
+            effectiveAccess.userId
+        ) {
+          return;
+        }
+
+
+        setRuntimePreferences(
+          previous => ({
+            ...previous,
+            sidebarMode:
+              detail.preferences!.sidebarMode,
+            tableDensity:
+              detail.preferences!.tableDensity,
+          })
+        );
+
+
+        applyGrowthOSTableDensity(
+          detail.preferences.tableDensity
+        );
+
+      }
+
+
+      window.addEventListener(
+        GROWTH_OS_PREFERENCES_UPDATED_EVENT,
+        handlePreferencesUpdate
+      );
+
+
+      return () => {
+
+        window.removeEventListener(
+          GROWTH_OS_PREFERENCES_UPDATED_EVENT,
+          handlePreferencesUpdate
+        );
+
+      };
+
+    },
+    [
+      effectiveAccess?.userId,
+    ]
+  );
 
 
   /* ==========================================================
@@ -985,7 +1328,13 @@ export default function GrowthOSDashboard() {
   useEffect(
     () => {
 
-      if (!effectiveAccess) {
+      if (
+        !effectiveAccess
+        || !preferencesReady
+        || !initialLandingResolved
+        || activeTab !==
+          'CEO Summary'
+      ) {
 
         return;
 
@@ -1020,6 +1369,85 @@ export default function GrowthOSDashboard() {
     },
     [
       effectiveAccess,
+      preferencesReady,
+      initialLandingResolved,
+      activeTab,
+    ]
+  );
+
+
+  /* ==========================================================
+     DEFAULT LANDING PAGE
+
+     Apply once when the app opens. If the preferred module is
+     unavailable, fall back to the first module the user can use.
+  ========================================================== */
+
+  useEffect(
+    () => {
+
+      if (
+        !effectiveAccess
+        || !preferencesReady
+        || initialLandingAppliedRef.current
+      ) {
+        return;
+      }
+
+
+      const preferred =
+        MODULE_NAVIGATION.find(
+          item =>
+            item.tab ===
+              runtimePreferences.defaultLandingPage
+        );
+
+
+      const preferredAllowed =
+        Boolean(
+          preferred
+        )
+        && effectiveAccess
+          .modules[
+            preferred!.moduleId
+          ]
+          ?.effectivePermission !==
+          'disabled';
+
+
+      const firstAllowed =
+        MODULE_NAVIGATION.find(
+          item =>
+            effectiveAccess
+              .modules[
+                item.moduleId
+              ]
+              ?.effectivePermission !==
+            'disabled'
+        );
+
+
+      setActiveTab(
+        preferredAllowed
+          ? preferred!.tab
+          : firstAllowed?.tab
+            || 'Settings'
+      );
+
+
+      initialLandingAppliedRef.current =
+        true;
+
+
+      setInitialLandingResolved(
+        true
+      );
+
+    },
+    [
+      effectiveAccess,
+      preferencesReady,
+      runtimePreferences.defaultLandingPage,
     ]
   );
 
@@ -1577,7 +2005,11 @@ export default function GrowthOSDashboard() {
      ACCESS RESOLUTION UI
   ========================================================== */
 
-  if (accessLoading) {
+  if (
+    accessLoading
+    || !preferencesReady
+    || !initialLandingResolved
+  ) {
 
     return (
 
@@ -1690,7 +2122,12 @@ export default function GrowthOSDashboard() {
 
   return (
 
-    <main className="min-h-screen bg-[#f5f6f8]">
+    <main
+      data-growth-os-table-density={
+        runtimePreferences.tableDensity
+      }
+      className="min-h-screen bg-[#f5f6f8]"
+    >
 
 
       <div className="flex min-h-screen">
@@ -1800,6 +2237,12 @@ export default function GrowthOSDashboard() {
 
                       setPreset={
                         setPreset
+                      }
+
+                      defaultPreset={
+                        dateRangeToPreset(
+                          runtimePreferences.defaultDateRange
+                        )
                       }
 
                     />

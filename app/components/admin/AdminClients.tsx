@@ -18,6 +18,9 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import AdminBillingPanel
+  from './AdminBillingPanel';
+
 
 // ============================================================
 // TYPES
@@ -2084,7 +2087,7 @@ function ClientDetail({
               text-slate-500
             "
           >
-            Read Only
+            Platform Admin
           </span>
 
         </div>
@@ -2430,6 +2433,16 @@ function ClientDetail({
         </div>
 
       </section>
+
+
+      <AdminBillingPanel
+        client={{
+          workspaceId: client.workspaceId,
+          brandId: client.brandId,
+          planId: client.planId,
+          planName: client.planName,
+        }}
+      />
 
 
       {/* =====================================================

@@ -19,6 +19,7 @@ type Preset =
   | 'l7'
   | 'l14'
   | 'l30'
+  | 'l90'
   | 'mtd'
   | 'lastMonth';
 
@@ -56,6 +57,9 @@ type DateControlProps = {
   setPreset: (
     preset: Preset
   ) => void;
+
+  defaultPreset?:
+    Preset;
 };
 
 
@@ -85,6 +89,11 @@ const PRESETS: Array<{
   },
 
   {
+    key: 'l90',
+    label: 'Last 90 Days',
+  },
+
+  {
     key: 'mtd',
     label: 'This Month',
   },
@@ -109,6 +118,8 @@ export default function DateControl({
   onApply,
   loading,
   setPreset,
+  defaultPreset =
+    'l30',
 }: DateControlProps) {
 
 
@@ -128,7 +139,21 @@ export default function DateControl({
     activePreset,
     setActivePreset,
   ] = useState<Preset>(
-    'l30'
+    defaultPreset
+  );
+
+
+  useEffect(
+    () => {
+
+      setActivePreset(
+        defaultPreset
+      );
+
+    },
+    [
+      defaultPreset,
+    ]
   );
 
 

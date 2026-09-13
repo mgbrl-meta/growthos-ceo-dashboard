@@ -16,6 +16,10 @@ import {
   revokeGrowthOSSecuritySession,
 } from '@/lib/auth/security-store';
 
+import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
 
 export const dynamic =
   'force-dynamic';
@@ -62,6 +66,47 @@ export async function POST(
             session.userId,
             session.sessionId
           );
+
+        }
+
+
+        if (
+          session.workspaceId
+          &&
+          session.brandId
+        ) {
+
+          await writeGrowthOSAuditEventSafe({
+            request,
+            workspaceId:
+              session.workspaceId,
+            brandId:
+              session.brandId,
+            category:
+              'security',
+            action:
+              'security.logout',
+            actorUserId:
+              session.userId,
+            actorEmail:
+              session.email
+              ?? null,
+            actorRole:
+              session.role
+              ?? null,
+            targetType:
+              'session',
+            targetId:
+              session.sessionId
+              ?? null,
+            targetLabel:
+              session.email
+              ?? session.userId,
+            metadata: {
+              authMethod:
+                session.authMethod,
+            },
+          });
 
         }
 

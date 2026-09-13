@@ -31,6 +31,10 @@ import {
   GROWTHOS_SUBMODULES,
 } from '@/lib/auth/submodule-registry';
 
+import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
 export const dynamic =
   'force-dynamic';
 
@@ -1085,6 +1089,43 @@ if (
   });
 
 
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId,
+      brandId,
+      category:
+        'user_access',
+      action:
+        'user.added',
+      actorUserId:
+        identity.userId,
+      actorEmail:
+        identity.email
+        ?? null,
+      actorRole:
+        identity.role
+        ?? null,
+      targetType:
+        'membership',
+      targetId:
+        membership.membershipId,
+      targetLabel:
+        user.email,
+      after: {
+        userId:
+          user.userId,
+        email:
+          user.email,
+        fullName:
+          user.fullName,
+        role:
+          targetRole,
+        membershipStatus:
+          'inactive',
+      },
+    });
+
+
     // ========================================================
     // 15. SUCCESS
     // ========================================================
@@ -1758,6 +1799,39 @@ export async function PATCH(
       });
 
 
+      await writeGrowthOSAuditEventSafe({
+        request,
+        workspaceId,
+        brandId,
+        category:
+          'user_access',
+        action:
+          'user.role_changed',
+        actorUserId:
+          identity.userId,
+        actorEmail:
+          identity.email
+          ?? null,
+        actorRole:
+          identity.role
+          ?? null,
+        targetType:
+          'membership',
+        targetId:
+          target.membership_id,
+        targetLabel:
+          target.email,
+        before: {
+          role:
+            target.role,
+        },
+        after: {
+          role:
+            targetRole,
+        },
+      });
+
+
       return NextResponse.json({
 
         ok:
@@ -1923,6 +1997,39 @@ export async function PATCH(
             target.is_default
           ),
 
+      });
+
+
+      await writeGrowthOSAuditEventSafe({
+        request,
+        workspaceId,
+        brandId,
+        category:
+          'user_access',
+        action:
+          'user.suspended',
+        actorUserId:
+          identity.userId,
+        actorEmail:
+          identity.email
+          ?? null,
+        actorRole:
+          identity.role
+          ?? null,
+        targetType:
+          'membership',
+        targetId:
+          target.membership_id,
+        targetLabel:
+          target.email,
+        before: {
+          status:
+            target.membership_status,
+        },
+        after: {
+          status:
+            'inactive',
+        },
       });
 
 
@@ -2307,6 +2414,39 @@ if (
           target.is_default
         ),
 
+    });
+
+
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId,
+      brandId,
+      category:
+        'user_access',
+      action:
+        'user.activated',
+      actorUserId:
+        identity.userId,
+      actorEmail:
+        identity.email
+        ?? null,
+      actorRole:
+        identity.role
+        ?? null,
+      targetType:
+        'membership',
+      targetId:
+        target.membership_id,
+      targetLabel:
+        target.email,
+      before: {
+        status:
+          target.membership_status,
+      },
+      after: {
+        status:
+          'active',
+      },
     });
 
 
@@ -2841,6 +2981,45 @@ export async function DELETE(
 
       },
 
+    });
+
+
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId,
+      brandId,
+      category:
+        'user_access',
+      action:
+        'user.removed',
+      actorUserId:
+        identity.userId,
+      actorEmail:
+        identity.email
+        ?? null,
+      actorRole:
+        identity.role
+        ?? null,
+      targetType:
+        'membership',
+      targetId:
+        target.membership_id,
+      targetLabel:
+        target.email,
+      before: {
+        userId:
+          target.user_id,
+        email:
+          target.email,
+        role:
+          target.role,
+        membershipStatus:
+          target.membership_status,
+      },
+      after: {
+        membershipStatus:
+          'removed',
+      },
     });
 
 

@@ -15,6 +15,10 @@ import {
   revokeGrowthOSSecuritySession,
 } from '@/lib/auth/security-store';
 
+import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
 
 export const dynamic =
   'force-dynamic';
@@ -145,6 +149,38 @@ export async function POST(
         identity.authSessionId ===
           sessionId
       );
+
+
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId:
+        String(identity.workspaceId || ''),
+      brandId:
+        String(identity.brandId || ''),
+      category:
+        'security',
+      action:
+        'security.session_revoked',
+      actorUserId:
+        identity.userId,
+      actorEmail:
+        identity.email
+        ?? null,
+      actorRole:
+        identity.role
+        ?? null,
+      targetType:
+        'session',
+      targetId:
+        sessionId,
+      targetLabel:
+        currentRevoked
+          ? 'Current session'
+          : 'Session',
+      metadata: {
+        currentRevoked,
+      },
+    });
 
 
     if (currentRevoked) {

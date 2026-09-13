@@ -26,6 +26,12 @@ import type {
   ClientEffectiveAccess,
 } from '@/lib/auth/client-effective-access';
 
+import {
+  getGrowthOSPreferencesStorageKey,
+  readGrowthOSPersonalPreferences,
+  writeGrowthOSPersonalPreferences,
+} from '@/lib/preferences/client-preferences';
+
 
 // ============================================================
 // TYPES
@@ -116,14 +122,6 @@ type NavigationGroup = {
     NavigationItem[];
 
 };
-
-
-// ============================================================
-// PERSONAL SIDEBAR PREFERENCE
-// ============================================================
-
-const SIDEBAR_MODE_KEY =
-  'growth_os_sidebar_mode_v1';
 
 
 // ============================================================
@@ -496,7 +494,8 @@ export default function AppSidebar({
   // ==========================================================
   // LOAD PERSONAL SIDEBAR PREFERENCE
   //
-  // This is the ONLY local configuration this component reads.
+  // Preference storage is user-scoped and centralized in the
+  // shared personal-preferences runtime.
   // ==========================================================
 
   useEffect(
@@ -504,12 +503,14 @@ export default function AppSidebar({
 
       try {
 
+        const stored =
+          readGrowthOSPersonalPreferences(
+            access.userId
+          );
+
+
         applySidebarMode(
-
-          window.localStorage.getItem(
-            SIDEBAR_MODE_KEY
-          )
-
+          stored.sidebarMode
         );
 
       } catch (
@@ -523,13 +524,6 @@ export default function AppSidebar({
 
       }
 
-
-      // ------------------------------------------------------
-      // SAME TAB
-      //
-      // GrowthSettings dispatches this after a user changes
-      // their personal sidebar preference.
-      // ------------------------------------------------------
 
       function handleSidebarModeUpdate(
         event:
@@ -550,10 +544,6 @@ export default function AppSidebar({
       }
 
 
-      // ------------------------------------------------------
-      // OTHER TAB / WINDOW
-      // ------------------------------------------------------
-
       function handleStorage(
         event:
           StorageEvent
@@ -561,7 +551,9 @@ export default function AppSidebar({
 
         if (
           event.key !==
-            SIDEBAR_MODE_KEY
+            getGrowthOSPreferencesStorageKey(
+              access.userId
+            )
         ) {
 
           return;
@@ -569,8 +561,14 @@ export default function AppSidebar({
         }
 
 
+        const stored =
+          readGrowthOSPersonalPreferences(
+            access.userId
+          );
+
+
         applySidebarMode(
-          event.newValue
+          stored.sidebarMode
         );
 
       }
@@ -605,6 +603,7 @@ export default function AppSidebar({
 
     },
     [
+      access.userId,
       setSidebarOpen,
     ]
   );
@@ -655,22 +654,19 @@ export default function AppSidebar({
 
     try {
 
-      window.localStorage.setItem(
-        SIDEBAR_MODE_KEY,
-        nextMode
-      );
+      const currentPreferences =
+        readGrowthOSPersonalPreferences(
+          access.userId
+        );
 
 
-      window.dispatchEvent(
-
-        new CustomEvent(
-          'growth-os-sidebar-mode-updated',
-          {
-            detail:
-              nextMode,
-          }
-        )
-
+      writeGrowthOSPersonalPreferences(
+        access.userId,
+        {
+          ...currentPreferences,
+          sidebarMode:
+            nextMode,
+        }
       );
 
     } catch (

@@ -6,6 +6,9 @@ export type ClientEffectivePermission =
 
 export type ClientEffectiveAccess = {
 
+  userId:
+    string;
+
   role:
     string;
 

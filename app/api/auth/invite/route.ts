@@ -25,6 +25,10 @@ import {
   resolveTenantContextById,
 } from '@/lib/tenancy/context';
 
+import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
 
 export const dynamic =
   'force-dynamic';
@@ -380,6 +384,35 @@ export async function POST(
       workspaceName:
         tenant.workspaceName,
 
+    });
+
+
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId,
+      brandId,
+      category:
+        'security',
+      action:
+        'security.invite_sent',
+      actorUserId:
+        identity.userId,
+      actorEmail:
+        identity.email
+        ?? null,
+      actorRole:
+        identity.role
+        ?? null,
+      targetType:
+        'user',
+      targetId:
+        user.user_id,
+      targetLabel:
+        user.email,
+      metadata: {
+        tokenId:
+          token.tokenId,
+      },
     });
 
 

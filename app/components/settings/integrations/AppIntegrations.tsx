@@ -13,6 +13,7 @@ import {
   Database,
   ExternalLink,
   RefreshCw,
+  Plug,
   ShoppingBag,
   Unplug,
 } from 'lucide-react';
@@ -261,59 +262,37 @@ export default function AppIntegrations() {
           PAGE INTRO
       ===================================================== */}
 
-      <section className="flex flex-wrap items-end justify-between gap-2.5">
+      <section className="gos-panel !p-3.5">
 
-        <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
 
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-600">
-            Data Sources
-          </p>
+          <div className="flex items-start gap-3">
 
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-violet-50 text-violet-600">
+              <Plug size={16} />
+            </div>
 
-          <h1 className="mt-1 text-[14px] font-semibold tracking-[-0.04em] text-slate-950">
-            App Integrations
-          </h1>
+            <div>
+              <h2 className="text-[14px] font-semibold tracking-[-0.025em] text-slate-950">
+                Integrations
+              </h2>
+              <p className="mt-0.5 max-w-2xl text-[9px] leading-4 text-slate-500">
+                Connect the commerce, advertising and data platforms used by your Growth OS workspace.
+              </p>
+            </div>
 
+          </div>
 
-          <p className="mt-1 max-w-2xl text-[11px] leading-6 text-slate-500">
-            Connect the platforms Growth OS uses to understand revenue,
-            customers, advertising and attribution.
-          </p>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-slate-200 bg-white px-3 text-[9px] font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <RefreshCw size={12} />
+            Refresh
+          </button>
 
         </div>
-
-
-        <button
-          type="button"
-          onClick={
-            load
-          }
-          className="
-            flex
-            h-8
-            items-center
-            gap-2
-            rounded-xl
-            border
-            border-slate-200
-            bg-white
-            px-3
-            text-[10px]
-            font-bold
-            text-slate-700
-            shadow-sm
-            transition
-            hover:bg-slate-50
-          "
-        >
-
-          <RefreshCw
-            size={14}
-          />
-
-          Refresh
-
-        </button>
 
       </section>
 
@@ -742,17 +721,6 @@ function IntegrationModal({
           )}
 
 
-          {integration.accountId && (
-
-            <InfoRow
-              label="Account ID"
-              value={
-                integration.accountId
-              }
-            />
-
-          )}
-
 
           <div>
 
@@ -788,11 +756,11 @@ function IntegrationModal({
             <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
 
               <p className="text-[10px] font-semibold text-violet-900">
-                Self-service connection
+                Connect this source
               </p>
 
               <p className="mt-1 text-[10px] leading-5 text-violet-700">
-                This provider will connect through Growth OS without manually configuring the dashboard.
+                Follow the guided connection flow to add this data source to your workspace.
               </p>
 
             </div>

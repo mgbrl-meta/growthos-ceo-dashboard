@@ -251,3 +251,40 @@ input[type="search"] {
 }
 
 .gos-table tbody tr:hover { background: var(--gos-surface-soft); }
+
+/* ============================================================
+   PERSONAL TABLE DENSITY
+
+   Applied from the authenticated user's Growth OS preference.
+   The selectors intentionally target ordinary tables as well as
+   .gos-table so existing modules inherit the preference without
+   requiring every table component to be rewritten.
+============================================================ */
+
+html[data-growth-os-table-density='compact'] table thead th,
+[data-growth-os-table-density='compact'] table thead th {
+  min-height: 32px;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+
+html[data-growth-os-table-density='compact'] table tbody td,
+[data-growth-os-table-density='compact'] table tbody td {
+  min-height: 34px;
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+}
+
+html[data-growth-os-table-density='comfortable'] table thead th,
+[data-growth-os-table-density='comfortable'] table thead th {
+  min-height: 38px;
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
+
+html[data-growth-os-table-density='comfortable'] table tbody td,
+[data-growth-os-table-density='comfortable'] table tbody td {
+  min-height: 44px;
+  padding-top: 9px !important;
+  padding-bottom: 9px !important;
+}

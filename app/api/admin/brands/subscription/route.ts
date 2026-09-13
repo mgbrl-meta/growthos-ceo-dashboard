@@ -12,6 +12,10 @@ import {
   upsertGrowthOSBrandSubscription,
 } from '@/lib/admin/control-plane';
 
+import {
+  writeGrowthOSAuditEventSafe,
+} from '@/lib/audit';
+
 
 export const dynamic =
   'force-dynamic';
@@ -367,6 +371,13 @@ export async function POST(
     // 5. UPDATE
     // ========================================================
 
+    const beforeSubscription =
+      await getGrowthOSBrandSubscription(
+        workspaceId,
+        brandId
+      );
+
+
     const result =
       await upsertGrowthOSBrandSubscription({
 
@@ -383,6 +394,34 @@ export async function POST(
           'inherit',
 
       });
+
+
+    await writeGrowthOSAuditEventSafe({
+      request,
+      workspaceId,
+      brandId,
+      category:
+        'billing',
+      action:
+        'billing.plan_changed',
+      actorUserId:
+        admin.userId,
+      actorEmail:
+        admin.email
+        ?? null,
+      actorRole:
+        admin.platformRole,
+      targetType:
+        'subscription',
+      targetId:
+        result.subscriptionId,
+      targetLabel:
+        brandId,
+      before:
+        beforeSubscription,
+      after:
+        result,
+    });
 
 
     return NextResponse.json({
