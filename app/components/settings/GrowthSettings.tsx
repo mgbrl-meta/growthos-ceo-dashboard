@@ -1325,78 +1325,6 @@ export default function GrowthSettings() {
 
 
       {/* =====================================================
-          SETTINGS INTRO
-      ===================================================== */}
-
-      <section className="gos-panel !p-3">
-
-        <div
-          className="
-            flex
-            items-center
-            gap-3
-          "
-        >
-
-          <div
-            className="
-              flex
-              h-9
-              w-9
-              shrink-0
-              items-center
-              justify-center
-
-              rounded-[9px]
-
-              bg-violet-50
-
-              text-violet-600
-            "
-          >
-
-            <Settings2
-              size={16}
-            />
-
-          </div>
-
-
-          <div>
-
-            <h2
-              className="
-                text-[14px]
-                font-semibold
-                tracking-[-0.025em]
-
-                text-slate-950
-              "
-            >
-              Settings
-            </h2>
-
-
-            <p
-              className="
-                mt-0.5
-
-                text-[9px]
-
-                text-slate-500
-              "
-            >
-              Review your workspace, subscription, access, security, notifications, data controls and personal preferences.
-            </p>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      {/* =====================================================
           SETTINGS SHELL
       ===================================================== */}
 
@@ -1475,8 +1403,8 @@ export default function GrowthSettings() {
                         active
 
                           ? `
-                            bg-slate-950
-                            text-white
+                            bg-slate-100
+                            text-slate-950
                           `
 
                           : `

@@ -106,21 +106,6 @@ export default function AttributionModels({
   return (
     <div className="space-y-3">
 
-      <section>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
-          Attribution OS
-        </p>
-
-        <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
-          Attribution Models
-        </h2>
-
-        <p className="mt-1 text-[10px] text-slate-400">
-          Compare how revenue credit changes under each attribution methodology.
-        </p>
-      </section>
-
-
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
 
         <h3 className="text-[11px] font-semibold">

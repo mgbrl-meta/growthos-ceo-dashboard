@@ -71,19 +71,6 @@ export default function LearningLoop() {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
-        Learning Loop
-      </p>
-
-      <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
-        Expected vs Actual Memory
-      </h2>
-
-      <p className="mt-2 text-[11px] text-slate-500">
-        Stores what worked, what failed, how accurate the engine was, and what
-        should change next.
-      </p>
-
       {loading && (
         <p className="mt-3 text-[10px] font-bold text-blue-600">
           Loading learning data...

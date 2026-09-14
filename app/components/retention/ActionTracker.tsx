@@ -10,6 +10,10 @@ import type {
   ReactNode,
 } from 'react';
 
+import {
+  GrowthOSPageActionPortal,
+} from '../ui/GrowthOSPageShell';
+
 
 // ============================================================
 // TYPES
@@ -931,42 +935,15 @@ export default function ActionTracker() {
     <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
 
 
-      {/* HEADER */}
-
-      <div className="flex items-end justify-between gap-2.5">
-
-
-        <div>
-
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
-            Action Tracker
-          </p>
-
-
-          <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.04em] text-slate-950">
-            Retention Execution Queue
-          </h2>
-
-
-          <p className="mt-1 text-[10px] text-slate-500">
-            Configure, validate, export, send and measure frozen campaign audiences.
-          </p>
-
-        </div>
-
-
+      <GrowthOSPageActionPortal>
         <button
           type="button"
-          onClick={
-            loadExecutions
-          }
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold"
+          onClick={loadExecutions}
+          className="gos-page-action"
         >
           Refresh
         </button>
-
-
-      </div>
+      </GrowthOSPageActionPortal>
 
 
       {loading && (
@@ -989,7 +966,7 @@ export default function ActionTracker() {
 
       {/* KPI */}
 
-      <div className="mt-3 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
 
 
         <Card

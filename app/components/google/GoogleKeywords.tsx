@@ -1,17 +1,19 @@
 'use client';
 
+import {
+  GosEmptyState,
+} from '../ui/GrowthUI';
+
 type Props = {
   startDate: string;
   endDate: string;
 };
 
-export default function GoogleKeywords({ startDate, endDate }: Props) {
+export default function GoogleKeywords({}: Props) {
   return (
-    <div className="rounded-xl border bg-white/90 p-3.5 shadow-sm">
-      <h3 className="text-[15px] font-semibold">Keywords</h3>
-      <p className="mt-2 text-[11px] text-slate-500">
-        Google OS Overview will be built here.
-      </p>
-    </div>
+    <GosEmptyState
+      title="Keyword intelligence is not available yet"
+      text="Keyword-level demand and efficiency will appear here once the source is connected."
+    />
   );
 }

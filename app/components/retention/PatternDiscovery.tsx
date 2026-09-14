@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import {
+  GrowthOSPageActionPortal,
+} from '../ui/GrowthOSPageShell';
+
 import type {
   PatternActionGroup,
   PatternDiscoveryApiResponse,
@@ -452,43 +456,22 @@ export default function PatternDiscovery() {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-3.5">
-      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
-            Pattern Discovery
-          </p>
-
-          <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
-            What Should the Operator Act On?
-          </h2>
-
-          <p className="mt-2 max-w-4xl text-[11px] leading-6 text-slate-500">
-            Validated retention drivers, next-product sequences, routine
-            completion, replenishment windows and controlled affinity tests
-            from the frozen backend engines.
-          </p>
-        </div>
-
+      <GrowthOSPageActionPortal>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold text-slate-500">
-            Updated{' '}
-            {formatTimestamp(
-              quality?.latest_source_refresh
-            )}
+          <span className="hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-[10px] font-semibold text-slate-500 shadow-[0_1px_2px_rgba(15,23,42,0.02)] xl:inline-flex">
+            Updated {formatTimestamp(quality?.latest_source_refresh)}
           </span>
 
           <button
             type="button"
-            onClick={() =>
-              setReloadKey((value) => value + 1)
-            }
+            onClick={() => setReloadKey((value) => value + 1)}
             disabled={loading}
-            className="rounded-full border border-slate-900 bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="gos-page-action disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
-      </div>
+      </GrowthOSPageActionPortal>
 
       {error && (
         <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4">
@@ -1158,7 +1141,7 @@ function FamilyButton({
       onClick={onClick}
       className={`whitespace-nowrap rounded-full border px-3 py-2 text-[10px] font-semibold transition ${
         active
-          ? 'border-slate-950 bg-slate-950 text-white'
+          ? 'border-slate-300 bg-white text-slate-950 shadow-sm'
           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
       }`}
     >
@@ -1166,7 +1149,7 @@ function FamilyButton({
       <span
         className={
           active
-            ? 'text-slate-300'
+            ? 'text-slate-500'
             : 'text-slate-400'
         }
       >

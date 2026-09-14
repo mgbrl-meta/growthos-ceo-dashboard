@@ -29,7 +29,6 @@ import type {
 import {
   getGrowthOSPreferencesStorageKey,
   readGrowthOSPersonalPreferences,
-  writeGrowthOSPersonalPreferences,
 } from '@/lib/preferences/client-preferences';
 
 
@@ -610,80 +609,6 @@ export default function AppSidebar({
 
 
   // ==========================================================
-  // SIDEBAR MODE TOGGLE
-  // ==========================================================
-
-  function toggleSidebarMode() {
-
-    const nextFixed =
-      !sidebarOpen;
-
-
-    const nextMode =
-      nextFixed
-        ? 'fixed'
-        : 'cursor';
-
-
-    setSidebarOpen(
-      nextFixed
-    );
-
-
-    // --------------------------------------------------------
-    // If switching from fixed → hover while cursor is already
-    // inside, keep it expanded until the user leaves.
-    // --------------------------------------------------------
-
-    if (
-      !nextFixed
-    ) {
-
-      setHovered(
-        true
-      );
-
-    } else {
-
-      setHovered(
-        false
-      );
-
-    }
-
-
-    try {
-
-      const currentPreferences =
-        readGrowthOSPersonalPreferences(
-          access.userId
-        );
-
-
-      writeGrowthOSPersonalPreferences(
-        access.userId,
-        {
-          ...currentPreferences,
-          sidebarMode:
-            nextMode,
-        }
-      );
-
-    } catch (
-      error
-    ) {
-
-      console.error(
-        'SIDEBAR_MODE_SAVE_ERROR',
-        error
-      );
-
-    }
-
-  }
-
-
-  // ==========================================================
   // TIMER HELPERS
   // ==========================================================
 
@@ -1067,11 +992,11 @@ export default function AppSidebar({
           overflow-hidden
 
           border-r
-          border-slate-700/70
+          border-slate-200
 
-          bg-[#111827]
+          bg-[#fbfcfd]
 
-          text-white
+          text-slate-900
 
           transition-[width,box-shadow]
           duration-200
@@ -1083,7 +1008,7 @@ export default function AppSidebar({
               ? `
                 w-[220px]
 
-                shadow-[14px_0_32px_rgba(15,23,42,0.18)]
+                shadow-[8px_0_22px_rgba(15,23,42,0.025)]
               `
 
               : `
@@ -1114,7 +1039,7 @@ export default function AppSidebar({
               items-center
 
               border-b
-              border-white/5
+              border-slate-100
 
               px-3
             "
@@ -1200,7 +1125,7 @@ export default function AppSidebar({
                     text-[10px]
                     font-medium
 
-                    text-slate-400
+                    text-slate-500
                   "
                 >
                   Business Intelligence
@@ -1211,109 +1136,10 @@ export default function AppSidebar({
             </div>
 
 
-            {/* ===============================================
-                FIXED / HOVER TOGGLE
-            =============================================== */}
-
-            {expanded && (
-
-              <button
-
-                type="button"
-
-                role="switch"
-
-                aria-checked={
-                  sidebarOpen
-                }
-
-                aria-label="Toggle fixed sidebar"
-
-                title={
-                  sidebarOpen
-
-                    ? 'Switch to hover mode'
-
-                    : 'Keep sidebar fixed'
-                }
-
-                onClick={
-                  toggleSidebarMode
-                }
-
-                className={`
-                  relative
-
-                  ml-2
-
-                  flex
-                  h-5
-                  w-9
-                  shrink-0
-                  items-center
-
-                  rounded-full
-
-                  p-[2px]
-
-                  transition-colors
-                  duration-200
-
-                  focus:outline-none
-                  focus:ring-2
-                  focus:ring-violet-400/30
-
-                  ${
-                    sidebarOpen
-
-                      ? `
-                        bg-violet-500
-                      `
-
-                      : `
-                        bg-white/15
-
-                        hover:bg-white/20
-                      `
-                  }
-                `}
-              >
-
-                <span
-                  className={`
-                    block
-
-                    h-4
-                    w-4
-
-                    rounded-full
-
-                    bg-white
-
-                    shadow-sm
-
-                    transition-transform
-                    duration-200
-
-                    ${
-                      sidebarOpen
-
-                        ? `
-                          translate-x-4
-                        `
-
-                        : `
-                          translate-x-0
-                        `
-                    }
-                  `}
-                />
-
-              </button>
-
-            )}
-
           </div>
+
+
+
 
 
           {/* =================================================
@@ -1364,7 +1190,7 @@ export default function AppSidebar({
                       uppercase
                       tracking-[0.17em]
 
-                      text-slate-600
+                      text-slate-400
 
                       transition-opacity
                       duration-150
@@ -1461,18 +1287,16 @@ export default function AppSidebar({
                                   active
 
                                     ? `
-                                      bg-white
+                                      bg-slate-100
 
                                       text-slate-950
-
-                                      shadow-sm
                                     `
 
                                     : `
-                                      text-slate-400
+                                      text-slate-600
 
-                                      hover:bg-white/[0.06]
-                                      hover:text-white
+                                      hover:bg-slate-100
+                                      hover:text-slate-950
                                     `
                                 }
                               `}
@@ -1569,7 +1393,7 @@ export default function AppSidebar({
                                   mt-1
 
                                   border-l
-                                  border-white/10
+                                  border-slate-200
 
                                   pl-3
                                 "
@@ -1626,40 +1450,20 @@ export default function AppSidebar({
                                               selected
 
                                                 ? `
-                                                  bg-white/[0.08]
+                                                  bg-slate-100
 
-                                                  text-white
+                                                  text-slate-950
                                                 `
 
                                                 : `
                                                   text-slate-500
 
-                                                  hover:bg-white/[0.04]
-                                                  hover:text-slate-200
+                                                  hover:bg-slate-50
+                                                  hover:text-slate-900
                                                 `
                                             }
                                           `}
                                         >
-
-                                          {selected && (
-
-                                            <span
-                                              className="
-                                                absolute
-
-                                                -left-[13px]
-
-                                                h-4
-                                                w-[2px]
-
-                                                rounded-full
-
-                                                bg-violet-400
-                                              "
-                                            />
-
-                                          )}
-
 
                                           {subTab}
 
@@ -1702,7 +1506,7 @@ export default function AppSidebar({
               shrink-0
 
               border-t
-              border-white/5
+              border-slate-100
 
               p-2
             "
@@ -1749,16 +1553,16 @@ export default function AppSidebar({
                     'Settings'
 
                     ? `
-                      bg-white
+                      bg-slate-100
 
                       text-slate-950
                     `
 
                     : `
-                      text-slate-400
+                      text-slate-600
 
-                      hover:bg-white/[0.06]
-                      hover:text-white
+                      hover:bg-slate-100
+                      hover:text-slate-950
                     `
                 }
               `}
@@ -1823,13 +1627,13 @@ export default function AppSidebar({
 
                 rounded-xl
 
-                text-slate-400
+                text-slate-600
 
                 transition-colors
                 duration-150
 
-                hover:bg-white/[0.06]
-                hover:text-white
+                hover:bg-slate-100
+                hover:text-slate-950
 
                 disabled:opacity-40
 

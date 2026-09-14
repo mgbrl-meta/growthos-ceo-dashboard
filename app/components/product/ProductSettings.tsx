@@ -1,9 +1,14 @@
 'use client';
 
+import {
+  GosEmptyState,
+} from '../ui/GrowthUI';
+
 export default function ProductSettings() {
   return (
-    <div className="bg-white p-4 rounded-lg border">
-      <h2 className="text-[14px] font-semibold">Settings</h2>
-    </div>
+    <GosEmptyState
+      title="No Product OS settings are required yet"
+      text="Product-level operating assumptions will appear here when configurable rules are introduced."
+    />
   );
 }

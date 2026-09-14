@@ -24,6 +24,11 @@ type Preset =
   | 'lastMonth';
 
 
+type ActivePreset =
+  | Preset
+  | 'custom';
+
+
 type DateControlProps = {
 
   start: string;
@@ -106,6 +111,108 @@ const PRESETS: Array<{
 ];
 
 
+function dateKey(
+  value: Date
+) {
+  return value
+    .toISOString()
+    .split('T')[0];
+}
+
+
+function inferPreset(
+  start: string,
+  end: string,
+  fallback: Preset
+): ActivePreset {
+  const today =
+    new Date();
+
+  const ranges: Array<{
+    preset: Preset;
+    start: Date;
+    end: Date;
+  }> = [];
+
+  const yesterday =
+    new Date(today);
+  yesterday.setDate(
+    today.getDate() - 1
+  );
+
+  ranges.push({
+    preset: 'yesterday',
+    start: yesterday,
+    end: yesterday,
+  });
+
+  for (
+    const [preset, days]
+    of [
+      ['l7', 7],
+      ['l14', 14],
+      ['l30', 30],
+      ['l90', 90],
+    ] as Array<[Preset, number]>
+  ) {
+    const rangeStart =
+      new Date(today);
+
+    rangeStart.setDate(
+      today.getDate() - days + 1
+    );
+
+    ranges.push({
+      preset,
+      start: rangeStart,
+      end: today,
+    });
+  }
+
+  ranges.push({
+    preset: 'mtd',
+    start: new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
+    ),
+    end: today,
+  });
+
+  ranges.push({
+    preset: 'lastMonth',
+    start: new Date(
+      today.getFullYear(),
+      today.getMonth() - 1,
+      1
+    ),
+    end: new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      0
+    ),
+  });
+
+  const match =
+    ranges.find(
+      range =>
+        dateKey(range.start) === start
+        &&
+        dateKey(range.end) === end
+    );
+
+  if (match) {
+    return match.preset;
+  }
+
+  if (!start || !end) {
+    return fallback;
+  }
+
+  return 'custom';
+}
+
+
 export default function DateControl({
   start,
   end,
@@ -138,7 +245,7 @@ export default function DateControl({
   const [
     activePreset,
     setActivePreset,
-  ] = useState<Preset>(
+  ] = useState<ActivePreset>(
     defaultPreset
   );
 
@@ -225,6 +332,14 @@ export default function DateControl({
           compareEnd
         );
 
+        setActivePreset(
+          inferPreset(
+            start,
+            end,
+            defaultPreset
+          )
+        );
+
       }
 
     },
@@ -234,6 +349,7 @@ export default function DateControl({
       compareStart,
       compareEnd,
       open,
+      defaultPreset,
     ],
   );
 
@@ -304,10 +420,18 @@ export default function DateControl({
       preset
     );
 
+    setOpen(
+      false
+    );
+
   }
 
 
   function handleApply() {
+
+    setActivePreset(
+      'custom'
+    );
 
     /*
      * Custom edits override the preset values.
@@ -375,12 +499,15 @@ export default function DateControl({
 
 
   const presetLabel =
-    PRESETS.find(
-      item =>
-        item.key ===
-        activePreset
-    )?.label ||
-    'Date Range';
+    activePreset ===
+      'custom'
+      ? 'Custom Range'
+      : PRESETS.find(
+          item =>
+            item.key ===
+            activePreset
+        )?.label ||
+        'Date Range';
 
 
   return (
@@ -703,7 +830,7 @@ export default function DateControl({
                     );
 
                     setActivePreset(
-                      activePreset
+                      'custom'
                     );
 
                   }
@@ -714,6 +841,10 @@ export default function DateControl({
 
                     setDraftEnd(
                       value
+                    );
+
+                    setActivePreset(
+                      'custom'
                     );
 
                   }
@@ -738,11 +869,25 @@ export default function DateControl({
                 }
 
                 setStart={
-                  setDraftCompareStart
+                  value => {
+                    setDraftCompareStart(
+                      value
+                    );
+                    setActivePreset(
+                      'custom'
+                    );
+                  }
                 }
 
                 setEnd={
-                  setDraftCompareEnd
+                  value => {
+                    setDraftCompareEnd(
+                      value
+                    );
+                    setActivePreset(
+                      'custom'
+                    );
+                  }
                 }
               />
 

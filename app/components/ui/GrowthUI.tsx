@@ -239,3 +239,104 @@ export function GosSummaryTile({
     </div>
   );
 }
+
+export function GosButton({
+  children,
+  onClick,
+  type = 'button',
+  disabled = false,
+  variant = 'secondary',
+  className = '',
+}: BaseProps & {
+  children: ReactNode;
+  onClick?: () => void;
+  type?: 'button' | 'submit';
+  disabled?: boolean;
+  variant?: 'primary' | 'secondary' | 'ghost';
+}) {
+  const variantClass =
+    variant === 'primary'
+      ? 'border-violet-600 bg-violet-600 text-white hover:border-violet-700 hover:bg-violet-700'
+      : variant === 'ghost'
+        ? 'border-transparent bg-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50';
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex min-h-[34px] items-center justify-center rounded-lg border px-3 text-[11px] font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.02)] transition disabled:cursor-not-allowed disabled:opacity-50 ${variantClass} ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function GosSearchInput({
+  value,
+  onChange,
+  placeholder = 'Search…',
+  className = '',
+}: BaseProps & {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className={`gos-input w-full ${className}`}
+    />
+  );
+}
+
+export function GosSelect({
+  value,
+  onChange,
+  children,
+  className = '',
+}: BaseProps & {
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`gos-select ${className}`}
+    >
+      {children}
+    </select>
+  );
+}
+
+export function GosFilterBar({
+  children,
+  className = '',
+}: BaseProps & {
+  children: ReactNode;
+}) {
+  return (
+    <div className={`gos-filter-bar ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+export function GosTableFrame({
+  children,
+  className = '',
+}: BaseProps & {
+  children: ReactNode;
+}) {
+  return (
+    <div className={`overflow-x-auto rounded-xl border border-slate-200 bg-white ${className}`}>
+      {children}
+    </div>
+  );
+}

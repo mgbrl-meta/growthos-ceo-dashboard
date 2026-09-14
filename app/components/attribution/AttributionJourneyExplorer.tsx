@@ -15,6 +15,10 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 
+import {
+  GrowthOSPageActionPortal,
+} from '../ui/GrowthOSPageShell';
+
 
 type Props = {
   startDate: string;
@@ -343,70 +347,33 @@ export default function AttributionJourneyExplorer({
     <div className="space-y-3">
 
 
-      {/* =====================================================
-          TOP STRIP
-      ===================================================== */}
-
-      <section className="flex flex-wrap items-end justify-between gap-2.5">
-
-        <div>
-
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
-            Journey Explorer
-          </p>
-
-          <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em] text-slate-950">
-            Individual customer journeys
-          </h2>
-
-          <p className="mt-1 text-[10px] text-slate-400">
-            Follow the complete sequence from discovery to purchase.
-          </p>
-
-        </div>
-
-
+      <GrowthOSPageActionPortal>
         <form
-          onSubmit={
-            submitSearch
-          }
+          onSubmit={submitSearch}
           className="flex items-center gap-2"
         >
-
-          <div className="flex h-8 w-[300px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
-
+          <div className="flex h-[34px] w-[300px] items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 shadow-[0_1px_2px_rgba(15,23,42,0.02)]">
             <Search
               size={15}
               className="text-slate-400"
             />
 
             <input
-              value={
-                search
-              }
-              onChange={
-                event =>
-                  setSearch(
-                    event.target.value
-                  )
-              }
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
               placeholder="Order, customer or visitor"
-              className="min-w-0 flex-1 bg-transparent text-[10px] font-medium text-slate-800 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[11px] font-medium text-slate-800 outline-none"
             />
-
           </div>
-
 
           <button
             type="submit"
-            className="h-8 rounded-xl bg-slate-950 px-3 text-[10px] font-semibold text-white"
+            className="gos-page-action border-violet-600 bg-violet-600 text-white hover:bg-violet-700"
           >
             Search
           </button>
-
         </form>
-
-      </section>
+      </GrowthOSPageActionPortal>
 
 
       {/* =====================================================

@@ -592,19 +592,6 @@ export default function Settings() {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
-        Engine Settings
-      </p>
-
-      <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
-        Retention Brain Configuration
-      </h2>
-
-      <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
-        These settings define how Retention OS ranks opportunities, hypotheses,
-        actions and learnings.
-      </p>
-
       <div className="mt-3 space-y-3">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
           <h3 className="text-[14px] font-semibold text-slate-950">Business Goal</h3>

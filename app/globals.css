@@ -5,18 +5,18 @@
 ============================================================ */
 
 :root {
-  --gos-bg: #f5f6f8;
+  --gos-bg: #F9FAFC;
   --gos-surface: #ffffff;
-  --gos-surface-soft: #f8fafc;
-  --gos-surface-muted: #f1f5f9;
+  --gos-surface-soft: #F8FAFC;
+  --gos-surface-muted: #F2F4F7;
 
   --gos-text: #0f172a;
   --gos-text-secondary: #475569;
   --gos-text-muted: #64748b;
   --gos-text-faint: #94a3b8;
 
-  --gos-border: #e2e8f0;
-  --gos-border-soft: #f1f5f9;
+  --gos-border: #E5E7EB;
+  --gos-border-soft: #edf0f4;
 
   --gos-positive: #059669;
   --gos-positive-bg: #ecfdf5;
@@ -37,8 +37,8 @@
   --gos-radius: 10px;
   --gos-radius-lg: 12px;
 
-  --gos-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
-  --gos-shadow-hover: 0 3px 10px rgba(15, 23, 42, 0.06);
+  --gos-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+  --gos-shadow-hover: 0 3px 10px rgba(15, 23, 42, 0.045);
 
   --background: var(--gos-bg);
   --foreground: var(--gos-text);
@@ -163,7 +163,7 @@ input[type="search"] {
   min-height: 54px;
   border: 1px solid var(--gos-border);
   border-radius: 9px;
-  background: var(--gos-surface-soft);
+  background: var(--gos-surface);
   padding: 8px 10px;
 }
 
@@ -287,4 +287,175 @@ html[data-growth-os-table-density='comfortable'] table tbody td,
   min-height: 44px;
   padding-top: 9px !important;
   padding-bottom: 9px !important;
+}
+
+/* ============================================================
+   GROWTH OS — PHASE 2 VISUAL NORMALIZATION
+   Reference: light application shell, restrained violet accent,
+   white cards, soft borders, compact operator density.
+============================================================ */
+
+:root {
+  --gos-bg: #f4f6f8;
+  --gos-surface: #ffffff;
+  --gos-surface-soft: #f8f9fb;
+  --gos-surface-muted: #f1f3f5;
+  --gos-border: #e1e5eb;
+  --gos-border-soft: #edf0f4;
+  --gos-accent: #6d5dfc;
+  --gos-accent-soft: #f2f0ff;
+  --gos-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+  --gos-shadow-hover: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+/* Normalize legacy Google/Product surfaces without forcing their
+   information architecture to match another module. */
+.gos-module-normalized :where(.border):not([class*="border-red"]):not([class*="border-emerald"]):not([class*="border-green"]):not([class*="border-amber"]):not([class*="border-yellow"]):not([class*="border-blue"]):not([class*="border-violet"]):not([class*="border-purple"]) {
+  border-color: var(--gos-border) !important;
+}
+
+.gos-module-normalized :where([class*="bg-white"]) {
+  background-color: var(--gos-surface) !important;
+}
+
+.gos-module-normalized :where(.shadow-sm) {
+  box-shadow: var(--gos-shadow) !important;
+}
+
+.gos-module-normalized :where(.rounded-lg, .rounded-xl) {
+  border-radius: var(--gos-radius-lg);
+}
+
+.gos-module-normalized :where(table) {
+  color: var(--gos-text-secondary);
+}
+
+.gos-module-normalized :where(thead) {
+  background: var(--gos-surface-soft);
+}
+
+.gos-module-normalized :where(thead th) {
+  color: var(--gos-text-muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.gos-module-normalized :where(tbody tr) {
+  border-color: var(--gos-border-soft) !important;
+}
+
+.gos-module-normalized :where(input, select) {
+  border-color: var(--gos-border) !important;
+  background: var(--gos-surface) !important;
+  color: var(--gos-text);
+}
+
+.gos-module-normalized :where(.bg-black, .bg-slate-950) {
+  background-color: #111827 !important;
+}
+
+.gos-module-normalized :where(.text-white) {
+  color: #ffffff;
+}
+
+.gos-module-normalized :where(.bg-gray-200) {
+  background-color: var(--gos-surface-muted) !important;
+}
+
+.gos-module-normalized :where(.hover\:bg-gray-50:hover) {
+  background-color: var(--gos-surface-soft) !important;
+}
+
+/* Shared lightweight utility row used by page-level filters. */
+.gos-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--gos-border);
+  border-radius: var(--gos-radius-lg);
+  background: var(--gos-surface);
+  padding: 10px;
+  box-shadow: var(--gos-shadow);
+}
+
+.gos-page-action {
+  min-height: 34px;
+  border: 1px solid var(--gos-border);
+  border-radius: 9px;
+  background: var(--gos-surface);
+  color: var(--gos-text-secondary);
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: var(--gos-shadow);
+}
+
+.gos-page-action:hover {
+  border-color: #cfd5df;
+  background: var(--gos-surface-soft);
+}
+
+
+/* ============================================================
+   GROWTH OS — NEUTRAL TABS / SEGMENTED CONTROLS
+   Navigation and tabs are intentionally neutral. Violet remains
+   a product accent, not the selected-state background.
+============================================================ */
+.gos-tab {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0 11px;
+  color: var(--gos-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.gos-tab:hover {
+  background: var(--gos-surface-muted);
+  color: var(--gos-text);
+}
+
+.gos-tab[data-active='true'],
+.gos-tab-active {
+  border-color: var(--gos-border);
+  background: var(--gos-surface);
+  color: var(--gos-text);
+  box-shadow: var(--gos-shadow);
+}
+
+.gos-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--gos-border);
+  border-radius: 9px;
+  background: var(--gos-surface-muted);
+  padding: 3px;
+}
+
+.gos-segmented > button {
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  padding: 0 10px;
+  color: var(--gos-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.gos-segmented > button[data-active='true'] {
+  border-color: var(--gos-border);
+  background: var(--gos-surface);
+  color: var(--gos-text);
+  box-shadow: var(--gos-shadow);
 }

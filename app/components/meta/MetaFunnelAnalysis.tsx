@@ -106,14 +106,7 @@ export default function MetaFunnelAnalysis({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-2.5 rounded-xl border bg-white p-3.5 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div>
-          <h3 className="text-[14px] font-semibold">Funnel Analysis</h3>
-          <p className="text-[11px] text-slate-500">
-            Current period vs comparison period with growth by funnel stage.
-          </p>
-        </div>
-
+      <div className="flex justify-end rounded-xl border bg-white p-3.5 shadow-sm">
         <div className="flex gap-2">
           <Toggle active={viewMode === 'account'} onClick={() => setViewMode('account')} label="Account Level" />
           <Toggle active={viewMode === 'campaign'} onClick={() => setViewMode('campaign')} label="Campaign Level" />
@@ -226,8 +219,8 @@ function Toggle({ active, onClick, label }: any) {
       onClick={onClick}
       className={
         active
-          ? 'rounded-xl bg-slate-950 px-3 py-2 text-[11px] font-semibold text-white'
-          : 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600'
+          ? 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-950 shadow-sm'
+          : 'rounded-lg border border-transparent bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-200 hover:text-slate-950'
       }
     >
       {label}

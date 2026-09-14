@@ -31,8 +31,8 @@ import AttributionOS
 import AppSidebar
   from './AppSidebar';
 
-import AppHeader
-  from './AppHeader';
+import GrowthOSPageShell
+  from './ui/GrowthOSPageShell';
 
 import GrowthSettings
   from './settings/GrowthSettings';
@@ -40,6 +40,10 @@ import GrowthSettings
 import type {
   ClientEffectiveAccess,
 } from '@/lib/auth/client-effective-access';
+
+import {
+  getGrowthOSPageDefinition,
+} from '@/lib/ui/growthos-page-registry';
 
 import {
   getGrowthOSSubmodules,
@@ -1363,7 +1367,8 @@ export default function GrowthOSDashboard() {
 
       fetchData();
 
-      // Access resolution triggers the one initial CEO load.
+      // Date changes are global state, so Command Center reloads
+      // whenever the universal range changes.
       // eslint-disable-next-line react-hooks/exhaustive-deps
 
     },
@@ -1372,6 +1377,10 @@ export default function GrowthOSDashboard() {
       preferencesReady,
       initialLandingResolved,
       activeTab,
+      start,
+      end,
+      compareStart,
+      compareEnd,
     ]
   );
 
@@ -1980,25 +1989,30 @@ export default function GrowthOSDashboard() {
 
 
   /* ==========================================================
-     DATE CONTROL VISIBILITY
+     CENTRAL PAGE PRESENTATION
 
-     Date controls belong on analytical OS pages.
-     They are not required on platform administration pages.
+     All Growth OS page identity, explanation and universal-date
+     visibility are resolved from one registry. New modules/pages
+     therefore inherit the same page shell instead of creating
+     their own header chrome.
   ========================================================== */
 
-  const showDateControl =
-    [
-
-      'CEO Summary',
-      'Meta OS',
-      'Google OS',
-      'Attribution OS',
-      'Retention OS',
-      'Product OS',
-
-    ].includes(
+  const activeSubTab =
+    activeSubTabs[
       activeTab
+    ];
+
+
+  const pageDefinition =
+    getGrowthOSPageDefinition(
+      activeTab,
+      activeSubTab
     );
+
+
+  const showDateControl =
+    pageDefinition.dateMode ===
+      'global';
 
 
   /* ==========================================================
@@ -2020,7 +2034,7 @@ export default function GrowthOSDashboard() {
           items-center
           justify-center
 
-          bg-[#f5f6f8]
+          bg-[var(--gos-bg)]
         "
       >
 
@@ -2057,7 +2071,7 @@ export default function GrowthOSDashboard() {
           items-center
           justify-center
 
-          bg-[#f5f6f8]
+          bg-[var(--gos-bg)]
 
           px-6
         "
@@ -2126,7 +2140,7 @@ export default function GrowthOSDashboard() {
       data-growth-os-table-density={
         runtimePreferences.tableDensity
       }
-      className="min-h-screen bg-[#f5f6f8]"
+      className="min-h-screen bg-[var(--gos-bg)]"
     >
 
 
@@ -2178,85 +2192,6 @@ export default function GrowthOSDashboard() {
 
 
           {/* ==================================================
-              GLOBAL HEADER
-          ================================================== */}
-
-          <AppHeader
-
-            activeTab={
-              activeTab
-            }
-
-            actions={
-
-              showDateControl
-
-                ? (
-
-                    <DateControl
-
-                      start={
-                        start
-                      }
-
-                      end={
-                        end
-                      }
-
-                      compareStart={
-                        compareStart
-                      }
-
-                      compareEnd={
-                        compareEnd
-                      }
-
-                      setStart={
-                        setStart
-                      }
-
-                      setEnd={
-                        setEnd
-                      }
-
-                      setCompareStart={
-                        setCompareStart
-                      }
-
-                      setCompareEnd={
-                        setCompareEnd
-                      }
-
-                      onApply={
-                        fetchData
-                      }
-
-                      loading={
-                        loading
-                      }
-
-                      setPreset={
-                        setPreset
-                      }
-
-                      defaultPreset={
-                        dateRangeToPreset(
-                          runtimePreferences.defaultDateRange
-                        )
-                      }
-
-                    />
-
-                  )
-
-                : null
-
-            }
-
-          />
-
-
-          {/* ==================================================
               MAIN WORKSPACE
           ================================================== */}
 
@@ -2265,15 +2200,48 @@ export default function GrowthOSDashboard() {
               mx-auto
               max-w-[1880px]
 
-              px-3
-              py-2.5
+              px-4
+              py-3
 
-              md:px-3
-              xl:px-3
+              md:px-5
+              xl:px-6
             "
           >
 
-            <div className="text-slate-950">
+            <GrowthOSPageShell
+              page={
+                pageDefinition
+              }
+              actions={
+                showDateControl
+                  ? (
+                    <DateControl
+                      start={start}
+                      end={end}
+                      compareStart={compareStart}
+                      compareEnd={compareEnd}
+                      setStart={setStart}
+                      setEnd={setEnd}
+                      setCompareStart={setCompareStart}
+                      setCompareEnd={setCompareEnd}
+                      onApply={() => undefined}
+                      loading={
+                        activeTab ===
+                          'CEO Summary'
+                          ? loading
+                          : false
+                      }
+                      setPreset={setPreset}
+                      defaultPreset={
+                        dateRangeToPreset(
+                          runtimePreferences.defaultDateRange
+                        )
+                      }
+                    />
+                  )
+                  : null
+              }
+            >
 
 
               {/* ==============================================
@@ -2505,7 +2473,7 @@ export default function GrowthOSDashboard() {
               )}
 
 
-            </div>
+            </GrowthOSPageShell>
 
           </div>
 

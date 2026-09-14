@@ -21,6 +21,10 @@ import {
 } from 'recharts';
 
 
+import {
+  GrowthOSPageActionPortal,
+} from '../ui/GrowthOSPageShell';
+
 type Props = {
   startDate: string;
   endDate: string;
@@ -426,53 +430,15 @@ export default function AttributionOverview({
     <div className="space-y-3">
 
 
-      {/* ==================================================
-          HEADER STRIP
-      ================================================== */}
-
-      <section className="flex flex-wrap items-center justify-between gap-3">
-
-        <div>
-
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-600">
-            Attribution Intelligence
-          </p>
-
-          <p className="mt-1 text-[11px] text-slate-500">
-            Understand how channels, campaigns and customer journeys contribute to purchase.
-          </p>
-
-        </div>
-
-
-        <div className="flex items-center gap-2">
-
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600">
-            {startDate === endDate
-              ? formatDate(
-                  startDate
-                )
-              : `${formatDate(
-                  startDate
-                )} – ${formatDate(
-                  endDate
-                )}`}
-          </span>
-
-
-          <button
-            type="button"
-            onClick={
-              load
-            }
-            className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white transition hover:bg-slate-800"
-          >
-            Refresh
-          </button>
-
-        </div>
-
-      </section>
+      <GrowthOSPageActionPortal>
+        <button
+          type="button"
+          onClick={load}
+          className="gos-page-action"
+        >
+          Refresh
+        </button>
+      </GrowthOSPageActionPortal>
 
 
       {/* ==================================================
@@ -1738,31 +1704,3 @@ function creativeName(
 }
 
 
-function formatDate(
-  value: string
-) {
-
-  if (!value) {
-    return '—';
-  }
-
-
-  return new Intl.DateTimeFormat(
-    'en-IN',
-    {
-      day:
-        '2-digit',
-
-      month:
-        'short',
-
-      year:
-        'numeric',
-    }
-  ).format(
-    new Date(
-      `${value}T00:00:00`
-    )
-  );
-
-}

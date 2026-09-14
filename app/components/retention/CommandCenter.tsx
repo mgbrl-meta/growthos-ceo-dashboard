@@ -36,18 +36,6 @@ export default function CommandCenter() {
   return (
     <div className="space-y-3">
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
-          Mission Control
-        </p>
-
-        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-slate-950">
-          Retention Decision Engine
-        </h2>
-
-        <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
-          Powered by NBA v6: journey action + product action + expected business value.
-        </p>
-
         {loading && (
           <p className="mt-3 text-[10px] font-bold text-blue-600">
             Loading mission control...

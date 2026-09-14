@@ -1,17 +1,19 @@
 'use client';
 
+import {
+  GosEmptyState,
+} from '../ui/GrowthUI';
+
 type Props = {
   startDate: string;
   endDate: string;
 };
 
-export default function ProductInsights({ startDate, endDate }: Props) {
+export default function ProductInsights({}: Props) {
   return (
-    <div className="bg-white p-4 rounded-lg border">
-      <h2 className="text-[14px] font-semibold mb-2">Product Insights</h2>
-      <p className="text-[11px] text-gray-500">
-        {startDate} → {endDate}
-      </p>
-    </div>
+    <GosEmptyState
+      title="No product insights available yet"
+      text="Product growth signals, concentration risks and portfolio opportunities will appear here as the intelligence layer is expanded."
+    />
   );
 }

@@ -74,8 +74,6 @@ export default function SkuPerformance({
 
   return (
     <div className="bg-white p-4 rounded-lg border">
-      <h2 className="text-[14px] font-semibold mb-2.5">SKU Performance</h2>
-
       <p className="mb-3 text-[10px] text-gray-500">
         Showing {processedData.length} of {data.length} SKUs
       </p>
@@ -83,7 +81,7 @@ export default function SkuPerformance({
       <div className="flex gap-3 mb-2.5">
         <button
           onClick={() => setSortBy('revenue')}
-          className={`px-3 py-1 rounded ${sortBy === 'revenue' ? 'bg-black text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${sortBy === 'revenue' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           Sort: Revenue
@@ -91,7 +89,7 @@ export default function SkuPerformance({
 
         <button
           onClick={() => setSortBy('growth')}
-          className={`px-3 py-1 rounded ${sortBy === 'growth' ? 'bg-black text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${sortBy === 'growth' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           Sort: Growth
@@ -99,7 +97,7 @@ export default function SkuPerformance({
 
         <button
           onClick={() => setFilter('all')}
-          className={`px-3 py-1 rounded ${filter === 'all' ? 'bg-black text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${filter === 'all' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           All
@@ -107,7 +105,7 @@ export default function SkuPerformance({
 
         <button
           onClick={() => setFilter('Winner')}
-          className={`px-3 py-1 rounded ${filter === 'Winner' ? 'bg-green-600 text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${filter === 'Winner' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           Winners
@@ -115,7 +113,7 @@ export default function SkuPerformance({
 
         <button
           onClick={() => setFilter('Declining')}
-          className={`px-3 py-1 rounded ${filter === 'Declining' ? 'bg-red-600 text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${filter === 'Declining' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           Declining
@@ -123,7 +121,7 @@ export default function SkuPerformance({
 
         <button
           onClick={() => setFilter('Stable')}
-          className={`px-3 py-1 rounded ${filter === 'Stable' ? 'bg-yellow-600 text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${filter === 'Stable' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           Stable
@@ -131,7 +129,7 @@ export default function SkuPerformance({
 
         <button
           onClick={() => setFilter('Dead')}
-          className={`px-3 py-1 rounded ${filter === 'Dead' ? 'bg-gray-700 text-white' : 'bg-gray-200'
+          className={`rounded-lg border px-3 py-1.5 text-[10px] font-semibold ${filter === 'Dead' ? 'border-slate-300 bg-white text-slate-950 shadow-sm' : 'border-transparent bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
         >
           Dead

@@ -76,7 +76,7 @@ export default function ProductOS({
 
   return (
 
-    <section className="space-y-3">
+    <section className="gos-module-normalized space-y-3">
 
 
       {/* =====================================================

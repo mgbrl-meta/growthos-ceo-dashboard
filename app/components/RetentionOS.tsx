@@ -76,48 +76,10 @@ function Placeholder({
 
   return (
 
-    <section
-      className="
-        gos-panel
-      "
-    >
-
-      <p
-        className="
-          text-[10px]
-          font-semibold
-          uppercase
-          tracking-[0.22em]
-          text-blue-600
-        "
-      >
-        Retention OS
+    <section className="gos-panel">
+      <p className="text-[11px] text-slate-500">
+        {title} will be built next.
       </p>
-
-
-      <h2
-        className="
-          mt-2
-          text-[14px]
-          font-semibold
-          tracking-[-0.04em]
-          text-slate-950
-        "
-      >
-        {title}
-      </h2>
-
-
-      <p
-        className="
-          mt-2
-          text-[11px]
-          text-slate-500
-        "
-      >
-        This module will be built next.
-      </p>
-
     </section>
 
   );

@@ -5,6 +5,10 @@ import {
   useState,
 } from 'react';
 
+import {
+  GrowthOSPageActionPortal,
+} from '../ui/GrowthOSPageShell';
+
 
 export default function AttributionDataQuality() {
 
@@ -84,31 +88,15 @@ export default function AttributionDataQuality() {
   return (
     <div className="space-y-3">
 
-      <section className="flex items-end justify-between gap-2.5">
-
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
-            Attribution OS
-          </p>
-
-          <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
-            Data Quality
-          </h2>
-
-          <p className="mt-1 text-[10px] text-slate-400">
-            Monitor collection, sessionization, identity matching and order resolution.
-          </p>
-        </div>
-
-
+      <GrowthOSPageActionPortal>
         <button
+          type="button"
           onClick={load}
-          className="rounded-xl bg-slate-950 px-3 py-2 text-[10px] font-semibold text-white"
+          className="gos-page-action"
         >
           Refresh
         </button>
-
-      </section>
+      </GrowthOSPageActionPortal>
 
 
       <section className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-4">

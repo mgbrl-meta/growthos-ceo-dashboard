@@ -124,9 +124,6 @@ export default function AttributionNewRepeat({
   return (
     <div className="space-y-3">
 
-      <PageIntro />
-
-
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-[0.7fr_1.3fr]">
 
         <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -280,23 +277,6 @@ export default function AttributionNewRepeat({
       </section>
 
     </div>
-  );
-}
-
-
-function PageIntro() {
-  return (
-    <section>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
-        Attribution OS
-      </p>
-      <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em]">
-        New vs Repeat
-      </h2>
-      <p className="mt-1 text-[10px] text-slate-400">
-        Understand how acquisition and repeat-customer journeys differ.
-      </p>
-    </section>
   );
 }
 

@@ -1,17 +1,19 @@
 'use client';
 
+import {
+  GosEmptyState,
+} from '../ui/GrowthUI';
+
 type Props = {
   startDate: string;
   endDate: string;
 };
 
-export default function InventoryHealth({ startDate, endDate }: Props) {
+export default function InventoryHealth({}: Props) {
   return (
-    <div className="bg-white p-4 rounded-lg border">
-      <h2 className="text-[14px] font-semibold mb-2">Inventory Health</h2>
-      <p className="text-[11px] text-gray-500">
-        {startDate} → {endDate}
-      </p>
-    </div>
+    <GosEmptyState
+      title="Inventory health is not available yet"
+      text="Availability, stock-cover and inventory-risk metrics will appear here as this view is expanded."
+    />
   );
 }

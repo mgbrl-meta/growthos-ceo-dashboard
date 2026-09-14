@@ -6,6 +6,10 @@ import {
   useState,
 } from 'react';
 
+import {
+  GrowthOSPageActionPortal,
+} from '../ui/GrowthOSPageShell';
+
 type DailyPlannerProps = {
   selectedDate?: string;
 };
@@ -674,88 +678,45 @@ export default function DailyPlanner({
     }, [filteredRows]);
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="space-y-3">
 
-      {/* HEADER */}
-
-      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-end lg:justify-between">
-
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-600">
-            Retention Planner
-          </p>
-
-          <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.04em] text-slate-950">
-            Weekly Execution Planner
-          </h2>
-
-          <p className="mt-1 text-[10px] text-slate-500">
-            One next-best action per customer, consolidated into executable campaign groups.
-          </p>
-        </div>
-
-        <div className="flex flex-col items-end gap-1">
-
-          <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-
-            <button
-              type="button"
-              onClick={() =>
-                setPlannerMode(
-                  'SELECTED_DATE'
-                )
-              }
-              className={`rounded-lg px-3 py-2 text-[10px] font-semibold transition ${
-                plannerMode ===
-                'SELECTED_DATE'
-                  ? 'bg-slate-950 text-white'
-                  : 'text-slate-500'
-              }`}
-            >
-              Selected Date
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setPlannerMode(
-                  'ALL_WEEK'
-                )
-              }
-              className={`rounded-lg px-3 py-2 text-[10px] font-semibold transition ${
-                plannerMode ===
-                'ALL_WEEK'
-                  ? 'bg-slate-950 text-white'
-                  : 'text-slate-500'
-              }`}
-            >
-              All Week
-            </button>
-
-          </div>
-
-          <p className="pr-1 text-[9px] font-bold text-slate-400">
-
-            {plannerMode ===
-              'SELECTED_DATE'
-              ? `Selected: ${prettyDate(
-                  selectedDate
-                )}`
+      <GrowthOSPageActionPortal>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-[10px] font-medium text-slate-500 xl:inline">
+            {plannerMode === 'SELECTED_DATE'
+              ? `Selected: ${prettyDate(selectedDate)}`
               : rows.length > 0
-                ? `${prettyDate(
-                    rows[0]
-                      .week_start_date
-                  )} – ${prettyDate(
-                    rows[0]
-                      .week_end_date
-                  )}`
+                ? `${prettyDate(rows[0].week_start_date)} – ${prettyDate(rows[0].week_end_date)}`
                 : 'Full Weekly Plan'}
+          </span>
 
-          </p>
+          <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setPlannerMode('SELECTED_DATE')}
+              className={`rounded-md px-3 py-1.5 text-[10px] font-semibold transition ${
+                plannerMode === 'SELECTED_DATE'
+                  ? 'border border-slate-200 bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              Selected Day
+            </button>
 
+            <button
+              type="button"
+              onClick={() => setPlannerMode('ALL_WEEK')}
+              className={`rounded-md px-3 py-1.5 text-[10px] font-semibold transition ${
+                plannerMode === 'ALL_WEEK'
+                  ? 'border border-slate-200 bg-white text-slate-950 shadow-sm'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              Full Week
+            </button>
+          </div>
         </div>
-
-      </div>
+      </GrowthOSPageActionPortal>
 
       {loading && (
         <p className="mt-3 text-[10px] font-bold text-blue-600">
@@ -771,7 +732,7 @@ export default function DailyPlanner({
 
       {/* KPI */}
 
-      <div className="mt-3 grid gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-7">
 
         <Card
           label="Campaigns"
@@ -1269,7 +1230,7 @@ export default function DailyPlanner({
 
       </div>
 
-    </section>
+    </div>
   );
 }
 

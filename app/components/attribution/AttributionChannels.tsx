@@ -144,13 +144,6 @@ export default function AttributionChannels({
   return (
     <div className="space-y-3">
 
-      <PageIntro
-        eyebrow="Attribution OS"
-        title="Channel Attribution"
-        description="Understand which channels start, assist and close customer journeys."
-      />
-
-
       <KpiGrid
         items={[
           [
@@ -371,27 +364,6 @@ export default function AttributionChannels({
 
 
 /* shared local UI */
-
-function PageIntro({
-  eyebrow,
-  title,
-  description,
-}: any) {
-  return (
-    <section>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-600">
-        {eyebrow}
-      </p>
-      <h2 className="mt-1 text-[15px] font-semibold tracking-[-0.035em] text-slate-950">
-        {title}
-      </h2>
-      <p className="mt-1 text-[10px] text-slate-400">
-        {description}
-      </p>
-    </section>
-  );
-}
-
 
 function KpiGrid({
   items,

@@ -22,6 +22,17 @@ export const defaultSettings: GoogleSettingsState = {
   positiveKeywordConversions: 2,
 };
 
+const labels: Record<keyof GoogleSettingsState, string> = {
+  targetRoas: 'Target ROAS',
+  targetCpa: 'Target CPA',
+  minSpend: 'Minimum Spend',
+  minConversions: 'Minimum Conversions',
+  minClicks: 'Minimum Clicks',
+  negativeKeywordSpend: 'Negative Keyword Spend',
+  negativeKeywordClicks: 'Negative Keyword Clicks',
+  positiveKeywordConversions: 'Positive Keyword Conversions',
+};
+
 export default function GoogleSettings({ settings, setSettings }: any) {
   const update = (key: keyof GoogleSettingsState, value: string) => {
     setSettings((prev: GoogleSettingsState) => ({
@@ -30,25 +41,26 @@ export default function GoogleSettings({ settings, setSettings }: any) {
     }));
   };
 
-  return (
-    <div className="rounded-xl border bg-white/90 p-3.5 shadow-sm">
-      <h3 className="mb-2.5 text-[14px] font-semibold">Google OS Settings</h3>
+  const values = settings || defaultSettings;
 
-      <div className="grid grid-cols-2 gap-2.5">
-        {Object.entries(settings || defaultSettings).map(([key, value]) => (
+  return (
+    <section className="gos-panel">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {(Object.keys(values) as Array<keyof GoogleSettingsState>).map((key) => (
           <label key={key}>
-            <span className="mb-1 block text-[10px] font-bold uppercase text-slate-500">
-              {key}
+            <span className="mb-1 block text-[10px] font-semibold text-slate-600">
+              {labels[key]}
             </span>
+
             <input
               type="number"
-              value={value as number}
-              onChange={(e) => update(key as keyof GoogleSettingsState, e.target.value)}
-              className="w-full rounded-lg border bg-slate-50 px-3 py-2 font-semibold outline-none"
+              value={values[key] as number}
+              onChange={(event) => update(key, event.target.value)}
+              className="gos-input w-full"
             />
           </label>
         ))}
       </div>
-    </div>
+    </section>
   );
 }

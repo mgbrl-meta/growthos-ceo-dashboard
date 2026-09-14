@@ -14,8 +14,14 @@ type MetaParams = {
   cpmIncreasePct: number;
 };
 
-export default function MetaSettings({ params, setParams }: any) {
-  const update = (key: keyof MetaParams, value: string) => {
+export default function MetaSettings({
+  params,
+  setParams,
+}: any) {
+  const update = (
+    key: keyof MetaParams,
+    value: string
+  ) => {
     setParams((prev: MetaParams) => ({
       ...prev,
       [key]: Number(value || 0),
@@ -28,12 +34,17 @@ export default function MetaSettings({ params, setParams }: any) {
         <SettingInput
           label="Target ROAS"
           value={params.targetRoas}
-          onChange={(v: string) => update('targetRoas', v)}
+          onChange={(v: string) =>
+            update('targetRoas', v)
+          }
         />
+
         <SettingInput
           label="Target CPA"
           value={params.targetCpa}
-          onChange={(v: string) => update('targetCpa', v)}
+          onChange={(v: string) =>
+            update('targetCpa', v)
+          }
         />
       </SettingCard>
 
@@ -41,12 +52,17 @@ export default function MetaSettings({ params, setParams }: any) {
         <SettingInput
           label="Scale If Better Than Target %"
           value={params.scalePct}
-          onChange={(v: string) => update('scalePct', v)}
+          onChange={(v: string) =>
+            update('scalePct', v)
+          }
         />
+
         <SettingInput
           label="Kill If Worse Than Target %"
           value={params.killPct}
-          onChange={(v: string) => update('killPct', v)}
+          onChange={(v: string) =>
+            update('killPct', v)
+          }
         />
       </SettingCard>
 
@@ -54,12 +70,17 @@ export default function MetaSettings({ params, setParams }: any) {
         <SettingInput
           label="Minimum Spend To Evaluate"
           value={params.minSpend}
-          onChange={(v: string) => update('minSpend', v)}
+          onChange={(v: string) =>
+            update('minSpend', v)
+          }
         />
+
         <SettingInput
           label="Minimum Purchases"
           value={params.minPurchases}
-          onChange={(v: string) => update('minPurchases', v)}
+          onChange={(v: string) =>
+            update('minPurchases', v)
+          }
         />
       </SettingCard>
 
@@ -67,12 +88,17 @@ export default function MetaSettings({ params, setParams }: any) {
         <SettingInput
           label="Max CPA"
           value={params.maxCpa}
-          onChange={(v: string) => update('maxCpa', v)}
+          onChange={(v: string) =>
+            update('maxCpa', v)
+          }
         />
+
         <SettingInput
           label="Min ROAS"
           value={params.minRoas}
-          onChange={(v: string) => update('minRoas', v)}
+          onChange={(v: string) =>
+            update('minRoas', v)
+          }
         />
       </SettingCard>
 
@@ -80,71 +106,127 @@ export default function MetaSettings({ params, setParams }: any) {
         <SettingInput
           label="Min CTR %"
           value={params.minCtr}
-          onChange={(v: string) => update('minCtr', v)}
+          onChange={(v: string) =>
+            update('minCtr', v)
+          }
         />
+
         <SettingInput
           label="Max Frequency"
           value={params.maxFrequency}
-          onChange={(v: string) => update('maxFrequency', v)}
+          onChange={(v: string) =>
+            update('maxFrequency', v)
+          }
         />
+
         <SettingInput
           label="CPM Increase %"
           value={params.cpmIncreasePct}
-          onChange={(v: string) => update('cpmIncreasePct', v)}
+          onChange={(v: string) =>
+            update('cpmIncreasePct', v)
+          }
         />
       </SettingCard>
 
-      <div className="rounded-xl border border-slate-800 bg-gradient-to-br from-slate-950 to-slate-900 p-3.5 text-white shadow-sm shadow-slate-900/25">
-        <h3 className="text-[14px] font-semibold">How this powers Meta OS</h3>
-        <p className="mt-2 text-[11px] text-slate-400">
-          Every tab uses these rules to classify Scale, Test, Kill and Ignore.
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <h3 className="text-[14px] font-semibold text-slate-950">
+          How this powers Meta OS
+        </h3>
+
+        <p className="mt-2 text-[11px] leading-[17px] text-slate-500">
+          Every tab uses these rules to classify Scale, Test,
+          Kill and Ignore.
         </p>
 
-        <div className="mt-3 space-y-2 text-[11px] text-slate-300">
-          <p>
-            Scale ROAS: above{' '}
-            {(params.targetRoas * (1 + params.scalePct / 100)).toFixed(2)}
-          </p>
-          <p>
-            Kill ROAS: below{' '}
-            {(params.targetRoas * (1 - params.killPct / 100)).toFixed(2)}
-          </p>
-          <p>
-            Evaluate only after {formatCurrency(params.minSpend)} spend
-          </p>
+        <div className="mt-4 space-y-2.5">
+          <RuleRow
+            label="Scale ROAS"
+            value={`Above ${(
+              params.targetRoas *
+              (1 + params.scalePct / 100)
+            ).toFixed(2)}`}
+          />
+
+          <RuleRow
+            label="Kill ROAS"
+            value={`Below ${(
+              params.targetRoas *
+              (1 - params.killPct / 100)
+            ).toFixed(2)}`}
+          />
+
+          <RuleRow
+            label="Minimum evaluation spend"
+            value={formatCurrency(params.minSpend)}
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function SettingCard({ title, children }: any) {
+function SettingCard({
+  title,
+  children,
+}: any) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 shadow-sm shadow-slate-200/25">
-      <h3 className="mb-2.5 font-semibold">{title}</h3>
+    <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <h3 className="mb-3 text-[14px] font-semibold text-slate-950">
+        {title}
+      </h3>
+
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {children}
       </div>
-    </div>
+    </section>
   );
 }
 
-function SettingInput({ label, value, onChange }: any) {
+function SettingInput({
+  label,
+  value,
+  onChange,
+}: any) {
   return (
-    <label>
-      <span className="mb-1 block text-[10px] font-bold text-slate-500">
+    <label className="block">
+      <span className="mb-1.5 block text-[10px] font-semibold text-slate-500">
         {label}
       </span>
+
       <input
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold outline-none focus:border-slate-950"
+        onChange={(e) =>
+          onChange(e.target.value)
+        }
+        className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-slate-400"
       />
     </label>
   );
 }
 
-function formatCurrency(value: number = 0) {
+function RuleRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2.5 last:border-0 last:pb-0">
+      <span className="text-[11px] text-slate-500">
+        {label}
+      </span>
+
+      <strong className="text-[11px] font-semibold text-slate-900">
+        {value}
+      </strong>
+    </div>
+  );
+}
+
+function formatCurrency(
+  value: number = 0
+) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
