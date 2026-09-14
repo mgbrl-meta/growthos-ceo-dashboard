@@ -57,6 +57,10 @@ import {
   GROWTHOS_SUBMODULES,
 } from '@/lib/auth/submodule-registry';
 
+import type {
+  ClientEffectiveAccess,
+} from '@/lib/auth/client-effective-access';
+
 import {
   DEFAULT_GROWTH_OS_PERSONAL_PREFERENCES,
   readGrowthOSPersonalPreferences,
@@ -318,6 +322,56 @@ type WorkspaceSubscriptionResponse = {
       setupRequired:
         boolean;
 
+      accessMode?:
+        string | null;
+
+      releaseStage?:
+        string | null;
+
+      planEnabled?:
+        boolean;
+
+      brandOverride?:
+        string;
+
+      releaseAllowed?:
+        boolean;
+
+      submodules?:
+        Array<{
+
+          moduleId:
+            string;
+
+          submoduleId:
+            string;
+
+          label:
+            string;
+
+          status:
+            string | null;
+
+          accessMode?:
+            string | null;
+
+          releaseStage?:
+            string | null;
+
+          planEnabled?:
+            boolean;
+
+          brandOverride?:
+            string;
+
+          releaseAllowed?:
+            boolean;
+
+          enabled:
+            boolean;
+
+        }>;
+
     }>;
 
 };
@@ -439,6 +493,9 @@ const SETTINGS_TABS:
     label:
       string;
 
+    submoduleId:
+      string;
+
     icon:
       any;
   }> = [
@@ -449,6 +506,9 @@ const SETTINGS_TABS:
 
     label:
       'Workspace',
+
+    submoduleId:
+      'workspace',
 
     icon:
       Settings2,
@@ -461,6 +521,9 @@ const SETTINGS_TABS:
     label:
       'Plan & Billing',
 
+    submoduleId:
+      'plan-billing',
+
     icon:
       CreditCard,
   },
@@ -471,6 +534,9 @@ const SETTINGS_TABS:
 
     label:
       'Modules',
+
+    submoduleId:
+      'modules',
 
     icon:
       Boxes,
@@ -483,6 +549,9 @@ const SETTINGS_TABS:
     label:
       'Integrations',
 
+    submoduleId:
+      'integrations',
+
     icon:
       Plug,
   },
@@ -493,6 +562,9 @@ const SETTINGS_TABS:
 
     label:
       'Users & Access',
+
+    submoduleId:
+      'users-access',
 
     icon:
       Users,
@@ -505,6 +577,9 @@ const SETTINGS_TABS:
     label:
       'Security',
 
+    submoduleId:
+      'security',
+
     icon:
       ShieldCheck,
   },
@@ -515,6 +590,9 @@ const SETTINGS_TABS:
 
     label:
       'Notifications',
+
+    submoduleId:
+      'notifications',
 
     icon:
       Bell,
@@ -527,6 +605,9 @@ const SETTINGS_TABS:
     label:
       'Audit Log',
 
+    submoduleId:
+      'audit-log',
+
     icon:
       History,
   },
@@ -537,6 +618,9 @@ const SETTINGS_TABS:
 
     label:
       'Data & Account',
+
+    submoduleId:
+      'data-account',
 
     icon:
       Database,
@@ -549,6 +633,9 @@ const SETTINGS_TABS:
     label:
       'My Preferences',
 
+    submoduleId:
+      'my-preferences',
+
     icon:
       UserRound,
   },
@@ -559,6 +646,9 @@ const SETTINGS_TABS:
 
     label:
       'Launch Readiness',
+
+    submoduleId:
+      'launch-readiness',
 
     icon:
       ClipboardCheck,
@@ -635,7 +725,17 @@ const LANDING_PAGE_OPTIONS:
 // MAIN
 // ============================================================
 
-export default function GrowthSettings() {
+export default function GrowthSettings({
+
+  effectiveAccess,
+
+}: {
+
+  effectiveAccess:
+    ClientEffectiveAccess |
+    null;
+
+}) {
 
 
   const [
@@ -645,6 +745,77 @@ export default function GrowthSettings() {
     useState<SettingsTab>(
       'Workspace'
     );
+
+
+  // ==========================================================
+  // SETTINGS CAPABILITY VISIBILITY
+  //
+  // Before the Settings capability has been registered/migrated,
+  // preserve the existing client experience. Once effective access
+  // contains the Settings module, individual sections follow the
+  // canonical Admin-controlled submodule entitlement result.
+  // ==========================================================
+
+  const settingsAccess =
+    effectiveAccess
+      ?.modules[
+        'settings'
+      ]
+    ??
+    null;
+
+
+  const visibleSettingsTabs =
+    settingsAccess
+
+      ? SETTINGS_TABS.filter(
+          tab =>
+            settingsAccess
+              .submodules[
+                tab.submoduleId
+              ]
+              ?.effectivePermission !==
+            'disabled'
+        )
+
+      : SETTINGS_TABS;
+
+
+  useEffect(
+    () => {
+
+      if (
+        visibleSettingsTabs.length ===
+          0
+      ) {
+
+        return;
+
+      }
+
+
+      const activeStillVisible =
+        visibleSettingsTabs.some(
+          tab =>
+            tab.id ===
+              activeTab
+        );
+
+
+      if (!activeStillVisible) {
+
+        setActiveTab(
+          visibleSettingsTabs[0].id
+        );
+
+      }
+
+    },
+    [
+      activeTab,
+      effectiveAccess,
+    ]
+  );
 
 
   // ==========================================================
@@ -1354,7 +1525,7 @@ export default function GrowthSettings() {
 
           <nav className="space-y-1">
 
-            {SETTINGS_TABS.map(
+            {visibleSettingsTabs.map(
               tab => {
 
                 const Icon =
@@ -2371,6 +2542,78 @@ function UserAccessSettings({
     );
 
 
+  function availableSubmodulesForModule(
+
+    moduleId:
+      string
+
+  ) {
+
+    const module =
+      activeModules.find(
+        item =>
+          item.moduleId ===
+            moduleId
+      );
+
+
+    if (
+      !module
+      ||
+      !module.enabled
+    ) {
+
+      return [];
+
+    }
+
+
+    const commerciallyEnabledIds =
+      new Set(
+        (
+          module.submodules
+          ||
+          []
+        )
+          .filter(
+            submodule =>
+              submodule.enabled
+              &&
+              submodule.status ===
+                'active'
+          )
+          .map(
+            submodule =>
+              submodule.submoduleId
+          )
+      );
+
+
+    return GROWTHOS_SUBMODULES.filter(
+      submodule =>
+        submodule.moduleId ===
+          moduleId
+        &&
+        commerciallyEnabledIds.has(
+          submodule.submoduleId
+        )
+    );
+
+  }
+
+
+  function availableSubmodules() {
+
+    return activeModules.flatMap(
+      module =>
+        availableSubmodulesForModule(
+          module.moduleId
+        )
+    );
+
+  }
+
+
   function defaultModulePermission(
 
     module:
@@ -2467,7 +2710,7 @@ function UserAccessSettings({
 
     for (
       const submodule
-      of GROWTHOS_SUBMODULES
+      of availableSubmodules()
     ) {
 
       const module =
@@ -2647,10 +2890,8 @@ function UserAccessSettings({
 
 
     const moduleSubmodules =
-      GROWTHOS_SUBMODULES.filter(
-        submodule =>
-          submodule.moduleId ===
-            moduleId
+      availableSubmodulesForModule(
+        moduleId
       );
 
 
@@ -3451,7 +3692,7 @@ function UserAccessSettings({
 
 
       const applicableSubmodules =
-        GROWTHOS_SUBMODULES.filter(
+        availableSubmodules().filter(
           submodule => {
 
             const module =
@@ -5390,10 +5631,8 @@ function UserAccessSettings({
 
 
                   const submodules =
-                    GROWTHOS_SUBMODULES.filter(
-                      submodule =>
-                        submodule.moduleId ===
-                          module.moduleId
+                    availableSubmodulesForModule(
+                      module.moduleId
                     );
 
 
@@ -5636,11 +5875,10 @@ function UserAccessSettings({
                     parentPermission ===
                       'disabled'
                     ||
-                    GROWTHOS_SUBMODULES.every(
-                      submodule =>
-                        submodule.moduleId !==
-                          module.moduleId
-                    )
+                    availableSubmodulesForModule(
+                      module.moduleId
+                    ).length ===
+                      0
                   );
 
                 }

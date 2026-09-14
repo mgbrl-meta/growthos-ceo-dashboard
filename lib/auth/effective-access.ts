@@ -54,6 +54,21 @@ export type GrowthOSEffectiveSubmoduleAccess = {
   label:
     string;
 
+  planEnabled:
+    boolean;
+
+  brandOverride:
+    string;
+
+  brandEnabled:
+    boolean;
+
+  accessMode:
+    string | null;
+
+  releaseStage:
+    string | null;
+
   configuredPermission:
     GrowthOSConfiguredPermission |
     null;
@@ -79,6 +94,12 @@ export type GrowthOSEffectiveModuleAccess = {
     string | null;
 
   moduleStatus:
+    string | null;
+
+  accessMode:
+    string | null;
+
+  releaseStage:
     string | null;
 
   planEnabled:
@@ -303,6 +324,7 @@ function resolveModulePermission({
   configuredPermission,
   role,
   syntheticMembership,
+  accessMode,
 
 }: {
 
@@ -318,6 +340,9 @@ function resolveModulePermission({
 
   syntheticMembership:
     boolean;
+
+  accessMode:
+    string | null;
 
 }):
   GrowthOSEffectivePermission {
@@ -344,11 +369,16 @@ function resolveModulePermission({
   }
 
 
-  // Normal user = fail closed.
+  // Standard capabilities are the product baseline. A missing
+  // per-user row therefore inherits the user's workspace role rather than
+  // making a newly launched Standard capability disappear for existing users.
+  // Explicit user permissions still win below.
 
   if (!configuredPermission) {
 
-    return 'disabled';
+    return accessMode === 'standard'
+      ? roleDefaultPermission(role)
+      : 'disabled';
 
   }
 
@@ -386,13 +416,18 @@ function resolveModulePermission({
 function resolveSubmodulePermission({
 
   parentPermission,
+  brandEnabled,
   configuredPermission,
   syntheticMembership,
+  allowImplicitInherit,
 
 }: {
 
   parentPermission:
     GrowthOSEffectivePermission;
+
+  brandEnabled:
+    boolean;
 
   configuredPermission:
     GrowthOSConfiguredPermission |
@@ -401,11 +436,16 @@ function resolveSubmodulePermission({
   syntheticMembership:
     boolean;
 
+  allowImplicitInherit:
+    boolean;
+
 }):
   GrowthOSEffectivePermission {
 
   if (
     parentPermission === 'disabled'
+    ||
+    !brandEnabled
   ) {
 
     return 'disabled';
@@ -422,7 +462,9 @@ function resolveSubmodulePermission({
 
   if (!configuredPermission) {
 
-    return 'disabled';
+    return allowImplicitInherit
+      ? parentPermission
+      : 'disabled';
 
   }
 
@@ -798,6 +840,8 @@ export async function resolveGrowthOSEffectiveAccess(
         configuredPermission,
         role,
         syntheticMembership,
+        accessMode:
+          module.accessMode ?? null,
 
       });
 
@@ -809,6 +853,17 @@ export async function resolveGrowthOSEffectiveAccess(
       > = {};
 
 
+    const commercialSubmoduleMap =
+      new Map(
+        (module.submodules || []).map(
+          (item: any) => [
+            String(item.submoduleId || '').trim(),
+            item,
+          ]
+        )
+      );
+
+
     for (
       const submodule
       of GROWTHOS_SUBMODULES.filter(
@@ -817,6 +872,18 @@ export async function resolveGrowthOSEffectiveAccess(
             moduleId
       )
     ) {
+
+      const commercialSubmodule =
+        commercialSubmoduleMap.get(
+          submodule.submoduleId
+        ) as any;
+
+
+      const submoduleBrandEnabled =
+        Boolean(
+          commercialSubmodule?.enabled
+        );
+
 
       const key =
         `${moduleId}:${submodule.submoduleId}`;
@@ -842,10 +909,20 @@ export async function resolveGrowthOSEffectiveAccess(
           parentPermission:
             effectivePermission,
 
+          brandEnabled:
+            submoduleBrandEnabled,
+
           configuredPermission:
             configuredSubmodulePermission,
 
           syntheticMembership,
+
+          // Settings sections did not historically have explicit user
+          // permission rows. Commercial Admin control should therefore be
+          // enough to expose/hide them while still respecting an explicit
+          // user-level permission if one is later configured.
+          allowImplicitInherit:
+            moduleId === 'settings',
 
         });
 
@@ -861,6 +938,31 @@ export async function resolveGrowthOSEffectiveAccess(
 
         label:
           submodule.label,
+
+        planEnabled:
+          Boolean(
+            commercialSubmodule?.planEnabled
+          ),
+
+        brandOverride:
+          String(
+            commercialSubmodule?.brandOverride
+            ||
+            'default'
+          ),
+
+        brandEnabled:
+          submoduleBrandEnabled,
+
+        accessMode:
+          commercialSubmodule?.accessMode
+          ??
+          null,
+
+        releaseStage:
+          commercialSubmodule?.releaseStage
+          ??
+          null,
 
         configuredPermission:
           configuredSubmodulePermission,
@@ -890,6 +992,12 @@ export async function resolveGrowthOSEffectiveAccess(
 
       moduleStatus:
         module.status ?? null,
+
+      accessMode:
+        module.accessMode ?? null,
+
+      releaseStage:
+        module.releaseStage ?? null,
 
       planEnabled:
         Boolean(

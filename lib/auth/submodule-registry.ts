@@ -20,6 +20,15 @@ export type GrowthOSSubmoduleDefinition = {
   label:
     string;
 
+  // Optional seed defaults used only when a capability is first
+  // registered in the control plane. Existing Admin-managed values
+  // are never overwritten by these defaults.
+  defaultAccessMode?:
+    'standard' | 'plan' | 'custom';
+
+  defaultReleaseStage?:
+    'draft' | 'internal' | 'beta' | 'live' | 'archived';
+
 };
 
 
@@ -298,6 +307,105 @@ export const GROWTHOS_SUBMODULES:
     moduleId: 'product',
     submoduleId: 'settings',
     label: 'Settings',
+  },
+
+
+  // ==========================================================
+  // SETTINGS
+  //
+  // Settings itself is a protected parent module. Individual
+  // sections are registered as controllable submodules so Admin
+  // can release them to everyone, a plan, or selected clients.
+  // Existing client behaviour is preserved by seeding these
+  // sections as Standard + Live on first registration.
+  // ==========================================================
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'workspace',
+    label: 'Workspace',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'plan-billing',
+    label: 'Plan & Billing',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'modules',
+    label: 'Modules',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'integrations',
+    label: 'Integrations',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'users-access',
+    label: 'Users & Access',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'security',
+    label: 'Security',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'notifications',
+    label: 'Notifications',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'audit-log',
+    label: 'Audit Log',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'data-account',
+    label: 'Data & Account',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'my-preferences',
+    label: 'My Preferences',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
+  },
+
+  {
+    moduleId: 'settings',
+    submoduleId: 'launch-readiness',
+    label: 'Launch Readiness',
+    defaultAccessMode: 'standard',
+    defaultReleaseStage: 'live',
   },
 
 ];

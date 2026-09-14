@@ -2260,37 +2260,60 @@ const modulePermissionMap =
   );
 
 
-const applicableModuleIds =
+const applicableModules =
+  (
+    subscription.modules
+    ||
+    []
+  ).filter(
+    module =>
+      module.status ===
+        'active'
+      &&
+      module.enabled
+      &&
+      modulePermissionMap.get(
+        module.moduleId
+      ) !==
+        'disabled'
+  );
+
+
+const commerciallyEnabledSubmoduleKeys =
   new Set(
-    (
-      subscription.modules
-      ||
-      []
+    applicableModules.flatMap(
+      module =>
+        (
+          (
+            module.submodules
+            ||
+            []
+          ) as Array<{
+            submoduleId: string;
+            status: string | null;
+            enabled: boolean;
+          }>
+        )
+          .filter(
+            submodule =>
+              submodule.status ===
+                'active'
+              &&
+              submodule.enabled
+          )
+          .map(
+            submodule =>
+              `${module.moduleId}:${submodule.submoduleId}`
+          )
     )
-      .filter(
-        module =>
-          module.status ===
-            'active'
-          &&
-          module.enabled
-          &&
-          modulePermissionMap.get(
-            module.moduleId
-          ) !==
-            'disabled'
-      )
-      .map(
-        module =>
-          module.moduleId
-      )
   );
 
 
 const requiredSubmodules =
   GROWTHOS_SUBMODULES.filter(
     submodule =>
-      applicableModuleIds.has(
-        submodule.moduleId
+      commerciallyEnabledSubmoduleKeys.has(
+        `${submodule.moduleId}:${submodule.submoduleId}`
       )
   );
 

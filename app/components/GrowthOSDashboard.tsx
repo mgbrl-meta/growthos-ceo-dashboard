@@ -2468,7 +2468,11 @@ export default function GrowthOSDashboard() {
               {activeTab ===
                 'Settings' && (
 
-                <GrowthSettings />
+                <GrowthSettings
+                  effectiveAccess={
+                    effectiveAccess
+                  }
+                />
 
               )}
 

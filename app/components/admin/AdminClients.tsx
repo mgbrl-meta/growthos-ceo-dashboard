@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Plug,
   RefreshCw,
+  Save,
   Search,
   Users,
   XCircle,
@@ -188,6 +189,51 @@ type AdminClientsResponse = {
   error?:
     string;
 
+};
+
+
+
+
+type ClientAccessSubmodule = {
+  moduleId: string;
+  submoduleId: string;
+  label: string;
+  status: string | null;
+  accessMode: string;
+  releaseStage: string;
+  planEnabled: boolean;
+  brandOverride: string;
+  releaseAllowed: boolean;
+  enabled: boolean;
+};
+
+
+type ClientAccessModule = {
+  moduleId: string;
+  name: string | null;
+  description: string | null;
+  accessMode: string;
+  releaseStage: string;
+  status: string | null;
+  planEnabled: boolean;
+  brandOverride: string;
+  releaseAllowed: boolean;
+  enabled: boolean;
+  submodules: ClientAccessSubmodule[];
+};
+
+
+type ClientAccessResponse = {
+  ok: boolean;
+  access?: {
+    configured: boolean;
+    plan: {
+      planId: string;
+      name: string;
+    } | null;
+    modules: ClientAccessModule[];
+  };
+  error?: string;
 };
 
 
@@ -1878,7 +1924,7 @@ export default function AdminClients() {
             text-violet-700
           "
         >
-          Source of truth: Growth OS workspaces, brands, subscriptions, plans, memberships and integration connections. Admin Clients is read-only during this architecture phase.
+          Source of truth: Growth OS workspaces, brands, subscriptions, plans, memberships and integration connections. Product-access overrides are editable from each client detail.
         </p>
 
 
@@ -2599,6 +2645,9 @@ function ClientDetail({
       </section>
 
 
+      <ClientAccessControl client={client} />
+
+
       {/* =====================================================
           LIFECYCLE
       ===================================================== */}
@@ -2689,7 +2738,7 @@ function ClientDetail({
             text-violet-600
           "
         >
-          This screen reflects real Growth OS control-plane state. Client creation, plan changes, status changes and entitlement overrides are intentionally disabled until dedicated authenticated Admin command APIs are introduced.
+          This screen reflects real Growth OS control-plane state. Product access overrides are editable here; subscription, billing and other client controls remain owned by their dedicated Admin sections.
         </p>
 
       </section>
@@ -3149,6 +3198,895 @@ function TableHeader({
     >
       {children}
     </th>
+
+  );
+
+}
+
+
+
+// ============================================================
+// CLIENT ACCESS CONTROL
+// ============================================================
+
+function ClientAccessControl({
+
+  client,
+
+}: {
+
+  client:
+    AdminClient;
+
+}) {
+
+  const [
+    data,
+    setData,
+  ] =
+    useState<
+      ClientAccessResponse |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+
+  const [
+    saving,
+    setSaving,
+  ] =
+    useState(
+      false
+    );
+
+
+  const [
+    message,
+    setMessage,
+  ] =
+    useState<
+      string |
+      null
+    >(
+      null
+    );
+
+
+  const [
+    moduleOverrides,
+    setModuleOverrides,
+  ] =
+    useState<
+      Record<
+        string,
+        string
+      >
+    >(
+      {}
+    );
+
+
+  const [
+    submoduleOverrides,
+    setSubmoduleOverrides,
+  ] =
+    useState<
+      Record<
+        string,
+        string
+      >
+    >(
+      {}
+    );
+
+
+  async function loadAccess() {
+
+    setLoading(
+      true
+    );
+
+
+    setMessage(
+      null
+    );
+
+
+    try {
+
+      const params =
+        new URLSearchParams({
+          workspaceId:
+            client.workspaceId,
+          brandId:
+            client.brandId,
+        });
+
+
+      const response =
+        await fetch(
+          `/api/admin/clients/access?${params.toString()}`,
+          {
+            cache:
+              'no-store',
+            credentials:
+              'same-origin',
+          }
+        );
+
+
+      const json:
+        ClientAccessResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to load client access'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+
+      const nextModuleOverrides:
+        Record<string, string> = {};
+
+
+      const nextSubmoduleOverrides:
+        Record<string, string> = {};
+
+
+      for (
+        const module
+        of json.access?.modules
+        ||
+        []
+      ) {
+
+        nextModuleOverrides[
+          module.moduleId
+        ] =
+          module.brandOverride
+          ||
+          'default';
+
+
+        for (
+          const submodule
+          of module.submodules
+          ||
+          []
+        ) {
+
+          nextSubmoduleOverrides[
+            `${module.moduleId}:${submodule.submoduleId}`
+          ] =
+            submodule.brandOverride
+            ||
+            'default';
+
+        }
+
+      }
+
+
+      setModuleOverrides(
+        nextModuleOverrides
+      );
+
+
+      setSubmoduleOverrides(
+        nextSubmoduleOverrides
+      );
+
+    } catch (
+      error:
+        any
+    ) {
+
+      setMessage(
+        String(
+          error?.message
+          ||
+          'Unable to load client access'
+        )
+      );
+
+    } finally {
+
+      setLoading(
+        false
+      );
+
+    }
+
+  }
+
+
+  useEffect(
+    () => {
+
+      loadAccess();
+
+    },
+    [
+      client.workspaceId,
+      client.brandId,
+    ]
+  );
+
+
+  async function saveAccess() {
+
+    setSaving(
+      true
+    );
+
+
+    setMessage(
+      null
+    );
+
+
+    try {
+
+      const response =
+        await fetch(
+          '/api/admin/clients/access',
+          {
+            method:
+              'PATCH',
+            credentials:
+              'same-origin',
+            headers: {
+              'content-type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                workspaceId:
+                  client.workspaceId,
+                brandId:
+                  client.brandId,
+                moduleOverrides:
+                  Object.entries(
+                    moduleOverrides
+                  ).map(
+                    ([
+                      moduleId,
+                      override,
+                    ]) => ({
+                      moduleId,
+                      override,
+                    })
+                  ),
+                submoduleOverrides:
+                  Object.entries(
+                    submoduleOverrides
+                  ).map(
+                    ([
+                      key,
+                      override,
+                    ]) => {
+
+                      const separator =
+                        key.indexOf(
+                          ':'
+                        );
+
+
+                      return {
+                        moduleId:
+                          separator >= 0
+                            ? key.slice(
+                                0,
+                                separator
+                              )
+                            : key,
+                        submoduleId:
+                          separator >= 0
+                            ? key.slice(
+                                separator + 1
+                              )
+                            : '',
+                        override,
+                      };
+
+                    }
+                  ),
+              }),
+          }
+        );
+
+
+      const json:
+        ClientAccessResponse =
+          await response.json();
+
+
+      if (
+        !response.ok
+        ||
+        !json.ok
+      ) {
+
+        throw new Error(
+          json.error
+          ||
+          'Unable to save client access'
+        );
+
+      }
+
+
+      setData(
+        json
+      );
+
+
+      setMessage(
+        'Client access overrides saved.'
+      );
+
+
+      await loadAccess();
+
+    } catch (
+      error:
+        any
+    ) {
+
+      setMessage(
+        String(
+          error?.message
+          ||
+          'Unable to save client access'
+        )
+      );
+
+    } finally {
+
+      setSaving(
+        false
+      );
+
+    }
+
+  }
+
+
+  const modules =
+    data?.access?.modules
+    ||
+    [];
+
+
+  return (
+
+    <section className="gos-panel !p-3.5">
+
+      <div
+        className="
+          flex
+          flex-col
+          gap-3
+
+          md:flex-row
+          md:items-center
+          md:justify-between
+        "
+      >
+
+        <div>
+
+          <h3 className="gos-section-title">
+            Product Access Overrides
+          </h3>
+
+
+          <p
+            className="
+              mt-0.5
+              text-[9px]
+              text-slate-500
+            "
+          >
+            Inherit follows Standard / Plan / Custom rules. Allow or Deny creates a client-specific exception. Release-stage gates still apply.
+          </p>
+
+        </div>
+
+
+        <button
+          type="button"
+          onClick={
+            saveAccess
+          }
+          disabled={
+            saving
+            ||
+            loading
+          }
+          className="
+            inline-flex
+            h-8
+            items-center
+            gap-2
+            rounded-[8px]
+            bg-slate-950
+            px-3
+            text-[9px]
+            font-semibold
+            text-white
+            hover:bg-slate-800
+            disabled:opacity-50
+          "
+        >
+          <Save
+            size={12}
+          />
+          {saving
+            ? 'Saving…'
+            : 'Save Access'}
+        </button>
+
+      </div>
+
+
+      {message && (
+        <p
+          className="
+            mt-2
+            text-[9px]
+            text-slate-600
+          "
+        >
+          {message}
+        </p>
+      )}
+
+
+      {loading ? (
+
+        <div
+          className="
+            mt-3
+            rounded-[8px]
+            border
+            border-slate-200
+            bg-slate-50
+            p-4
+            text-center
+            text-[9px]
+            text-slate-500
+          "
+        >
+          Loading product access…
+        </div>
+
+      ) : modules.length === 0 ? (
+
+        <div
+          className="
+            mt-3
+            rounded-[8px]
+            border
+            border-amber-200
+            bg-amber-50
+            p-3
+            text-[9px]
+            text-amber-700
+          "
+        >
+          No commercial access snapshot is available for this client. Confirm that a plan is assigned first.
+        </div>
+
+      ) : (
+
+        <div className="mt-3 space-y-2">
+
+          {modules.map(
+            module => {
+
+              const moduleOverride =
+                moduleOverrides[
+                  module.moduleId
+                ]
+                ||
+                'default';
+
+
+              return (
+
+                <div
+                  key={
+                    module.moduleId
+                  }
+                  className="
+                    rounded-[10px]
+                    border
+                    border-slate-200
+                    bg-white
+                  "
+                >
+
+                  <div
+                    className="
+                      grid
+                      grid-cols-1
+                      gap-3
+                      px-3
+                      py-2.5
+
+                      md:grid-cols-[minmax(180px,1fr)_100px_100px_130px]
+                      md:items-center
+                    "
+                  >
+
+                    <div className="min-w-0">
+
+                      <div
+                        className="
+                          text-[9px]
+                          font-semibold
+                          text-slate-900
+                        "
+                      >
+                        {module.name
+                          ||
+                          module.moduleId}
+                      </div>
+
+
+                      <div
+                        className="
+                          mt-0.5
+                          text-[8px]
+                          text-slate-400
+                        "
+                      >
+                        {formatLabel(
+                          module.accessMode
+                        )}
+                        {' · '}
+                        {formatLabel(
+                          module.releaseStage
+                        )}
+                      </div>
+
+                    </div>
+
+
+                    <AccessState
+                      label="Plan"
+                      enabled={
+                        module.planEnabled
+                      }
+                    />
+
+
+                    <AccessState
+                      label="Effective"
+                      enabled={
+                        module.enabled
+                      }
+                    />
+
+
+                    <OverrideSelect
+                      value={
+                        moduleOverride
+                      }
+                      onChange={
+                        value =>
+                          setModuleOverrides(
+                            current => ({
+                              ...current,
+                              [module.moduleId]:
+                                value,
+                            })
+                          )
+                      }
+                    />
+
+                  </div>
+
+
+                  {module.submodules?.length > 0 && (
+
+                    <div
+                      className="
+                        border-t
+                        border-slate-100
+                        bg-slate-50/40
+                        px-3
+                        py-2.5
+                      "
+                    >
+
+                      <div
+                        className="
+                          grid
+                          grid-cols-1
+                          gap-1.5
+
+                          xl:grid-cols-2
+                        "
+                      >
+
+                        {module.submodules.map(
+                          submodule => {
+
+                            const key =
+                              `${module.moduleId}:${submodule.submoduleId}`;
+
+
+                            const override =
+                              submoduleOverrides[
+                                key
+                              ]
+                              ||
+                              'default';
+
+
+                            return (
+
+                              <div
+                                key={
+                                  key
+                                }
+                                className="
+                                  grid
+                                  grid-cols-[minmax(120px,1fr)_72px_72px_105px]
+                                  items-center
+                                  gap-2
+                                  rounded-[8px]
+                                  border
+                                  border-slate-200
+                                  bg-white
+                                  px-2.5
+                                  py-2
+                                "
+                              >
+
+                                <div className="min-w-0">
+
+                                  <div
+                                    className="
+                                      truncate
+                                      text-[8px]
+                                      font-semibold
+                                      text-slate-700
+                                    "
+                                  >
+                                    {submodule.label}
+                                  </div>
+
+
+                                  <div
+                                    className="
+                                      mt-0.5
+                                      truncate
+                                      text-[7px]
+                                      text-slate-400
+                                    "
+                                  >
+                                    {formatLabel(
+                                      submodule.accessMode
+                                    )}
+                                    {' · '}
+                                    {formatLabel(
+                                      submodule.releaseStage
+                                    )}
+                                  </div>
+
+                                </div>
+
+
+                                <TinyState
+                                  enabled={
+                                    submodule.planEnabled
+                                  }
+                                />
+
+
+                                <TinyState
+                                  enabled={
+                                    submodule.enabled
+                                  }
+                                />
+
+
+                                <OverrideSelect
+                                  value={
+                                    override
+                                  }
+                                  compact
+                                  onChange={
+                                    value =>
+                                      setSubmoduleOverrides(
+                                        current => ({
+                                          ...current,
+                                          [key]:
+                                            value,
+                                        })
+                                      )
+                                  }
+                                />
+
+                              </div>
+
+                            );
+
+                          }
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+              );
+
+            }
+          )}
+
+        </div>
+
+      )}
+
+    </section>
+
+  );
+
+}
+
+
+function OverrideSelect({
+
+  value,
+  onChange,
+  compact =
+    false,
+
+}: {
+
+  value:
+    string;
+
+  onChange:
+    (
+      value:
+        string
+    ) => void;
+
+  compact?:
+    boolean;
+
+}) {
+
+  return (
+
+    <select
+      value={
+        value
+      }
+      onChange={
+        event =>
+          onChange(
+            event.target.value
+          )
+      }
+      className={`rounded-[7px] border border-slate-200 bg-white px-2 text-slate-700 outline-none focus:border-violet-300 ${compact ? 'h-7 text-[7px]' : 'h-8 text-[8px]'}`}
+    >
+      <option value="default">
+        Inherit
+      </option>
+      <option value="enabled">
+        Allow
+      </option>
+      <option value="disabled">
+        Deny
+      </option>
+    </select>
+
+  );
+
+}
+
+
+function AccessState({
+
+  label,
+  enabled,
+
+}: {
+
+  label:
+    string;
+
+  enabled:
+    boolean;
+
+}) {
+
+  return (
+
+    <div>
+
+      <div
+        className="
+          text-[7px]
+          font-semibold
+          uppercase
+          tracking-[0.08em]
+          text-slate-400
+        "
+      >
+        {label}
+      </div>
+
+
+      <div
+        className={`mt-1 text-[8px] font-semibold ${enabled ? 'text-emerald-700' : 'text-slate-400'}`}
+      >
+        {enabled
+          ? 'Enabled'
+          : 'Disabled'}
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+function TinyState({
+
+  enabled,
+
+}: {
+
+  enabled:
+    boolean;
+
+}) {
+
+  return (
+
+    <span
+      className={`text-[7px] font-semibold ${enabled ? 'text-emerald-700' : 'text-slate-400'}`}
+    >
+      {enabled
+        ? 'Yes'
+        : 'No'}
+    </span>
 
   );
 

@@ -18,6 +18,10 @@ import {
   resolveTenantContextById,
 } from '@/lib/tenancy/context';
 
+import {
+  ensureGrowthOSCapabilityControl,
+} from '@/lib/admin/capability-control';
+
 
 // ============================================================
 // CONFIG
@@ -149,6 +153,12 @@ export type StoredGrowthOSModule = {
 
   module_type:
     GrowthOSModuleType;
+
+  access_mode:
+    string | null;
+
+  release_stage:
+    string | null;
 
   category:
     GrowthOSModuleCategory;
@@ -442,6 +452,33 @@ const DEFAULT_MODULES = [
 
     setupRequired:
       true,
+  },
+
+
+  {
+    moduleId:
+      'settings',
+
+    moduleName:
+      'Settings',
+
+    description:
+      'Workspace, billing, access, security and account controls.',
+
+    moduleType:
+      'standard',
+
+    category:
+      'system',
+
+    routeKey:
+      'Settings',
+
+    status:
+      'active',
+
+    setupRequired:
+      false,
   },
 
 ] as const;
@@ -1046,35 +1083,6 @@ async function seedModules() {
           source.module_id
 
 
-        WHEN MATCHED THEN
-
-          UPDATE SET
-
-            module_name =
-              source.module_name,
-
-            description =
-              source.description,
-
-            module_type =
-              source.module_type,
-
-            category =
-              source.category,
-
-            route_key =
-              source.route_key,
-
-            status =
-              source.status,
-
-            setup_required =
-              source.setup_required,
-
-            updated_at =
-              CURRENT_TIMESTAMP()
-
-
         WHEN NOT MATCHED THEN
 
           INSERT
@@ -1249,29 +1257,6 @@ async function seedPlans() {
           source.plan_id
 
 
-        WHEN MATCHED THEN
-
-          UPDATE SET
-
-            plan_name =
-              source.plan_name,
-
-            description =
-              source.description,
-
-            status =
-              source.status,
-
-            monthly_order_limit =
-              source.monthly_order_limit,
-
-            max_users =
-              source.max_users,
-
-            updated_at =
-              CURRENT_TIMESTAMP()
-
-
         WHEN NOT MATCHED THEN
 
           INSERT
@@ -1438,17 +1423,6 @@ async function seedPlanModules() {
             source.module_id
 
 
-          WHEN MATCHED THEN
-
-            UPDATE SET
-
-              enabled =
-                source.enabled,
-
-              updated_at =
-                CURRENT_TIMESTAMP()
-
-
           WHEN NOT MATCHED THEN
 
             INSERT
@@ -1571,6 +1545,8 @@ export async function ensureGrowthOSAdminControlPlane() {
       await seedPlans();
 
       await seedPlanModules();
+
+      await ensureGrowthOSCapabilityControl();
 
 
       adminControlReady =
@@ -1729,6 +1705,10 @@ export async function listGrowthOSModules():
           description,
 
           module_type,
+
+          access_mode,
+
+          release_stage,
 
           category,
 
@@ -3703,308 +3683,213 @@ export async function getGrowthOSWorkspaceSubscriptionSnapshot(
 
         WITH latest_subscription AS
         (
-
-          SELECT
-            *
-
-          FROM
-            \`${projectId}.${DATASET_ID}.brand_subscriptions\`
-
+          SELECT *
+          FROM \`${projectId}.${DATASET_ID}.brand_subscriptions\`
           WHERE
-
-            workspace_id =
-              @workspace_id
-
-            AND brand_id =
-              @brand_id
-
+            workspace_id = @workspace_id
+            AND brand_id = @brand_id
           QUALIFY
-
-            ROW_NUMBER() OVER
-            (
-
-              PARTITION BY
-                workspace_id,
-                brand_id
-
-              ORDER BY
-                updated_at DESC,
-                created_at DESC,
-                subscription_id DESC
-
+            ROW_NUMBER() OVER (
+              PARTITION BY workspace_id, brand_id
+              ORDER BY updated_at DESC, created_at DESC, subscription_id DESC
             ) = 1
-
         ),
-
 
         latest_brand_overrides AS
         (
-
-          SELECT
-            *
-
-          FROM
-            \`${projectId}.${DATASET_ID}.brand_module_overrides\`
-
+          SELECT *
+          FROM \`${projectId}.${DATASET_ID}.brand_module_overrides\`
           WHERE
-
-            workspace_id =
-              @workspace_id
-
-            AND brand_id =
-              @brand_id
-
+            workspace_id = @workspace_id
+            AND brand_id = @brand_id
           QUALIFY
-
-            ROW_NUMBER() OVER
-            (
-
-              PARTITION BY
-                workspace_id,
-                brand_id,
-                module_id
-
-              ORDER BY
-                updated_at DESC,
-                created_at DESC,
-                override_id DESC
-
+            ROW_NUMBER() OVER (
+              PARTITION BY workspace_id, brand_id, module_id
+              ORDER BY updated_at DESC, created_at DESC, override_id DESC
             ) = 1
+        ),
 
+        latest_submodule_overrides AS
+        (
+          SELECT *
+          FROM \`${projectId}.${DATASET_ID}.brand_submodule_overrides\`
+          WHERE
+            workspace_id = @workspace_id
+            AND brand_id = @brand_id
+          QUALIFY
+            ROW_NUMBER() OVER (
+              PARTITION BY workspace_id, brand_id, module_id, submodule_id
+              ORDER BY updated_at DESC, created_at DESC, override_id DESC
+            ) = 1
+        ),
+
+        release_audience AS
+        (
+          SELECT
+            capability_type,
+            module_id,
+            COALESCE(submodule_id, '') AS submodule_id,
+            TRUE AS selected
+          FROM \`${projectId}.${DATASET_ID}.capability_release_audience\`
+          WHERE
+            workspace_id = @workspace_id
+            AND brand_id = @brand_id
+          GROUP BY capability_type, module_id, COALESCE(submodule_id, '')
+        ),
+
+        capability_rows AS
+        (
+          SELECT
+            s.subscription_id,
+            s.workspace_id,
+            s.brand_id,
+            s.plan_id,
+            s.status AS subscription_status,
+            s.order_limit_override_mode,
+            s.monthly_order_limit_override,
+            FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', s.created_at)
+              AS subscription_created_at,
+            FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%SZ', s.updated_at)
+              AS subscription_updated_at,
+
+            p.plan_name,
+            p.description AS plan_description,
+            p.status AS plan_status,
+            p.monthly_order_limit AS plan_monthly_order_limit,
+            p.max_users,
+
+            CASE
+              WHEN s.order_limit_override_mode = 'unlimited' THEN NULL
+              WHEN s.order_limit_override_mode = 'custom' THEN s.monthly_order_limit_override
+              ELSE p.monthly_order_limit
+            END AS effective_monthly_order_limit,
+
+            m.module_id,
+            m.module_name,
+            m.description AS module_description,
+            m.module_type,
+            COALESCE(NULLIF(m.access_mode, ''), 'plan') AS access_mode,
+            COALESCE(NULLIF(m.release_stage, ''), 'live') AS release_stage,
+            m.category,
+            m.route_key,
+            m.status AS module_status,
+            m.setup_required,
+            COALESCE(pm.enabled, FALSE) AS plan_enabled,
+            COALESCE(bmo.module_override, 'default') AS brand_module_override,
+
+            CASE
+              WHEN LOWER(COALESCE(s.status, '')) NOT IN ('active', 'trial') THEN FALSE
+              WHEN LOWER(COALESCE(p.status, '')) != 'active' THEN FALSE
+              WHEN LOWER(COALESCE(m.status, '')) != 'active' THEN FALSE
+              WHEN COALESCE(NULLIF(m.release_stage, ''), 'live') = 'archived' THEN FALSE
+              WHEN COALESCE(NULLIF(m.release_stage, ''), 'live') IN ('draft', 'internal') THEN FALSE
+              WHEN COALESCE(NULLIF(m.release_stage, ''), 'live') = 'beta'
+                AND COALESCE(mra.selected, FALSE) = FALSE THEN FALSE
+              ELSE TRUE
+            END AS module_release_allowed,
+
+            CASE
+              WHEN bmo.module_override = 'enabled' THEN TRUE
+              WHEN bmo.module_override = 'disabled' THEN FALSE
+              WHEN COALESCE(NULLIF(m.access_mode, ''), 'plan') = 'standard' THEN TRUE
+              WHEN COALESCE(NULLIF(m.access_mode, ''), 'plan') = 'custom' THEN FALSE
+              ELSE COALESCE(pm.enabled, FALSE)
+            END AS module_commercial_enabled,
+
+            sm.submodule_id,
+            sm.label AS submodule_label,
+            sm.status AS submodule_status,
+            COALESCE(NULLIF(sm.access_mode, ''), 'plan') AS submodule_access_mode,
+            COALESCE(NULLIF(sm.release_stage, ''), 'live') AS submodule_release_stage,
+            COALESCE(psm.enabled, pm.enabled, FALSE) AS plan_submodule_enabled,
+            COALESCE(bsmo.submodule_override, 'default') AS brand_submodule_override,
+
+            CASE
+              WHEN sm.submodule_id IS NULL THEN NULL
+              WHEN LOWER(COALESCE(sm.status, '')) != 'active' THEN FALSE
+              WHEN COALESCE(NULLIF(sm.release_stage, ''), 'live') = 'archived' THEN FALSE
+              WHEN COALESCE(NULLIF(sm.release_stage, ''), 'live') IN ('draft', 'internal') THEN FALSE
+              WHEN COALESCE(NULLIF(sm.release_stage, ''), 'live') = 'beta'
+                AND COALESCE(sra.selected, FALSE) = FALSE THEN FALSE
+              ELSE TRUE
+            END AS submodule_release_allowed,
+
+            CASE
+              WHEN sm.submodule_id IS NULL THEN NULL
+              WHEN bsmo.submodule_override = 'enabled' THEN TRUE
+              WHEN bsmo.submodule_override = 'disabled' THEN FALSE
+              WHEN COALESCE(NULLIF(sm.access_mode, ''), 'plan') = 'standard' THEN TRUE
+              WHEN COALESCE(NULLIF(sm.access_mode, ''), 'plan') = 'custom' THEN FALSE
+              ELSE COALESCE(psm.enabled, pm.enabled, FALSE)
+            END AS submodule_commercial_enabled
+
+          FROM latest_subscription AS s
+
+          INNER JOIN \`${projectId}.${DATASET_ID}.plans\` AS p
+            ON p.plan_id = s.plan_id
+
+          CROSS JOIN \`${projectId}.${DATASET_ID}.modules\` AS m
+
+          LEFT JOIN \`${projectId}.${DATASET_ID}.plan_modules\` AS pm
+            ON pm.plan_id = s.plan_id
+            AND pm.module_id = m.module_id
+
+          LEFT JOIN latest_brand_overrides AS bmo
+            ON bmo.workspace_id = s.workspace_id
+            AND bmo.brand_id = s.brand_id
+            AND bmo.module_id = m.module_id
+
+          LEFT JOIN release_audience AS mra
+            ON mra.capability_type = 'module'
+            AND mra.module_id = m.module_id
+            AND mra.submodule_id = ''
+
+          LEFT JOIN \`${projectId}.${DATASET_ID}.submodules\` AS sm
+            ON sm.module_id = m.module_id
+
+          LEFT JOIN \`${projectId}.${DATASET_ID}.plan_submodules\` AS psm
+            ON psm.plan_id = s.plan_id
+            AND psm.module_id = sm.module_id
+            AND psm.submodule_id = sm.submodule_id
+
+          LEFT JOIN latest_submodule_overrides AS bsmo
+            ON bsmo.workspace_id = s.workspace_id
+            AND bsmo.brand_id = s.brand_id
+            AND bsmo.module_id = sm.module_id
+            AND bsmo.submodule_id = sm.submodule_id
+
+          LEFT JOIN release_audience AS sra
+            ON sra.capability_type = 'submodule'
+            AND sra.module_id = sm.module_id
+            AND sra.submodule_id = sm.submodule_id
         )
 
-
         SELECT
-
-          -- ==================================================
-          -- SUBSCRIPTION
-          -- ==================================================
-
-          s.subscription_id,
-
-          s.workspace_id,
-
-          s.brand_id,
-
-          s.plan_id,
-
-          s.status
-            AS subscription_status,
-
-          s.order_limit_override_mode,
-
-          s.monthly_order_limit_override,
-
-          FORMAT_TIMESTAMP(
-            '%Y-%m-%dT%H:%M:%SZ',
-            s.created_at
-          )
-            AS subscription_created_at,
-
-          FORMAT_TIMESTAMP(
-            '%Y-%m-%dT%H:%M:%SZ',
-            s.updated_at
-          )
-            AS subscription_updated_at,
-
-
-          -- ==================================================
-          -- PLAN
-          -- ==================================================
-
-          p.plan_name,
-
-          p.description
-            AS plan_description,
-
-          p.status
-            AS plan_status,
-
-          p.monthly_order_limit
-            AS plan_monthly_order_limit,
-
-          p.max_users,
-
-
-          -- ==================================================
-          -- EFFECTIVE ORDER LIMIT
-          -- ==================================================
-
+          *,
+          (module_release_allowed AND module_commercial_enabled)
+            AS effective_enabled,
           CASE
-
-            WHEN
-              s.order_limit_override_mode =
-                'unlimited'
-
-            THEN
-              NULL
-
-
-            WHEN
-              s.order_limit_override_mode =
-                'custom'
-
-            THEN
-              s.monthly_order_limit_override
-
-
-            ELSE
-              p.monthly_order_limit
-
-          END
-            AS effective_monthly_order_limit,
-
-
-          -- ==================================================
-          -- MODULE
-          -- ==================================================
-
-          m.module_id,
-
-          m.module_name,
-
-          m.description
-            AS module_description,
-
-          m.module_type,
-
-          m.category,
-
-          m.route_key,
-
-          m.status
-            AS module_status,
-
-          m.setup_required,
-
-
-          -- ==================================================
-          -- PLAN ENTITLEMENT
-          -- ==================================================
-
-          COALESCE(
-            pm.enabled,
-            FALSE
-          )
-            AS plan_enabled,
-
-
-          -- ==================================================
-          -- BRAND OVERRIDE
-          -- ==================================================
-
-          COALESCE(
-            bmo.module_override,
-            'default'
-          )
-            AS brand_module_override,
-
-
-          -- ==================================================
-          -- EFFECTIVE MODULE ACCESS
-          -- ==================================================
-
-          CASE
-
-            WHEN
-              bmo.module_override =
-                'enabled'
-
-            THEN
-              TRUE
-
-
-            WHEN
-              bmo.module_override =
-                'disabled'
-
-            THEN
-              FALSE
-
-
-            ELSE
-              COALESCE(
-                pm.enabled,
-                FALSE
-              )
-
-          END
-            AS effective_enabled
-
-
-        FROM
-          latest_subscription
-          AS s
-
-
-        INNER JOIN
-          \`${projectId}.${DATASET_ID}.plans\`
-          AS p
-
-        ON
-          p.plan_id =
-            s.plan_id
-
-
-        CROSS JOIN
-          \`${projectId}.${DATASET_ID}.modules\`
-          AS m
-
-
-        LEFT JOIN
-          \`${projectId}.${DATASET_ID}.plan_modules\`
-          AS pm
-
-        ON
-          pm.plan_id =
-            s.plan_id
-
-          AND pm.module_id =
-            m.module_id
-
-
-        LEFT JOIN
-          latest_brand_overrides
-          AS bmo
-
-        ON
-          bmo.workspace_id =
-            s.workspace_id
-
-          AND bmo.brand_id =
-            s.brand_id
-
-          AND bmo.module_id =
-            m.module_id
-
-
+            WHEN submodule_id IS NULL THEN NULL
+            ELSE (
+              module_release_allowed
+              AND module_commercial_enabled
+              AND COALESCE(submodule_release_allowed, FALSE)
+              AND COALESCE(submodule_commercial_enabled, FALSE)
+            )
+          END AS effective_submodule_enabled
+        FROM capability_rows
         ORDER BY
-
-          CASE m.category
-
-            WHEN 'workspace'
-              THEN 1
-
-            WHEN 'growth'
-              THEN 2
-
-            WHEN 'customers'
-              THEN 3
-
-            WHEN 'commerce'
-              THEN 4
-
-            WHEN 'data'
-              THEN 5
-
-            WHEN 'system'
-              THEN 6
-
+          CASE category
+            WHEN 'workspace' THEN 1
+            WHEN 'growth' THEN 2
+            WHEN 'customers' THEN 3
+            WHEN 'commerce' THEN 4
+            WHEN 'data' THEN 5
+            WHEN 'system' THEN 6
             ELSE 99
-
           END,
-
-          m.module_name
+          module_name,
+          submodule_label
 
       `,
 
@@ -4012,23 +3897,17 @@ export async function getGrowthOSWorkspaceSubscriptionSnapshot(
         LOCATION,
 
       params: {
-
         workspace_id:
           normalizedWorkspaceId,
-
         brand_id:
           normalizedBrandId,
-
       },
 
       types: {
-
         workspace_id:
           'STRING',
-
         brand_id:
           'STRING',
-
       },
 
     });
@@ -4042,204 +3921,261 @@ export async function getGrowthOSWorkspaceSubscriptionSnapshot(
     ) as any[];
 
 
-  // ==========================================================
-  // NO SUBSCRIPTION
-  // ==========================================================
-
   if (
     resultRows.length ===
     0
   ) {
 
     return {
-
       configured:
         false,
-
       subscription:
         null,
-
       plan:
         null,
-
       modules:
         [],
-
     };
 
   }
 
 
-  // ==========================================================
-  // ROOT
-  // ==========================================================
-
   const root =
     resultRows[0];
 
 
-  // ==========================================================
-  // RESPONSE
-  // ==========================================================
+  const moduleMap =
+    new Map<
+      string,
+      any
+    >();
+
+
+  for (
+    const row
+    of resultRows
+  ) {
+
+    const moduleId =
+      String(
+        row.module_id
+        ||
+        ''
+      );
+
+
+    if (!moduleId) {
+      continue;
+    }
+
+
+    let module =
+      moduleMap.get(
+        moduleId
+      );
+
+
+    if (!module) {
+
+      module = {
+        moduleId,
+        name:
+          row.module_name
+          ??
+          null,
+        description:
+          row.module_description
+          ??
+          null,
+        moduleType:
+          row.module_type
+          ??
+          null,
+        accessMode:
+          row.access_mode
+          ??
+          'plan',
+        releaseStage:
+          row.release_stage
+          ??
+          'live',
+        category:
+          row.category
+          ??
+          null,
+        routeKey:
+          row.route_key
+          ??
+          null,
+        status:
+          row.module_status
+          ??
+          null,
+        setupRequired:
+          Boolean(
+            row.setup_required
+          ),
+        planEnabled:
+          Boolean(
+            row.plan_enabled
+          ),
+        brandOverride:
+          String(
+            row.brand_module_override
+            ||
+            'default'
+          ),
+        releaseAllowed:
+          Boolean(
+            row.module_release_allowed
+          ),
+        enabled:
+          Boolean(
+            row.effective_enabled
+          ),
+        submodules:
+          [],
+      };
+
+
+      moduleMap.set(
+        moduleId,
+        module
+      );
+
+    }
+
+
+    if (
+      row.submodule_id
+    ) {
+
+      module.submodules.push({
+        moduleId,
+        submoduleId:
+          String(
+            row.submodule_id
+          ),
+        label:
+          row.submodule_label
+          ??
+          row.submodule_id,
+        status:
+          row.submodule_status
+          ??
+          null,
+        accessMode:
+          row.submodule_access_mode
+          ??
+          'plan',
+        releaseStage:
+          row.submodule_release_stage
+          ??
+          'live',
+        planEnabled:
+          Boolean(
+            row.plan_submodule_enabled
+          ),
+        brandOverride:
+          String(
+            row.brand_submodule_override
+            ||
+            'default'
+          ),
+        releaseAllowed:
+          Boolean(
+            row.submodule_release_allowed
+          ),
+        enabled:
+          Boolean(
+            row.effective_submodule_enabled
+          ),
+      });
+
+    }
+
+  }
+
 
   return {
 
     configured:
       true,
 
-
     subscription: {
-
       subscriptionId:
         String(
           root.subscription_id
         ),
-
       workspaceId:
         String(
           root.workspace_id
         ),
-
       brandId:
         String(
           root.brand_id
         ),
-
       status:
         String(
           root.subscription_status
         ),
-
       planId:
         String(
           root.plan_id
         ),
-
       orderLimitOverrideMode:
         String(
           root.order_limit_override_mode
         ),
-
       monthlyOrderLimitOverride:
         root.monthly_order_limit_override
         ??
         null,
-
       createdAt:
         root.subscription_created_at
         ??
         null,
-
       updatedAt:
         root.subscription_updated_at
         ??
         null,
-
     },
 
-
     plan: {
-
       planId:
         String(
           root.plan_id
         ),
-
       name:
         String(
           root.plan_name
         ),
-
       description:
         root.plan_description
         ??
         null,
-
       status:
         String(
           root.plan_status
         ),
-
       monthlyOrderLimit:
         root.plan_monthly_order_limit
         ??
         null,
-
       effectiveMonthlyOrderLimit:
         root.effective_monthly_order_limit
         ??
         null,
-
       maxUsers:
         root.max_users
         ??
         null,
-
     },
 
-
     modules:
-      resultRows.map(
-        row => ({
-
-          moduleId:
-            String(
-              row.module_id
-            ),
-
-          name:
-            row.module_name
-            ??
-            null,
-
-          description:
-            row.module_description
-            ??
-            null,
-
-          moduleType:
-            row.module_type
-            ??
-            null,
-
-          category:
-            row.category
-            ??
-            null,
-
-          routeKey:
-            row.route_key
-            ??
-            null,
-
-          status:
-            row.module_status
-            ??
-            null,
-
-          setupRequired:
-            Boolean(
-              row.setup_required
-            ),
-
-          planEnabled:
-            Boolean(
-              row.plan_enabled
-            ),
-
-          brandOverride:
-            String(
-              row.brand_module_override
-              ||
-              'default'
-            ),
-
-          enabled:
-            Boolean(
-              row.effective_enabled
-            ),
-
-        })),
+      Array.from(
+        moduleMap.values()
+      ),
 
   };
 
