@@ -211,6 +211,28 @@ export async function POST(
     Date.now();
 
 
+  // ==========================================================
+  // TEMPORARY ORDERING DIAGNOSTIC
+  //
+  // Normal Shopify traffic does NOT send this header.
+  //
+  // Only our manually signed diagnostic request sends:
+  //
+  // x-growthos-ordering-debug: 1
+  //
+  // This allows us to expose a sanitized Pub/Sub exception
+  // during the controlled test without exposing internals to
+  // normal Shopify webhook traffic.
+  // ==========================================================
+
+  const debugOrdering =
+    request.headers.get(
+      'x-growthos-ordering-debug'
+    )
+    ===
+    '1';
+
+
   try {
 
     // ========================================================
@@ -567,6 +589,22 @@ export async function POST(
 
     };
 
+
+    // ========================================================
+    // ORDERING KEY
+    //
+    // All webhook events for the same canonical Customer use
+    // the same Pub/Sub ordering key.
+    //
+    // Example:
+    //
+    // customers/create ─┐
+    //                   ├─ same Customer serialized
+    // customers/update ─┘
+    //
+    // Different Customers can continue in parallel.
+    // ========================================================
+
     const orderingKey =
       [
         'shopify',
@@ -589,7 +627,7 @@ export async function POST(
         payload:
           job,
 
-        orderingKey,  
+        orderingKey,
 
         attributes: {
 
@@ -648,6 +686,8 @@ export async function POST(
         integrationAccountId:
           job.integrationAccountId,
 
+        orderingKey,
+
         messageId:
           published.messageId,
 
@@ -668,6 +708,25 @@ export async function POST(
       queued:
         true,
 
+      ...(
+        debugOrdering
+          ?
+            {
+
+              diagnostic: {
+
+                messageId:
+                  published.messageId,
+
+                orderingKey,
+
+              },
+
+            }
+          :
+            {}
+      ),
+
     });
 
 
@@ -683,11 +742,42 @@ export async function POST(
       );
 
 
+    const errorName =
+      String(
+        error?.name
+        ??
+        ''
+      );
+
+
+    const errorCode =
+      error?.code
+      ??
+      null;
+
+
+    const errorDetails =
+      String(
+        error?.details
+        ??
+        ''
+      );
+
+
     console.error(
       'SHOPIFY_CUSTOMER_WEBHOOK_FAILED',
       {
 
+        name:
+          errorName,
+
+        code:
+          errorCode,
+
         message,
+
+        details:
+          errorDetails,
 
         durationMs:
           Date.now()
@@ -701,6 +791,13 @@ export async function POST(
     // ========================================================
     // Return 500 for genuine transient failures so Shopify can
     // retry delivery.
+    //
+    // TEMPORARY DEBUG:
+    //
+    // Only expose sanitized exception information when our
+    // manually signed request includes:
+    //
+    // x-growthos-ordering-debug: 1
     // ========================================================
 
     return NextResponse.json(
@@ -711,6 +808,31 @@ export async function POST(
 
         error:
           'SHOPIFY_CUSTOMER_WEBHOOK_FAILED',
+
+        ...(
+          debugOrdering
+            ?
+              {
+
+                diagnostic: {
+
+                  name:
+                    errorName,
+
+                  code:
+                    errorCode,
+
+                  message,
+
+                  details:
+                    errorDetails,
+
+                },
+
+              }
+            :
+              {}
+        ),
 
       },
       {
