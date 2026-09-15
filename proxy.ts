@@ -51,6 +51,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/integrations/shopify/callback',
   '/api/integrations/shopify/webhooks/app-uninstalled',
   '/api/integrations/shopify/webhooks/orders',
+  '/api/integrations/shopify/webhooks/customers',
 ]);
 
 
