@@ -368,13 +368,153 @@ export async function writeShopifyCustomers(
       }
     );
 
+    // ==========================================================
+  // DEDUPE NORMALIZED BATCH BY RECORD ID
+  //
+  // One canonical Customer candidate per record_id must enter
+  // STATE comparison / RAW append / STATE MERGE.
+  //
+  // This protects against duplicate Customer rows inside one
+  // writer invocation.
+  //
+  // Cross-request concurrency is handled separately.
+  // ==========================================================
+
+  const normalizedByRecordId =
+    new Map();
+
+
+  for (
+    const row
+    of normalized
+  ) {
+
+    const existing =
+      normalizedByRecordId.get(
+        row.record_id
+      );
+
+
+    if (!existing) {
+
+      normalizedByRecordId.set(
+        row.record_id,
+        row
+      );
+
+      continue;
+
+    }
+
+
+    const existingUpdatedAt =
+      Date.parse(
+        existing.updated_at
+        ??
+        ''
+      );
+
+
+    const incomingUpdatedAt =
+      Date.parse(
+        row.updated_at
+        ??
+        ''
+      );
+
+
+    const existingTimestampValid =
+      Number.isFinite(
+        existingUpdatedAt
+      );
+
+
+    const incomingTimestampValid =
+      Number.isFinite(
+        incomingUpdatedAt
+      );
+
+
+    if (
+      (
+        incomingTimestampValid
+        &&
+        !existingTimestampValid
+      )
+      ||
+      (
+        incomingTimestampValid
+        &&
+        existingTimestampValid
+        &&
+        incomingUpdatedAt >=
+          existingUpdatedAt
+      )
+      ||
+      (
+        !incomingTimestampValid
+        &&
+        !existingTimestampValid
+      )
+    ) {
+
+      normalizedByRecordId.set(
+        row.record_id,
+        row
+      );
+
+    }
+
+  }
+
+
+  const canonicalBatch =
+    Array.from(
+      normalizedByRecordId.values()
+    );
+
+
+  const collapsedBatchDuplicates =
+    normalized.length
+    -
+    canonicalBatch.length;
+
+
+  if (
+    collapsedBatchDuplicates >
+      0
+  ) {
+
+    console.warn(
+      'SHOPIFY_CUSTOMER_BATCH_DUPLICATES_COLLAPSED',
+      {
+
+        workspaceId,
+
+        brandId,
+
+        integrationAccountId,
+
+        received:
+          normalized.length,
+
+        canonical:
+          canonicalBatch.length,
+
+        collapsed:
+          collapsedBatchDuplicates,
+
+      }
+    );
+
+  }
 
   // ==========================================================
   // LOAD EXISTING CURRENT HASHES
   // ==========================================================
 
   const recordIds =
-    normalized.map(
+    canonicalBatch.map(
       row =>
         row.record_id
     );
@@ -483,7 +623,7 @@ export async function writeShopifyCustomers(
   // ==========================================================
 
   const changed =
-    normalized.filter(
+     canonicalBatch.filter(
       row =>
 
         currentHashes.get(

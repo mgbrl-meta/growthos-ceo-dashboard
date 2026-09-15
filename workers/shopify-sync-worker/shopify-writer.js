@@ -540,13 +540,162 @@ export async function writeShopifyOrders(
       }
     );
 
+    // ==========================================================
+  // DEDUPE NORMALIZED BATCH BY RECORD ID
+  //
+  // A single Shopify fetch / reconstructed Bulk batch can
+  // contain the same canonical Order more than once.
+  //
+  // STATE must have exactly one candidate per record_id.
+  //
+  // Selection:
+  //
+  // 1. newest updated_at wins
+  // 2. equal timestamps -> later occurrence wins
+  // 3. missing timestamps -> later valid timestamp wins
+  //
+  // IMPORTANT:
+  //
+  // Keep `normalized.length` for received/skipped metrics.
+  // Use `canonicalBatch` only for canonical processing.
+  // ==========================================================
+
+  const normalizedByRecordId =
+    new Map();
+
+
+  for (
+    const row
+    of normalized
+  ) {
+
+    const existing =
+      normalizedByRecordId.get(
+        row.record_id
+      );
+
+
+    if (!existing) {
+
+      normalizedByRecordId.set(
+        row.record_id,
+        row
+      );
+
+      continue;
+
+    }
+
+
+    const existingUpdatedAt =
+      Date.parse(
+        existing.updated_at
+        ??
+        ''
+      );
+
+
+    const incomingUpdatedAt =
+      Date.parse(
+        row.updated_at
+        ??
+        ''
+      );
+
+
+    const existingTimestampValid =
+      Number.isFinite(
+        existingUpdatedAt
+      );
+
+
+    const incomingTimestampValid =
+      Number.isFinite(
+        incomingUpdatedAt
+      );
+
+
+    if (
+      (
+        incomingTimestampValid
+        &&
+        !existingTimestampValid
+      )
+      ||
+      (
+        incomingTimestampValid
+        &&
+        existingTimestampValid
+        &&
+        incomingUpdatedAt >=
+          existingUpdatedAt
+      )
+      ||
+      (
+        !incomingTimestampValid
+        &&
+        !existingTimestampValid
+      )
+    ) {
+
+      normalizedByRecordId.set(
+        row.record_id,
+        row
+      );
+
+    }
+
+  }
+
+
+  const canonicalBatch =
+    Array.from(
+      normalizedByRecordId.values()
+    );
+
+
+  const collapsedBatchDuplicates =
+    normalized.length
+    -
+    canonicalBatch.length;
+
+
+  if (
+    collapsedBatchDuplicates >
+      0
+  ) {
+
+    console.warn(
+      'SHOPIFY_ORDER_BATCH_DUPLICATES_COLLAPSED',
+      {
+
+        workspaceId,
+
+        brandId,
+
+        integrationAccountId,
+
+        received:
+          normalized.length,
+
+        canonical:
+          canonicalBatch.length,
+
+        collapsed:
+          collapsedBatchDuplicates,
+
+      }
+    );
+
+  }  
+
 
   // ==========================================================
   // CURRENT STATE
   // ==========================================================
 
   const recordIds =
-    normalized.map(
+    canonicalBatch.map(
       row =>
         row.record_id
     );
@@ -639,7 +788,7 @@ export async function writeShopifyOrders(
   // ==========================================================
 
   const changed =
-    normalized.filter(
+    canonicalBatch.filter(
       row =>
 
         currentHashes.get(
