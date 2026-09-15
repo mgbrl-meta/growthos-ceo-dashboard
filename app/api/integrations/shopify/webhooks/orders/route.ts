@@ -541,6 +541,14 @@ export async function POST(
 
     };
 
+    const orderingKey =
+      [
+        'shopify',
+        job.integrationAccountId,
+        'orders',
+        orderId,
+      ].join(':');
+
 
     const published =
       await publishJsonMessage({
@@ -550,6 +558,8 @@ export async function POST(
 
         payload:
           job,
+
+        orderingKey,  
 
         attributes: {
 
