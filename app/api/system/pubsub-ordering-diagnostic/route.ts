@@ -4,8 +4,9 @@ import {
 } from 'next/server';
 
 import {
-  PubSub,
-} from '@google-cloud/pubsub';
+  getPubSubClient,
+  getPubSubProjectId,
+} from '@/lib/queue/pubsub';
 
 
 export const dynamic =
@@ -20,26 +21,32 @@ export async function POST(
 ) {
 
   const projectId =
-    String(
-      process.env.GOOGLE_CLOUD_PROJECT
-      ||
-      process.env.GCLOUD_PROJECT
-      ||
-      'shopify-colab'
-    ).trim();
+    getPubSubProjectId();
 
 
   const orderingKey =
     'shopify:brillare:brillare:shopify:gid://shopify/Shop/44356501671:customers:gid://shopify/Customer/6196646412465';
 
 
-  const pubsub =
-    new PubSub({
-      projectId,
-    });
-
-
   try {
+
+    // ========================================================
+    // IMPORTANT
+    //
+    // Use the exact same Growth OS Pub/Sub client as the live
+    // Shopify webhook publisher.
+    //
+    // This means Vercel uses:
+    //
+    // GCP_CLIENT_EMAIL
+    // GCP_PRIVATE_KEY
+    //
+    // rather than Application Default Credentials.
+    // ========================================================
+
+    const pubsub =
+      getPubSubClient();
+
 
     const topic =
       pubsub.topic(
@@ -58,7 +65,7 @@ export async function POST(
           Buffer.from(
             JSON.stringify({
               test:
-                'vercel-ordering-diagnostic',
+                'vercel-growthos-client-ordering',
 
               createdAt:
                 new Date()
@@ -70,7 +77,7 @@ export async function POST(
         attributes: {
 
           purpose:
-            'vercel-ordering-diagnostic',
+            'vercel-growthos-client-ordering',
 
         },
 
@@ -137,21 +144,10 @@ export async function POST(
 
       },
       {
-
         status:
           500,
-
       }
     );
-
-
-  } finally {
-
-    await pubsub
-      .close()
-      .catch(
-        () => {}
-      );
 
   }
 
