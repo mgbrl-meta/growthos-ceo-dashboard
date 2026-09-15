@@ -567,14 +567,6 @@ export async function POST(
 
     };
 
-    const orderingKey =
-      [
-        'shopify',
-        job.integrationAccountId,
-        'customers',
-        customerId,
-      ].join(':');
-
 
     // ========================================================
     // 10. PUB/SUB
@@ -588,8 +580,6 @@ export async function POST(
 
         payload:
           job,
-
-        orderingKey,  
 
         attributes: {
 
