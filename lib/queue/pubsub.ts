@@ -104,6 +104,13 @@ export function getPubSubClient() {
   const projectId =
     getPubSubProjectId();
 
+  const apiEndpoint =
+    String(
+      process.env.GROWTHOS_PUBSUB_API_ENDPOINT
+      ||
+      'asia-south1-pubsub.googleapis.com:443'
+    ).trim();  
+
 
   const clientEmail =
     String(
@@ -143,6 +150,8 @@ export function getPubSubClient() {
 
         projectId,
 
+        apiEndpoint,
+
         credentials: {
 
           client_email:
@@ -171,6 +180,8 @@ export function getPubSubClient() {
     new PubSub({
 
       projectId,
+
+      apiEndpoint,
 
     });
 
