@@ -227,6 +227,9 @@ export async function publishJsonMessage(
         string
       >;
 
+    orderingKey?:
+      string | null;  
+
   }
 ) {
 
@@ -291,17 +294,47 @@ export async function publishJsonMessage(
 
   }
 
+  const orderingKey =
+    String(
+      input.orderingKey
+      ??
+      ''
+    ).trim();
+
+
+  const topic =
+    orderingKey
+      ?
+        pubsub.topic(
+          topicName,
+          {
+            messageOrdering:
+              true,
+          }
+        )
+      :
+        pubsub.topic(
+          topicName
+        );
+
 
   const messageId =
-    await pubsub
-      .topic(
-        topicName
-      )
+    await topic
       .publishMessage({
 
         data,
 
         attributes,
+
+        ...(
+          orderingKey
+            ?
+              {
+                orderingKey,
+              }
+            :
+              {}
+        ),
 
       });
 
@@ -312,6 +345,11 @@ export async function publishJsonMessage(
       topicName,
 
     messageId,
+
+    orderingKey:
+      orderingKey
+      ||
+      null,
 
   };
 

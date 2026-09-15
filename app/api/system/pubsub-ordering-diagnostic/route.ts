@@ -4,8 +4,7 @@ import {
 } from 'next/server';
 
 import {
-  getPubSubClient,
-  getPubSubProjectId,
+  publishJsonMessage,
 } from '@/lib/queue/pubsub';
 
 
@@ -20,68 +19,37 @@ export async function POST(
   _request: NextRequest
 ) {
 
-  const projectId =
-    getPubSubProjectId();
-
-
   const orderingKey =
     'shopify:brillare:brillare:shopify:gid://shopify/Shop/44356501671:customers:gid://shopify/Customer/6196646412465';
 
 
   try {
 
-    // ========================================================
-    // IMPORTANT
-    //
-    // Use the exact same Growth OS Pub/Sub client as the live
-    // Shopify webhook publisher.
-    //
-    // This means Vercel uses:
-    //
-    // GCP_CLIENT_EMAIL
-    // GCP_PRIVATE_KEY
-    //
-    // rather than Application Default Credentials.
-    // ========================================================
+    const result =
+      await publishJsonMessage({
 
-    const pubsub =
-      getPubSubClient();
+        topic:
+          'growthos-ordering-test',
 
+        payload: {
 
-    const topic =
-      pubsub.topic(
-        'growthos-ordering-test',
-        {
-          messageOrdering:
-            true,
-        }
-      );
+          test:
+            'publish-json-message-ordering-diagnostic',
 
-
-    const messageId =
-      await topic.publishMessage({
-
-        data:
-          Buffer.from(
-            JSON.stringify({
-              test:
-                'vercel-growthos-client-ordering',
-
-              createdAt:
-                new Date()
-                  .toISOString(),
-            }),
-            'utf8'
-          ),
-
-        attributes: {
-
-          purpose:
-            'vercel-growthos-client-ordering',
+          createdAt:
+            new Date()
+              .toISOString(),
 
         },
 
         orderingKey,
+
+        attributes: {
+
+          purpose:
+            'publish-json-message-ordering-diagnostic',
+
+        },
 
       });
 
@@ -91,11 +59,7 @@ export async function POST(
       ok:
         true,
 
-      projectId,
-
-      messageId,
-
-      orderingKey,
+      result,
 
     });
 
@@ -109,8 +73,6 @@ export async function POST(
 
         ok:
           false,
-
-        projectId,
 
         error: {
 
