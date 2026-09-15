@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
+
 import {
   bigquery,
 } from '@/lib/bigquery';
@@ -202,7 +204,7 @@ function requireProjectId() {
 // database passwords
 // ============================================================
 
-export async function getAdminSystemSnapshot():
+async function loadAdminSystemSnapshot():
 
   Promise<
     AdminSystemSnapshot
@@ -484,3 +486,18 @@ function safeString(
     null;
 
 }
+
+// ============================================================
+// CACHED ADMIN READER
+// ============================================================
+
+export async function getAdminSystemSnapshot(
+  options?: { fresh?: boolean }
+): Promise<AdminSystemSnapshot> {
+  return getCachedAdminSnapshot(
+    'admin:system',
+    loadAdminSystemSnapshot,
+    { fresh: options?.fresh }
+  );
+}
+

@@ -8,6 +8,7 @@ import {
 } from '@/lib/auth/platform-admin';
 
 import {
+  getAdminClientOptionsSnapshot,
   getAdminClientsSnapshot,
 } from '@/lib/admin/clients';
 
@@ -64,8 +65,30 @@ export async function GET(
     // 2. GLOBAL CLIENT READ
     // ========================================================
 
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get('fresh') === '1';
+    const mode = String(url.searchParams.get('mode') || '').trim().toLowerCase();
+
+    if (mode === 'options') {
+      const clients = await getAdminClientOptionsSnapshot({ fresh });
+
+      return NextResponse.json({
+        ok: true,
+        scope: 'global',
+        clients,
+        meta: {
+          durationMs: Date.now() - startedAt,
+          source: 'growthos_control.workspaces + growthos_control.brands + growthos_control.brand_subscriptions + growthos_control.plans',
+          readOnly: true,
+          authorization: 'platform_admin',
+          platformRole: admin.platformRole,
+          mode: 'options',
+        },
+      });
+    }
+
     const snapshot =
-      await getAdminClientsSnapshot();
+      await getAdminClientsSnapshot({ fresh });
 
 
     // ========================================================

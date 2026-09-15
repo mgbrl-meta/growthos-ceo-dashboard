@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
+
 import {
   bigquery,
 } from '@/lib/bigquery';
@@ -190,7 +192,7 @@ function requireProjectId() {
 // connections that exist but have not yet produced sync state.
 // ============================================================
 
-export async function getAdminDataHealthSnapshot():
+async function loadAdminDataHealthSnapshot():
 
   Promise<
     AdminDataHealthSnapshot
@@ -1130,3 +1132,18 @@ export async function getAdminDataHealthSnapshot():
   };
 
 }
+
+// ============================================================
+// CACHED ADMIN READER
+// ============================================================
+
+export async function getAdminDataHealthSnapshot(
+  options?: { fresh?: boolean }
+): Promise<AdminDataHealthSnapshot> {
+  return getCachedAdminSnapshot(
+    'admin:data-health',
+    loadAdminDataHealthSnapshot,
+    { fresh: options?.fresh, ttlMs: 60000 }
+  );
+}
+

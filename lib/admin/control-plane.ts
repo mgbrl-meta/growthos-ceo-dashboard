@@ -19,7 +19,7 @@ import {
 } from '@/lib/tenancy/context';
 
 import {
-  ensureGrowthOSCapabilityControl,
+  migrateGrowthOSCapabilityControl,
 } from '@/lib/admin/capability-control';
 
 
@@ -610,7 +610,11 @@ const DEFAULT_PLANS = [
 // PROCESS CACHE
 // ============================================================
 
-let adminControlReady =
+let adminRuntimeReady =
+  false;
+
+
+let adminMigrationReady =
   false;
 
 
@@ -1498,10 +1502,10 @@ async function seedPlanModules() {
 // ENSURE ADMIN CONTROL PLANE
 // ============================================================
 
-export async function ensureGrowthOSAdminControlPlane() {
+export async function migrateGrowthOSAdminControlPlane() {
 
   if (
-    adminControlReady
+    adminMigrationReady
   ) {
 
     return;
@@ -1546,10 +1550,13 @@ export async function ensureGrowthOSAdminControlPlane() {
 
       await seedPlanModules();
 
-      await ensureGrowthOSCapabilityControl();
+      await migrateGrowthOSCapabilityControl();
 
 
-      adminControlReady =
+      adminMigrationReady =
+        true;
+
+      adminRuntimeReady =
         true;
 
     })();
@@ -1566,7 +1573,7 @@ export async function ensureGrowthOSAdminControlPlane() {
     adminControlPromise =
       null;
 
-    adminControlReady =
+    adminMigrationReady =
       false;
 
     throw error;
@@ -1576,6 +1583,31 @@ export async function ensureGrowthOSAdminControlPlane() {
 
   adminControlPromise =
     null;
+
+}
+
+
+// ============================================================
+// FAST RUNTIME GATE
+//
+// Schema/bootstrap work is intentionally excluded from request paths.
+// Run POST /api/admin/control-plane/bootstrap when provisioning or
+// migrating an environment. Set GROWTHOS_ADMIN_AUTO_BOOTSTRAP=true only
+// when automatic migration is explicitly desired.
+// ============================================================
+
+export async function ensureGrowthOSAdminControlPlane() {
+
+  if (adminRuntimeReady) {
+    return;
+  }
+
+  if (process.env.GROWTHOS_ADMIN_AUTO_BOOTSTRAP === 'true') {
+    await migrateGrowthOSAdminControlPlane();
+    return;
+  }
+
+  adminRuntimeReady = true;
 
 }
 

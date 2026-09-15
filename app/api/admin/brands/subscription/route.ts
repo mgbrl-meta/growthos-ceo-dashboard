@@ -16,6 +16,10 @@ import {
   writeGrowthOSAuditEventSafe,
 } from '@/lib/audit';
 
+import {
+  invalidateAdminSnapshots,
+} from '@/lib/admin/snapshot-cache';
+
 
 export const dynamic =
   'force-dynamic';
@@ -422,6 +426,13 @@ export async function POST(
       after:
         result,
     });
+
+
+    invalidateAdminSnapshots(
+      'admin:clients',
+      'admin:plans',
+      'admin:overview'
+    );
 
 
     return NextResponse.json({

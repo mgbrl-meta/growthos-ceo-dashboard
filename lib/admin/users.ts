@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
+
 import {
   bigquery,
 } from '@/lib/bigquery';
@@ -182,7 +184,7 @@ function requireProjectId() {
 // remains visible even if they currently have zero memberships.
 // ============================================================
 
-export async function getAdminUsersSnapshot():
+async function loadAdminUsersSnapshot():
 
   Promise<
     AdminUsersSnapshot
@@ -777,3 +779,18 @@ export async function getAdminUsersSnapshot():
   };
 
 }
+
+// ============================================================
+// CACHED ADMIN READER
+// ============================================================
+
+export async function getAdminUsersSnapshot(
+  options?: { fresh?: boolean }
+): Promise<AdminUsersSnapshot> {
+  return getCachedAdminSnapshot(
+    'admin:users',
+    loadAdminUsersSnapshot,
+    { fresh: options?.fresh }
+  );
+}
+

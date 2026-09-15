@@ -162,7 +162,7 @@ export default function WarehouseAudit() {
   );
 
 
-  async function load() {
+  async function load(fresh = false) {
 
     try {
 
@@ -177,7 +177,7 @@ export default function WarehouseAudit() {
 
       const response =
         await fetch(
-          '/api/admin/warehouse/audit',
+          fresh ? '/api/admin/warehouse/audit?fresh=1' : '/api/admin/warehouse/audit',
           {
             cache:
               'no-store',
@@ -496,9 +496,9 @@ export default function WarehouseAudit() {
 
         <button
           type="button"
-          onClick={
-            load
-          }
+          onClick={() => {
+            void load();
+          }}
           className="mt-2.5 rounded-xl bg-red-900 px-3 py-2 text-[10px] font-semibold text-white"
         >
           Retry
@@ -558,9 +558,9 @@ export default function WarehouseAudit() {
 
         <button
           type="button"
-          onClick={
-            load
-          }
+          onClick={() => {
+            void load(true);
+          }}
           className="flex h-8 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-bold text-slate-700 shadow-sm hover:bg-slate-50"
         >
 

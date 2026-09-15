@@ -3,6 +3,7 @@ import 'server-only';
 import crypto from 'crypto';
 
 import { bigquery } from '@/lib/bigquery';
+import { resolveTenantContextById } from '@/lib/tenancy/context';
 import { GROWTHOS_SUBMODULES } from '@/lib/auth/submodule-registry';
 
 const PROJECT_ID =
@@ -50,7 +51,8 @@ export type GrowthOSCapabilityAudience = {
 };
 
 let capabilityControlReady = false;
-let capabilityControlPromise: Promise<void> | null = null;
+let capabilityMigrationReady = false;
+let capabilityMigrationPromise: Promise<void> | null = null;
 
 function requireProjectId() {
   if (!PROJECT_ID) {
@@ -133,11 +135,28 @@ export async function ensureGrowthOSCapabilityControl() {
     return;
   }
 
-  if (capabilityControlPromise) {
-    return capabilityControlPromise;
+  if (process.env.GROWTHOS_CAPABILITY_AUTO_MIGRATE === 'true') {
+    await migrateGrowthOSCapabilityControl();
+    return;
   }
 
-  capabilityControlPromise = (async () => {
+  // Runtime requests must never perform schema DDL/seeding. The explicit
+  // admin control-plane bootstrap owns migrations. Existing deployments
+  // already have these tables after Access Control V1.
+  capabilityControlReady = true;
+}
+
+export async function migrateGrowthOSCapabilityControl() {
+  if (capabilityMigrationReady) {
+    capabilityControlReady = true;
+    return;
+  }
+
+  if (capabilityMigrationPromise) {
+    return capabilityMigrationPromise;
+  }
+
+  capabilityMigrationPromise = (async () => {
     const projectId = requireProjectId();
 
     // Keep existing module_type semantics intact. access_mode is a new,
@@ -449,18 +468,20 @@ export async function ensureGrowthOSCapabilityControl() {
       `,
     });
 
+    capabilityMigrationReady = true;
     capabilityControlReady = true;
   })();
 
   try {
-    await capabilityControlPromise;
+    await capabilityMigrationPromise;
   } catch (error) {
+    capabilityMigrationReady = false;
     capabilityControlReady = false;
-    capabilityControlPromise = null;
+    capabilityMigrationPromise = null;
     throw error;
   }
 
-  capabilityControlPromise = null;
+  capabilityMigrationPromise = null;
 }
 
 export async function updateGrowthOSModuleControl(input: {
@@ -623,27 +644,6 @@ export async function replaceGrowthOSCapabilityReleaseAudience(input: {
     throw new Error('INVALID_CAPABILITY');
   }
 
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      DELETE FROM \`${projectId}.${DATASET_ID}.capability_release_audience\`
-      WHERE
-        capability_type = @capability_type
-        AND module_id = @module_id
-        AND COALESCE(submodule_id, '') = @submodule_id
-    `,
-    params: {
-      capability_type: capabilityType,
-      module_id: moduleId,
-      submodule_id: submoduleId,
-    },
-    types: {
-      capability_type: 'STRING',
-      module_id: 'STRING',
-      submodule_id: 'STRING',
-    },
-  });
-
   const uniqueAudience = new Map<string, GrowthOSCapabilityAudience>();
 
   for (const item of input.audience || []) {
@@ -660,58 +660,76 @@ export async function replaceGrowthOSCapabilityReleaseAudience(input: {
     });
   }
 
-  for (const item of uniqueAudience.values()) {
-    const audienceId = deterministicId('rel', [
+  const params: Record<string, unknown> = {
+    capability_type: capabilityType,
+    module_id: moduleId,
+    submodule_id: submoduleId,
+  };
+  const types: Record<string, string> = {
+    capability_type: 'STRING',
+    module_id: 'STRING',
+    submodule_id: 'STRING',
+  };
+
+  const statements = [
+    `
+      DELETE FROM \`${projectId}.${DATASET_ID}.capability_release_audience\`
+      WHERE
+        capability_type = @capability_type
+        AND module_id = @module_id
+        AND COALESCE(submodule_id, '') = @submodule_id
+    `,
+  ];
+
+  Array.from(uniqueAudience.values()).forEach((item, index) => {
+    const audienceIdKey = `audience_id_${index}`;
+    const workspaceIdKey = `workspace_id_${index}`;
+    const brandIdKey = `brand_id_${index}`;
+
+    params[audienceIdKey] = deterministicId('rel', [
       capabilityType,
       moduleId,
       submoduleId,
       item.workspaceId,
       item.brandId,
     ]);
+    params[workspaceIdKey] = item.workspaceId;
+    params[brandIdKey] = item.brandId;
+    types[audienceIdKey] = 'STRING';
+    types[workspaceIdKey] = 'STRING';
+    types[brandIdKey] = 'STRING';
 
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        INSERT INTO \`${projectId}.${DATASET_ID}.capability_release_audience\`
-        (
-          audience_id,
-          capability_type,
-          module_id,
-          submodule_id,
-          workspace_id,
-          brand_id,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          @audience_id,
-          @capability_type,
-          @module_id,
-          NULLIF(@submodule_id, ''),
-          @workspace_id,
-          @brand_id,
-          CURRENT_TIMESTAMP(),
-          CURRENT_TIMESTAMP()
-        )
-      `,
-      params: {
-        audience_id: audienceId,
-        capability_type: capabilityType,
-        module_id: moduleId,
-        submodule_id: submoduleId,
-        workspace_id: item.workspaceId,
-        brand_id: item.brandId,
-      },
-      types: {
-        audience_id: 'STRING',
-        capability_type: 'STRING',
-        module_id: 'STRING',
-        submodule_id: 'STRING',
-        workspace_id: 'STRING',
-        brand_id: 'STRING',
-      },
-    });
-  }
+    statements.push(`
+      INSERT INTO \`${projectId}.${DATASET_ID}.capability_release_audience\`
+      (
+        audience_id,
+        capability_type,
+        module_id,
+        submodule_id,
+        workspace_id,
+        brand_id,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        @${audienceIdKey},
+        @capability_type,
+        @module_id,
+        NULLIF(@submodule_id, ''),
+        @${workspaceIdKey},
+        @${brandIdKey},
+        CURRENT_TIMESTAMP(),
+        CURRENT_TIMESTAMP()
+      )
+    `);
+  });
+
+  await bigquery.query({
+    location: LOCATION,
+    query: statements.join(';\n'),
+    params,
+    types,
+  });
 
   return Array.from(uniqueAudience.values());
 }
@@ -736,6 +754,17 @@ export async function updateGrowthOSPlanCapabilityEntitlements(input: {
     throw new Error('planId is required');
   }
 
+  const params: Record<string, unknown> = {
+    plan_id: planId,
+  };
+  const types: Record<string, string> = {
+    plan_id: 'STRING',
+  };
+  const statements: string[] = [];
+
+  let moduleIndex = 0;
+  let submoduleIndex = 0;
+
   for (const module of input.modules || []) {
     const moduleId = String(module.moduleId || '').trim();
 
@@ -743,50 +772,44 @@ export async function updateGrowthOSPlanCapabilityEntitlements(input: {
       continue;
     }
 
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        MERGE \`${projectId}.${DATASET_ID}.plan_modules\` AS target
-        USING (
-          SELECT
-            @plan_id AS plan_id,
-            @module_id AS module_id,
-            @enabled AS enabled
-        ) AS source
-        ON
-          target.plan_id = source.plan_id
-          AND target.module_id = source.module_id
-        WHEN MATCHED THEN
-          UPDATE SET
-            enabled = source.enabled,
-            updated_at = CURRENT_TIMESTAMP()
-        WHEN NOT MATCHED THEN
-          INSERT (
-            plan_id,
-            module_id,
-            enabled,
-            created_at,
-            updated_at
-          )
-          VALUES (
-            source.plan_id,
-            source.module_id,
-            source.enabled,
-            CURRENT_TIMESTAMP(),
-            CURRENT_TIMESTAMP()
-          )
-      `,
-      params: {
-        plan_id: planId,
-        module_id: moduleId,
-        enabled: Boolean(module.enabled),
-      },
-      types: {
-        plan_id: 'STRING',
-        module_id: 'STRING',
-        enabled: 'BOOL',
-      },
-    });
+    const moduleIdKey = `module_id_${moduleIndex}`;
+    const moduleEnabledKey = `module_enabled_${moduleIndex}`;
+    params[moduleIdKey] = moduleId;
+    params[moduleEnabledKey] = Boolean(module.enabled);
+    types[moduleIdKey] = 'STRING';
+    types[moduleEnabledKey] = 'BOOL';
+
+    statements.push(`
+      MERGE \`${projectId}.${DATASET_ID}.plan_modules\` AS target
+      USING (
+        SELECT
+          @plan_id AS plan_id,
+          @${moduleIdKey} AS module_id,
+          @${moduleEnabledKey} AS enabled
+      ) AS source
+      ON
+        target.plan_id = source.plan_id
+        AND target.module_id = source.module_id
+      WHEN MATCHED THEN
+        UPDATE SET
+          enabled = source.enabled,
+          updated_at = CURRENT_TIMESTAMP()
+      WHEN NOT MATCHED THEN
+        INSERT (
+          plan_id,
+          module_id,
+          enabled,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          source.plan_id,
+          source.module_id,
+          source.enabled,
+          CURRENT_TIMESTAMP(),
+          CURRENT_TIMESTAMP()
+        )
+    `);
 
     for (const submodule of module.submodules || []) {
       const submoduleId = String(submodule.submoduleId || '').trim();
@@ -795,64 +818,270 @@ export async function updateGrowthOSPlanCapabilityEntitlements(input: {
         continue;
       }
 
-      await bigquery.query({
-        location: LOCATION,
-        query: `
-          MERGE \`${projectId}.${DATASET_ID}.plan_submodules\` AS target
-          USING (
-            SELECT
-              @plan_id AS plan_id,
-              @module_id AS module_id,
-              @submodule_id AS submodule_id,
-              @enabled AS enabled
-          ) AS source
-          ON
-            target.plan_id = source.plan_id
-            AND target.module_id = source.module_id
-            AND target.submodule_id = source.submodule_id
-          WHEN MATCHED THEN
-            UPDATE SET
-              enabled = source.enabled,
-              updated_at = CURRENT_TIMESTAMP()
-          WHEN NOT MATCHED THEN
-            INSERT (
-              plan_id,
-              module_id,
-              submodule_id,
-              enabled,
-              created_at,
-              updated_at
-            )
-            VALUES (
-              source.plan_id,
-              source.module_id,
-              source.submodule_id,
-              source.enabled,
-              CURRENT_TIMESTAMP(),
-              CURRENT_TIMESTAMP()
-            )
-        `,
-        params: {
-          plan_id: planId,
-          module_id: moduleId,
-          submodule_id: submoduleId,
-          // Submodule entitlement is an independent plan dimension.
-          // Parent module access is enforced separately by the effective-access
-          // resolver, so a Standard/Custom parent can still contain a
-          // Plan-controlled submodule.
-          enabled: Boolean(submodule.enabled),
-        },
-        types: {
-          plan_id: 'STRING',
-          module_id: 'STRING',
-          submodule_id: 'STRING',
-          enabled: 'BOOL',
-        },
-      });
+      const submoduleModuleIdKey = `submodule_module_id_${submoduleIndex}`;
+      const submoduleIdKey = `submodule_id_${submoduleIndex}`;
+      const submoduleEnabledKey = `submodule_enabled_${submoduleIndex}`;
+      params[submoduleModuleIdKey] = moduleId;
+      params[submoduleIdKey] = submoduleId;
+      params[submoduleEnabledKey] = Boolean(submodule.enabled);
+      types[submoduleModuleIdKey] = 'STRING';
+      types[submoduleIdKey] = 'STRING';
+      types[submoduleEnabledKey] = 'BOOL';
+
+      statements.push(`
+        MERGE \`${projectId}.${DATASET_ID}.plan_submodules\` AS target
+        USING (
+          SELECT
+            @plan_id AS plan_id,
+            @${submoduleModuleIdKey} AS module_id,
+            @${submoduleIdKey} AS submodule_id,
+            @${submoduleEnabledKey} AS enabled
+        ) AS source
+        ON
+          target.plan_id = source.plan_id
+          AND target.module_id = source.module_id
+          AND target.submodule_id = source.submodule_id
+        WHEN MATCHED THEN
+          UPDATE SET
+            enabled = source.enabled,
+            updated_at = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN
+          INSERT (
+            plan_id,
+            module_id,
+            submodule_id,
+            enabled,
+            created_at,
+            updated_at
+          )
+          VALUES (
+            source.plan_id,
+            source.module_id,
+            source.submodule_id,
+            source.enabled,
+            CURRENT_TIMESTAMP(),
+            CURRENT_TIMESTAMP()
+          )
+      `);
+
+      submoduleIndex += 1;
     }
+
+    moduleIndex += 1;
+  }
+
+  if (statements.length > 0) {
+    await bigquery.query({
+      location: LOCATION,
+      query: statements.join(';\n'),
+      params,
+      types,
+    });
   }
 
   return { planId };
+}
+
+
+export async function updateGrowthOSBrandCapabilityOverrides(input: {
+  workspaceId: string;
+  brandId: string;
+  moduleOverrides: Array<{
+    moduleId: string;
+    override: GrowthOSBrandAccessOverride;
+  }>;
+  submoduleOverrides: Array<{
+    moduleId: string;
+    submoduleId: string;
+    override: GrowthOSBrandAccessOverride;
+  }>;
+}) {
+  await ensureGrowthOSCapabilityControl();
+
+  const projectId = requireProjectId();
+  const workspaceId = String(input.workspaceId || '').trim();
+  const brandId = String(input.brandId || '').trim();
+
+  if (!workspaceId || !brandId) {
+    throw new Error('workspaceId and brandId are required');
+  }
+
+  await resolveTenantContextById(workspaceId, brandId);
+
+  const moduleOverrides = (input.moduleOverrides || [])
+    .map(item => ({
+      moduleId: String(item.moduleId || '').trim(),
+      override: normalizeOverride(item.override),
+    }))
+    .filter(item => item.moduleId);
+
+  const submoduleOverrides = (input.submoduleOverrides || [])
+    .map(item => ({
+      moduleId: String(item.moduleId || '').trim(),
+      submoduleId: String(item.submoduleId || '').trim(),
+      override: normalizeOverride(item.override),
+    }))
+    .filter(item => item.moduleId && item.submoduleId);
+
+  const params: Record<string, unknown> = {
+    workspace_id: workspaceId,
+    brand_id: brandId,
+  };
+  const types: Record<string, string> = {
+    workspace_id: 'STRING',
+    brand_id: 'STRING',
+  };
+  const statements: string[] = [];
+
+  if (moduleOverrides.length > 0) {
+    const sourceRows = moduleOverrides.map((item, index) => {
+      const overrideIdKey = `module_override_id_${index}`;
+      const moduleIdKey = `module_override_module_id_${index}`;
+      const overrideKey = `module_override_value_${index}`;
+
+      params[overrideIdKey] = deterministicId('ovr', [
+        workspaceId,
+        brandId,
+        item.moduleId,
+      ]);
+      params[moduleIdKey] = item.moduleId;
+      params[overrideKey] = item.override;
+      types[overrideIdKey] = 'STRING';
+      types[moduleIdKey] = 'STRING';
+      types[overrideKey] = 'STRING';
+
+      return `
+        SELECT
+          @${overrideIdKey} AS override_id,
+          @workspace_id AS workspace_id,
+          @brand_id AS brand_id,
+          @${moduleIdKey} AS module_id,
+          @${overrideKey} AS module_override
+      `;
+    });
+
+    statements.push(`
+      MERGE \`${projectId}.${DATASET_ID}.brand_module_overrides\` AS target
+      USING (
+        ${sourceRows.join('\n        UNION ALL\n')}
+      ) AS source
+      ON
+        target.workspace_id = source.workspace_id
+        AND target.brand_id = source.brand_id
+        AND target.module_id = source.module_id
+      WHEN MATCHED THEN
+        UPDATE SET
+          override_id = source.override_id,
+          module_override = source.module_override,
+          updated_at = CURRENT_TIMESTAMP()
+      WHEN NOT MATCHED THEN
+        INSERT (
+          override_id,
+          workspace_id,
+          brand_id,
+          module_id,
+          module_override,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          source.override_id,
+          source.workspace_id,
+          source.brand_id,
+          source.module_id,
+          source.module_override,
+          CURRENT_TIMESTAMP(),
+          CURRENT_TIMESTAMP()
+        )
+    `);
+  }
+
+  if (submoduleOverrides.length > 0) {
+    const sourceRows = submoduleOverrides.map((item, index) => {
+      const overrideIdKey = `submodule_override_id_${index}`;
+      const moduleIdKey = `submodule_override_module_id_${index}`;
+      const submoduleIdKey = `submodule_override_submodule_id_${index}`;
+      const overrideKey = `submodule_override_value_${index}`;
+
+      params[overrideIdKey] = deterministicId('smo', [
+        workspaceId,
+        brandId,
+        item.moduleId,
+        item.submoduleId,
+      ]);
+      params[moduleIdKey] = item.moduleId;
+      params[submoduleIdKey] = item.submoduleId;
+      params[overrideKey] = item.override;
+      types[overrideIdKey] = 'STRING';
+      types[moduleIdKey] = 'STRING';
+      types[submoduleIdKey] = 'STRING';
+      types[overrideKey] = 'STRING';
+
+      return `
+        SELECT
+          @${overrideIdKey} AS override_id,
+          @workspace_id AS workspace_id,
+          @brand_id AS brand_id,
+          @${moduleIdKey} AS module_id,
+          @${submoduleIdKey} AS submodule_id,
+          @${overrideKey} AS submodule_override
+      `;
+    });
+
+    statements.push(`
+      MERGE \`${projectId}.${DATASET_ID}.brand_submodule_overrides\` AS target
+      USING (
+        ${sourceRows.join('\n        UNION ALL\n')}
+      ) AS source
+      ON
+        target.workspace_id = source.workspace_id
+        AND target.brand_id = source.brand_id
+        AND target.module_id = source.module_id
+        AND target.submodule_id = source.submodule_id
+      WHEN MATCHED THEN
+        UPDATE SET
+          override_id = source.override_id,
+          submodule_override = source.submodule_override,
+          updated_at = CURRENT_TIMESTAMP()
+      WHEN NOT MATCHED THEN
+        INSERT (
+          override_id,
+          workspace_id,
+          brand_id,
+          module_id,
+          submodule_id,
+          submodule_override,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          source.override_id,
+          source.workspace_id,
+          source.brand_id,
+          source.module_id,
+          source.submodule_id,
+          source.submodule_override,
+          CURRENT_TIMESTAMP(),
+          CURRENT_TIMESTAMP()
+        )
+    `);
+  }
+
+  if (statements.length > 0) {
+    await bigquery.query({
+      location: LOCATION,
+      query: statements.join(';\n'),
+      params,
+      types,
+    });
+  }
+
+  return {
+    workspaceId,
+    brandId,
+    moduleOverrides: moduleOverrides.length,
+    submoduleOverrides: submoduleOverrides.length,
+  };
 }
 
 export async function upsertGrowthOSBrandSubmoduleOverride(input: {

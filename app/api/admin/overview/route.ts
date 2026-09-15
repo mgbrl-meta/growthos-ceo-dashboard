@@ -41,6 +41,9 @@ export async function GET(
 
   try {
 
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get('fresh') === '1';
+
     // ========================================================
     // 1. PLATFORM ADMIN AUTHORIZATION
     //
@@ -62,7 +65,7 @@ export async function GET(
     // ========================================================
 
     const overview =
-      await getAdminOverviewSnapshot();
+      await getAdminOverviewSnapshot({ fresh });
 
 
     // ========================================================
@@ -87,18 +90,7 @@ export async function GET(
           startedAt,
 
         source:
-          [
-            'admin.clients',
-            'admin.plans',
-            'admin.modules',
-            'admin.users',
-            'admin.integrations',
-            'admin.data-health',
-            'admin.sync-history',
-            'admin.system',
-          ].join(
-            ' + '
-          ),
+          'growthos_control optimized overview + dataset metadata',
 
         readOnly:
           true,

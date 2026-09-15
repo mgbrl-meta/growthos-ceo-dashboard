@@ -3,6 +3,7 @@ import 'server-only';
 import {
   bigquery,
 } from '@/lib/bigquery';
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
 
 
 // ============================================================
@@ -210,20 +211,23 @@ function requireProjectId() {
 // No tenant loops.
 // ============================================================
 
-export async function getAdminClientsSnapshot():
+export async function getAdminClientsSnapshot(options?: { fresh?: boolean }):
 
   Promise<
     AdminClientsSnapshot
   > {
 
-  const projectId =
-    requireProjectId();
+  return getCachedAdminSnapshot(
+    'admin:clients',
+    async () => {
+      const projectId =
+        requireProjectId();
 
 
-  const [
-    rawRows,
-  ] =
-    await bigquery.query({
+      const [
+        rawRows,
+      ] =
+        await bigquery.query({
 
       query: `
 
@@ -986,12 +990,12 @@ export async function getAdminClientsSnapshot():
     );
 
 
-  return {
+      return {
 
-    summary: {
+        summary: {
 
-      total:
-        clients.length,
+          total:
+            clients.length,
 
       active,
 
@@ -1011,8 +1015,10 @@ export async function getAdminClientsSnapshot():
 
     clients,
 
-  };
-
+      };
+    },
+    { fresh: options?.fresh }
+  );
 }
 
 
@@ -1067,4 +1073,75 @@ function normalizeStatus(
     .trim()
     .toLowerCase();
 
+}
+
+export type AdminClientOption = {
+  workspaceId: string;
+  brandId: string;
+  workspaceName: string | null;
+  brandName: string | null;
+  planName: string | null;
+};
+
+export async function getAdminClientOptionsSnapshot(options?: { fresh?: boolean }): Promise<AdminClientOption[]> {
+  return getCachedAdminSnapshot(
+    'admin:client-options',
+    async () => {
+      const projectId = requireProjectId();
+      const [rows] = await bigquery.query({
+        location: LOCATION,
+        query: `
+          WITH latest_workspaces AS (
+            SELECT *
+            FROM \`${projectId}.${DATASET_ID}.workspaces\`
+            QUALIFY ROW_NUMBER() OVER (
+              PARTITION BY workspace_id
+              ORDER BY updated_at DESC, created_at DESC
+            ) = 1
+          ),
+          latest_brands AS (
+            SELECT *
+            FROM \`${projectId}.${DATASET_ID}.brands\`
+            QUALIFY ROW_NUMBER() OVER (
+              PARTITION BY workspace_id, brand_id
+              ORDER BY updated_at DESC, created_at DESC
+            ) = 1
+          ),
+          latest_subscriptions AS (
+            SELECT *
+            FROM \`${projectId}.${DATASET_ID}.brand_subscriptions\`
+            QUALIFY ROW_NUMBER() OVER (
+              PARTITION BY workspace_id, brand_id
+              ORDER BY updated_at DESC, created_at DESC, subscription_id DESC
+            ) = 1
+          )
+          SELECT
+            b.workspace_id,
+            b.brand_id,
+            w.workspace_name,
+            b.brand_name,
+            p.plan_name
+          FROM latest_brands AS b
+          LEFT JOIN latest_workspaces AS w
+            ON w.workspace_id = b.workspace_id
+          LEFT JOIN latest_subscriptions AS s
+            ON s.workspace_id = b.workspace_id
+            AND s.brand_id = b.brand_id
+          LEFT JOIN \`${projectId}.${DATASET_ID}.plans\` AS p
+            ON p.plan_id = s.plan_id
+          WHERE COALESCE(b.status, 'active') != 'deleted'
+          ORDER BY COALESCE(w.workspace_name, b.workspace_id), COALESCE(b.brand_name, b.brand_id)
+        `,
+      });
+
+      return ((rows || []) as any[]).map(row => ({
+        workspaceId: String(row.workspace_id || ''),
+        brandId: String(row.brand_id || ''),
+        workspaceName: row.workspace_name ?? null,
+        brandName: row.brand_name ?? null,
+        planName: row.plan_name ?? null,
+      }));
+    },
+    { fresh: options?.fresh, ttlMs: 300000 }
+  );
 }

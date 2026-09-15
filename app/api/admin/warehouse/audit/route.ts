@@ -8,7 +8,7 @@ import {
 } from '@/lib/auth/platform-admin';
 
 import {
-  auditWarehouse,
+  getAdminWarehouseAuditSnapshot,
 } from '@/lib/admin/warehouse/auditor';
 
 
@@ -106,8 +106,11 @@ export async function GET(
     // intentionally audits configured platform infrastructure.
     // ========================================================
 
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get('fresh') === '1';
+
     const audit =
-      await auditWarehouse();
+      await getAdminWarehouseAuditSnapshot({ fresh });
 
 
     // ========================================================

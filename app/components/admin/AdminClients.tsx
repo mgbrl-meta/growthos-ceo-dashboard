@@ -350,7 +350,7 @@ export default function AdminClients() {
   // LOAD
   // ==========================================================
 
-  async function loadClients() {
+  async function loadClients(fresh = false) {
 
     setLoading(
       true
@@ -366,7 +366,7 @@ export default function AdminClients() {
 
       const response =
         await fetch(
-          '/api/admin/clients',
+          fresh ? '/api/admin/clients?fresh=1' : '/api/admin/clients',
           {
 
             cache:
@@ -893,9 +893,9 @@ export default function AdminClients() {
 
             type="button"
 
-            onClick={
-              loadClients
-            }
+            onClick={() => {
+              void loadClients();
+            }}
 
             className="
               h-7
@@ -1019,9 +1019,9 @@ export default function AdminClients() {
 
           type="button"
 
-          onClick={
-            loadClients
-          }
+          onClick={() => {
+            void loadClients(true);
+          }}
 
           disabled={
             loading

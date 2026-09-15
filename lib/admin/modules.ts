@@ -2,6 +2,7 @@ import 'server-only';
 
 import { bigquery } from '@/lib/bigquery';
 import { ensureGrowthOSCapabilityControl } from '@/lib/admin/capability-control';
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
 
 const PROJECT_ID =
   process.env.GCP_PROJECT_ID ||
@@ -84,12 +85,15 @@ function requireProjectId() {
   return PROJECT_ID;
 }
 
-export async function getAdminModulesSnapshot(): Promise<AdminModulesSnapshot> {
+export async function getAdminModulesSnapshot(options?: { fresh?: boolean }): Promise<AdminModulesSnapshot> {
   await ensureGrowthOSCapabilityControl();
 
-  const projectId = requireProjectId();
+  return getCachedAdminSnapshot(
+    'admin:modules',
+    async () => {
+      const projectId = requireProjectId();
 
-  const [moduleRows] = await bigquery.query({
+      const moduleQuery = bigquery.query({
     location: LOCATION,
     query: `
       WITH plan_usage AS (
@@ -150,9 +154,9 @@ export async function getAdminModulesSnapshot(): Promise<AdminModulesSnapshot> {
         END,
         m.module_name
     `,
-  });
+      });
 
-  const [submoduleRows] = await bigquery.query({
+      const submoduleQuery = bigquery.query({
     location: LOCATION,
     query: `
       WITH plan_usage AS (
@@ -203,9 +207,9 @@ export async function getAdminModulesSnapshot(): Promise<AdminModulesSnapshot> {
         AND ou.submodule_id = sm.submodule_id
       ORDER BY sm.module_id, sm.label
     `,
-  });
+      });
 
-  const [audienceRows] = await bigquery.query({
+      const audienceQuery = bigquery.query({
     location: LOCATION,
     query: `
       SELECT
@@ -217,9 +221,19 @@ export async function getAdminModulesSnapshot(): Promise<AdminModulesSnapshot> {
       FROM \`${projectId}.${DATASET_ID}.capability_release_audience\`
       ORDER BY capability_type, module_id, submodule_id, workspace_id, brand_id
     `,
-  });
+      });
 
-  const audienceMap = new Map<string, AdminCapabilityAudience[]>();
+      const [
+        [moduleRows],
+        [submoduleRows],
+        [audienceRows],
+      ] = await Promise.all([
+        moduleQuery,
+        submoduleQuery,
+        audienceQuery,
+      ]);
+
+      const audienceMap = new Map<string, AdminCapabilityAudience[]>();
 
   for (const row of (audienceRows || []) as any[]) {
     const key = `${row.capability_type}:${row.module_id}:${row.submodule_id || ''}`;
@@ -292,21 +306,24 @@ export async function getAdminModulesSnapshot(): Promise<AdminModulesSnapshot> {
   const custom = modules.filter(module => normalize(module.accessMode) === 'custom').length;
   const beta = modules.filter(module => normalize(module.releaseStage) === 'beta').length;
 
-  return {
-    summary: {
-      total: modules.length,
-      active,
-      inactive: modules.length - active,
-      standard,
-      planControlled,
-      custom,
-      beta,
-      setupRequired: modules.filter(module => module.setupRequired).length,
-      planAssignments: modules.reduce((total, module) => total + module.enabledPlans, 0),
-      clientOverrides: modules.reduce((total, module) => total + module.clientOverrides, 0),
+      return {
+        summary: {
+          total: modules.length,
+          active,
+          inactive: modules.length - active,
+          standard,
+          planControlled,
+          custom,
+          beta,
+          setupRequired: modules.filter(module => module.setupRequired).length,
+          planAssignments: modules.reduce((total, module) => total + module.enabledPlans, 0),
+          clientOverrides: modules.reduce((total, module) => total + module.clientOverrides, 0),
+        },
+        modules,
+      };
     },
-    modules,
-  };
+    { fresh: options?.fresh }
+  );
 }
 
 function normalize(value: string | null) {

@@ -262,7 +262,7 @@ export default function AdminIntegrations() {
   // LOAD REAL ADMIN INTEGRATIONS
   // ==========================================================
 
-  async function loadIntegrations() {
+  async function loadIntegrations(fresh = false) {
 
     setLoading(
       true
@@ -278,7 +278,7 @@ export default function AdminIntegrations() {
 
       const response =
         await fetch(
-          '/api/admin/integrations',
+          fresh ? '/api/admin/integrations?fresh=1' : '/api/admin/integrations',
           {
 
             cache:
@@ -790,9 +790,9 @@ export default function AdminIntegrations() {
 
             type="button"
 
-            onClick={
-              loadIntegrations
-            }
+            onClick={() => {
+              void loadIntegrations();
+            }}
 
             className="
               h-7
@@ -916,9 +916,9 @@ export default function AdminIntegrations() {
 
           type="button"
 
-          onClick={
-            loadIntegrations
-          }
+          onClick={() => {
+            void loadIntegrations(true);
+          }}
 
           disabled={
             loading

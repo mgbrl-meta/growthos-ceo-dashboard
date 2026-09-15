@@ -5,6 +5,7 @@ import {
 
 import {
   authenticateRequest,
+  invalidateAdminLiveAuthCache,
 } from '@/lib/auth/request-auth';
 
 import {
@@ -67,6 +68,10 @@ export async function POST(
       await revokeGrowthOSSecuritySessions({
         userId:
           identity.userId,
+      });
+
+      invalidateAdminLiveAuthCache({
+        userId: identity.userId,
       });
 
     }

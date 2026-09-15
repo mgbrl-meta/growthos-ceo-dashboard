@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
+
 import {
   bigquery,
 } from '@/lib/bigquery';
@@ -182,7 +184,7 @@ function requireProjectId() {
 // latest logical records are selected defensively.
 // ============================================================
 
-export async function getAdminIntegrationsSnapshot():
+async function loadAdminIntegrationsSnapshot():
 
   Promise<
     AdminIntegrationsSnapshot
@@ -737,3 +739,18 @@ export async function getAdminIntegrationsSnapshot():
   };
 
 }
+
+// ============================================================
+// CACHED ADMIN READER
+// ============================================================
+
+export async function getAdminIntegrationsSnapshot(
+  options?: { fresh?: boolean }
+): Promise<AdminIntegrationsSnapshot> {
+  return getCachedAdminSnapshot(
+    'admin:integrations',
+    loadAdminIntegrationsSnapshot,
+    { fresh: options?.fresh }
+  );
+}
+

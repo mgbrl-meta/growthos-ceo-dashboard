@@ -273,7 +273,7 @@ export default function AdminSyncHistory() {
   // LOAD REAL RUN HISTORY
   // ==========================================================
 
-  async function loadSyncHistory() {
+  async function loadSyncHistory(fresh = false) {
 
     setLoading(
       true
@@ -289,7 +289,7 @@ export default function AdminSyncHistory() {
 
       const response =
         await fetch(
-          '/api/admin/sync-history',
+          fresh ? '/api/admin/sync-history?fresh=1' : '/api/admin/sync-history',
           {
 
             cache:
@@ -843,9 +843,9 @@ export default function AdminSyncHistory() {
 
             type="button"
 
-            onClick={
-              loadSyncHistory
-            }
+            onClick={() => {
+              void loadSyncHistory();
+            }}
 
             className="
               h-7
@@ -969,9 +969,9 @@ export default function AdminSyncHistory() {
 
           type="button"
 
-          onClick={
-            loadSyncHistory
-          }
+          onClick={() => {
+            void loadSyncHistory(true);
+          }}
 
           disabled={
             loading

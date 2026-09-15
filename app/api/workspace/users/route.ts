@@ -11,6 +11,7 @@ import {
 
 import {
   authenticateRequest,
+  invalidateAdminLiveAuthCache,
 } from '@/lib/auth/request-auth';
 
 import {
@@ -34,6 +35,10 @@ import {
 import {
   writeGrowthOSAuditEventSafe,
 } from '@/lib/audit';
+
+import {
+  invalidateAdminSnapshots,
+} from '@/lib/admin/snapshot-cache';
 
 export const dynamic =
   'force-dynamic';
@@ -1089,6 +1094,17 @@ if (
   });
 
 
+    invalidateAdminLiveAuthCache({
+      userId: user.userId,
+    });
+
+    invalidateAdminSnapshots(
+      'admin:clients',
+      'admin:users',
+      'admin:overview'
+    );
+
+
     await writeGrowthOSAuditEventSafe({
       request,
       workspaceId,
@@ -1798,6 +1814,16 @@ export async function PATCH(
 
       });
 
+      invalidateAdminLiveAuthCache({
+        userId: target.user_id,
+      });
+
+      invalidateAdminSnapshots(
+        'admin:clients',
+        'admin:users',
+        'admin:overview'
+      );
+
 
       await writeGrowthOSAuditEventSafe({
         request,
@@ -1998,6 +2024,16 @@ export async function PATCH(
           ),
 
       });
+
+      invalidateAdminLiveAuthCache({
+        userId: target.user_id,
+      });
+
+      invalidateAdminSnapshots(
+        'admin:clients',
+        'admin:users',
+        'admin:overview'
+      );
 
 
       await writeGrowthOSAuditEventSafe({
@@ -2438,6 +2474,17 @@ if (
         ),
 
     });
+
+
+    invalidateAdminLiveAuthCache({
+      userId: target.user_id,
+    });
+
+    invalidateAdminSnapshots(
+      'admin:clients',
+      'admin:users',
+      'admin:overview'
+    );
 
 
     await writeGrowthOSAuditEventSafe({
@@ -3005,6 +3052,17 @@ export async function DELETE(
       },
 
     });
+
+
+    invalidateAdminLiveAuthCache({
+      userId: target.user_id,
+    });
+
+    invalidateAdminSnapshots(
+      'admin:clients',
+      'admin:users',
+      'admin:overview'
+    );
 
 
     await writeGrowthOSAuditEventSafe({

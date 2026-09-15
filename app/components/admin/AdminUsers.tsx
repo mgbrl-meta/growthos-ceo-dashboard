@@ -274,7 +274,7 @@ export default function AdminUsers() {
   // LOAD
   // ==========================================================
 
-  async function loadUsers() {
+  async function loadUsers(fresh = false) {
 
     setLoading(
       true
@@ -290,7 +290,7 @@ export default function AdminUsers() {
 
       const response =
         await fetch(
-          '/api/admin/users',
+          fresh ? '/api/admin/users?fresh=1' : '/api/admin/users',
           {
 
             cache:
@@ -812,9 +812,9 @@ export default function AdminUsers() {
 
             type="button"
 
-            onClick={
-              loadUsers
-            }
+            onClick={() => {
+              void loadUsers();
+            }}
 
             className="
               h-7
@@ -938,9 +938,9 @@ export default function AdminUsers() {
 
           type="button"
 
-          onClick={
-            loadUsers
-          }
+          onClick={() => {
+            void loadUsers(true);
+          }}
 
           disabled={
             loading

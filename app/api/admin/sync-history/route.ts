@@ -39,6 +39,9 @@ export async function GET(
 
   try {
 
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get('fresh') === '1';
+
     // ========================================================
     // 1. PLATFORM ADMIN AUTHORIZATION
     // ========================================================
@@ -54,7 +57,7 @@ export async function GET(
     // ========================================================
 
     const snapshot =
-      await getAdminSyncHistory();
+      await getAdminSyncHistory({ fresh });
 
 
     // ========================================================

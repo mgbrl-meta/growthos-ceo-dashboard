@@ -76,11 +76,11 @@ export default function AdminPlans() {
   const [search, setSearch] = useState('');
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  async function load() {
+  async function load(fresh = false) {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/admin/plans', {
+      const response = await fetch(`/api/admin/plans${fresh ? '?fresh=1' : ''}`, {
         cache: 'no-store',
         credentials: 'same-origin',
       });
@@ -118,7 +118,7 @@ export default function AdminPlans() {
       <PlanDetail
         plan={selected}
         onBack={() => setSelectedPlanId(null)}
-        onSaved={load}
+        onSaved={() => load(true)}
       />
     );
   }
@@ -138,7 +138,7 @@ export default function AdminPlans() {
           </div>
           <button
             type="button"
-            onClick={load}
+            onClick={() => load(true)}
             disabled={loading}
             className="inline-flex h-8 items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-[9px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >

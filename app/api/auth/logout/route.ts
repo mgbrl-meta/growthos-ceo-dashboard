@@ -20,6 +20,10 @@ import {
   writeGrowthOSAuditEventSafe,
 } from '@/lib/audit';
 
+import {
+  invalidateAdminLiveAuthCache,
+} from '@/lib/auth/request-auth';
+
 
 export const dynamic =
   'force-dynamic';
@@ -66,6 +70,11 @@ export async function POST(
             session.userId,
             session.sessionId
           );
+
+          invalidateAdminLiveAuthCache({
+            userId: session.userId,
+            sessionId: session.sessionId,
+          });
 
         }
 

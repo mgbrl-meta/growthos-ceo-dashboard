@@ -181,7 +181,7 @@ export default function AdminSystem() {
   // LOAD
   // ==========================================================
 
-  async function loadSystem() {
+  async function loadSystem(fresh = false) {
 
     setLoading(
       true
@@ -197,7 +197,7 @@ export default function AdminSystem() {
 
       const response =
         await fetch(
-          '/api/admin/system',
+          fresh ? '/api/admin/system?fresh=1' : '/api/admin/system',
           {
 
             cache:
@@ -385,9 +385,9 @@ export default function AdminSystem() {
 
             type="button"
 
-            onClick={
-              loadSystem
-            }
+            onClick={() => {
+              void loadSystem();
+            }}
 
             className="
               h-7
@@ -519,9 +519,9 @@ export default function AdminSystem() {
 
           type="button"
 
-          onClick={
-            loadSystem
-          }
+          onClick={() => {
+            void loadSystem(true);
+          }}
 
           disabled={
             loading

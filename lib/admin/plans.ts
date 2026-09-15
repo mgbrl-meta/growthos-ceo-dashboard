@@ -2,6 +2,7 @@ import 'server-only';
 
 import { bigquery } from '@/lib/bigquery';
 import { ensureGrowthOSCapabilityControl } from '@/lib/admin/capability-control';
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
 
 const PROJECT_ID =
   process.env.GCP_PROJECT_ID ||
@@ -77,12 +78,15 @@ function requireProjectId() {
   return PROJECT_ID;
 }
 
-export async function getAdminPlansSnapshot(): Promise<AdminPlansSnapshot> {
+export async function getAdminPlansSnapshot(options?: { fresh?: boolean }): Promise<AdminPlansSnapshot> {
   await ensureGrowthOSCapabilityControl();
 
-  const projectId = requireProjectId();
+  return getCachedAdminSnapshot(
+    'admin:plans',
+    async () => {
+      const projectId = requireProjectId();
 
-  const [rows] = await bigquery.query({
+      const [rows] = await bigquery.query({
     location: LOCATION,
     query: `
       WITH latest_subscriptions AS (
@@ -267,16 +271,19 @@ export async function getAdminPlansSnapshot(): Promise<AdminPlansSnapshot> {
   const active = plans.filter(plan => plan.status.toLowerCase() === 'active').length;
   const assignedClients = plans.reduce((total, plan) => total + plan.assignedClients, 0);
 
-  return {
-    summary: {
-      total: plans.length,
-      active,
-      inactive: plans.length - active,
-      assignedClients,
-      unassignedPlans: plans.filter(plan => plan.assignedClients === 0).length,
+      return {
+        summary: {
+          total: plans.length,
+          active,
+          inactive: plans.length - active,
+          assignedClients,
+          unassignedPlans: plans.filter(plan => plan.assignedClients === 0).length,
+        },
+        plans,
+      };
     },
-    plans,
-  };
+    { fresh: options?.fresh }
+  );
 }
 
 function toNullableNumber(value: unknown) {

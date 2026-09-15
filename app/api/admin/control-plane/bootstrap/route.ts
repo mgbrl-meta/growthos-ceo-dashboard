@@ -8,7 +8,11 @@ import {
 } from '@/lib/auth/platform-admin';
 
 import {
-  ensureGrowthOSAdminControlPlane,
+  invalidateAdminSnapshots,
+} from '@/lib/admin/snapshot-cache';
+
+import {
+  migrateGrowthOSAdminControlPlane,
   listGrowthOSModules,
   listGrowthOSPlans,
 } from '@/lib/admin/control-plane';
@@ -153,7 +157,8 @@ export async function POST(
     // 3. ENSURE CONTROL PLANE
     // ========================================================
 
-    await ensureGrowthOSAdminControlPlane();
+    await migrateGrowthOSAdminControlPlane();
+    invalidateAdminSnapshots();
 
 
     // ========================================================

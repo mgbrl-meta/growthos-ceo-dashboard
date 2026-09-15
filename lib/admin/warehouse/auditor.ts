@@ -2,6 +2,10 @@ import {
   bigquery,
 } from '@/lib/bigquery';
 
+import {
+  getCachedAdminSnapshot,
+} from '@/lib/admin/snapshot-cache';
+
 
 type WarehouseTableAudit = {
 
@@ -71,25 +75,71 @@ function requireProjectId() {
 }
 
 
-function getAuditDatasets() {
+function getExcludedAuditDatasets() {
 
   const raw =
-    process.env.GROWTHOS_AUDIT_DATASETS
+    process.env.GROWTHOS_AUDIT_EXCLUDE_DATASETS
     ||
     '';
 
 
-  return raw
+  return new Set(
+    raw
+      .split(',')
+      .map(
+        item =>
+          item.trim()
+      )
+      .filter(
+        Boolean
+      )
+  );
 
-    .split(',')
+}
+
+
+async function discoverAuditDatasets() {
+
+  const excluded =
+    getExcludedAuditDatasets();
+
+
+  // Platform Admin Warehouse should reflect the entire configured
+  // BigQuery project. Discover datasets from BigQuery instead of
+  // relying on a manually maintained allow-list in .env.local.
+  const [
+    datasets,
+  ] =
+    await bigquery.getDatasets();
+
+
+  return datasets
 
     .map(
-      item =>
-        item.trim()
+      dataset =>
+        String(
+          dataset.id
+          ||
+          ''
+        ).trim()
     )
 
     .filter(
-      Boolean
+      datasetId =>
+        Boolean(
+          datasetId
+        )
+        &&
+        !excluded.has(
+          datasetId
+        )
+    )
+
+    .sort(
+      (a, b) =>
+        a.localeCompare(
+          b
+        )
     );
 
 }
@@ -372,184 +422,221 @@ async function auditDataset(
       [];
 
 
+  // BigQuery table metadata calls are independent. The previous
+  // implementation awaited them one-by-one, which made a dataset
+  // with many tables take tens of seconds. Audit in bounded parallel
+  // batches so the route stays responsive without flooding the API.
+  const METADATA_CONCURRENCY = 12;
+
+
   for (
-    const table of tables
+    let offset = 0;
+    offset < tables.length;
+    offset += METADATA_CONCURRENCY
   ) {
 
-    try {
-
-      const [
-        metadata,
-      ] =
-        await table.getMetadata();
-
-
-      const rows =
-        asNumber(
-          metadata?.numRows
-        );
-
-
-      const bytes =
-        asNumber(
-          metadata?.numBytes
-        );
-
-
-      const timePartitioning =
-        metadata?.timePartitioning
-        ||
-        null;
-
-
-      const rangePartitioning =
-        metadata?.rangePartitioning
-        ||
-        null;
-
-
-      const partitioned =
-        Boolean(
-          timePartitioning
-          ||
-          rangePartitioning
-        );
-
-
-      const partitionField =
-        timePartitioning?.field
-        ||
-        rangePartitioning?.field
-        ||
-        null;
-
-
-      const partitionType =
-        timePartitioning?.type
-        ||
-        (
-          rangePartitioning
-            ? 'RANGE'
-            : null
-        );
-
-
-      const clusteringFields =
-        Array.isArray(
-          metadata?.clustering?.fields
-        )
-          ? metadata.clustering.fields
-          : [];
-
-
-      const tableType =
-        String(
-          metadata?.type
-          ||
-          'TABLE'
-        );
-
-
-      const classification =
-        classifyTable({
-
-          tableId:
-            String(
-              table.id
-            ),
-
-          tableType,
-
-          rows,
-
-          bytes,
-
-          partitioned,
-
-          clusteringFields,
-
-        });
-
-
-      auditedTables.push({
-
-        projectId,
-
-        datasetId,
-
-        tableId:
-          String(
-            table.id
-          ),
-
-        tableType,
-
-        rows,
-
-        bytes,
-
-        sizeMB:
-          Number(
-            (
-              bytes /
-              1024 /
-              1024
-            ).toFixed(
-              2
-            )
-          ),
-
-        sizeGB:
-          Number(
-            (
-              bytes /
-              1024 /
-              1024 /
-              1024
-            ).toFixed(
-              3
-            )
-          ),
-
-        partitioned,
-
-        partitionField,
-
-        partitionType,
-
-        clusteringFields,
-
-        createdAt:
-          asIso(
-            metadata?.creationTime
-          ),
-
-        modifiedAt:
-          asIso(
-            metadata?.lastModifiedTime
-          ),
-
-        issues:
-          classification.issues,
-
-        health:
-          classification.health,
-
-      });
-
-
-    } catch (
-      error: any
-    ) {
-
-      console.error(
-        'WAREHOUSE_TABLE_AUDIT_ERROR',
-        datasetId,
-        table.id,
-        error
+    const batch =
+      tables.slice(
+        offset,
+        offset + METADATA_CONCURRENCY
       );
 
-    }
+
+    const batchResults =
+      await Promise.all(
+        batch.map(
+          async table => {
+
+            try {
+
+              const [
+                metadata,
+              ] =
+                await table.getMetadata();
+
+
+              const rows =
+                asNumber(
+                  metadata?.numRows
+                );
+
+
+              const bytes =
+                asNumber(
+                  metadata?.numBytes
+                );
+
+
+              const timePartitioning =
+                metadata?.timePartitioning
+                ||
+                null;
+
+
+              const rangePartitioning =
+                metadata?.rangePartitioning
+                ||
+                null;
+
+
+              const partitioned =
+                Boolean(
+                  timePartitioning
+                  ||
+                  rangePartitioning
+                );
+
+
+              const partitionField =
+                timePartitioning?.field
+                ||
+                rangePartitioning?.field
+                ||
+                null;
+
+
+              const partitionType =
+                timePartitioning?.type
+                ||
+                (
+                  rangePartitioning
+                    ? 'RANGE'
+                    : null
+                );
+
+
+              const clusteringFields =
+                Array.isArray(
+                  metadata?.clustering?.fields
+                )
+                  ? metadata.clustering.fields
+                  : [];
+
+
+              const tableType =
+                String(
+                  metadata?.type
+                  ||
+                  'TABLE'
+                );
+
+
+              const classification =
+                classifyTable({
+
+                  tableId:
+                    String(
+                      table.id
+                    ),
+
+                  tableType,
+
+                  rows,
+
+                  bytes,
+
+                  partitioned,
+
+                  clusteringFields,
+
+                });
+
+
+              return {
+
+                projectId,
+
+                datasetId,
+
+                tableId:
+                  String(
+                    table.id
+                  ),
+
+                tableType,
+
+                rows,
+
+                bytes,
+
+                sizeMB:
+                  Number(
+                    (
+                      bytes /
+                      1024 /
+                      1024
+                    ).toFixed(
+                      2
+                    )
+                  ),
+
+                sizeGB:
+                  Number(
+                    (
+                      bytes /
+                      1024 /
+                      1024 /
+                      1024
+                    ).toFixed(
+                      3
+                    )
+                  ),
+
+                partitioned,
+
+                partitionField,
+
+                partitionType,
+
+                clusteringFields,
+
+                createdAt:
+                  asIso(
+                    metadata?.creationTime
+                  ),
+
+                modifiedAt:
+                  asIso(
+                    metadata?.lastModifiedTime
+                  ),
+
+                issues:
+                  classification.issues,
+
+                health:
+                  classification.health,
+
+              } satisfies WarehouseTableAudit;
+
+
+            } catch (
+              error: any
+            ) {
+
+              console.error(
+                'WAREHOUSE_TABLE_AUDIT_ERROR',
+                datasetId,
+                table.id,
+                error
+              );
+
+              return null;
+
+            }
+
+          }
+        )
+      );
+
+
+    auditedTables.push(
+      ...batchResults.filter(
+        (
+          table
+        ): table is WarehouseTableAudit =>
+          table !== null
+      )
+    );
 
   }
 
@@ -580,7 +667,7 @@ export async function auditWarehouse() {
 
 
   const datasets =
-    getAuditDatasets();
+    await discoverAuditDatasets();
 
 
   if (
@@ -589,28 +676,21 @@ export async function auditWarehouse() {
   ) {
 
     throw new Error(
-      'GROWTHOS_AUDIT_DATASETS is not configured'
+      `No BigQuery datasets were discovered in project ${projectId}`
     );
 
   }
 
 
   const results =
-    [];
-
-
-  for (
-    const datasetId
-    of datasets
-  ) {
-
-    results.push(
-      await auditDataset(
-        datasetId
+    await Promise.all(
+      datasets.map(
+        datasetId =>
+          auditDataset(
+            datasetId
+          )
       )
     );
-
-  }
 
 
   const tables =
@@ -727,4 +807,25 @@ export async function auditWarehouse() {
 
   };
 
+}
+
+// ============================================================
+// CACHED ADMIN READER
+//
+// Warehouse structure changes infrequently. Cache the read-only
+// audit for 10 minutes and let the UI explicitly bypass it when
+// an operator presses Refresh Audit.
+// ============================================================
+
+export async function getAdminWarehouseAuditSnapshot(
+  options?: { fresh?: boolean }
+) {
+  return getCachedAdminSnapshot(
+    'admin:warehouse-audit',
+    auditWarehouse,
+    {
+      fresh: options?.fresh,
+      ttlMs: 600000,
+    }
+  );
 }

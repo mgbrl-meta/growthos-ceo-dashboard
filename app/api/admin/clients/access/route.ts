@@ -9,16 +9,19 @@ import {
 
 import {
   getGrowthOSWorkspaceSubscriptionSnapshot,
-  upsertGrowthOSBrandModuleOverride,
 } from '@/lib/admin/control-plane';
 
 import {
-  upsertGrowthOSBrandSubmoduleOverride,
+  updateGrowthOSBrandCapabilityOverrides,
 } from '@/lib/admin/capability-control';
 
 import {
   writeGrowthOSAuditEventSafe,
 } from '@/lib/audit';
+
+import {
+  invalidateAdminSnapshots,
+} from '@/lib/admin/snapshot-cache';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -92,39 +95,25 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    for (const item of moduleOverrides) {
-      const moduleId = String(item?.moduleId || '').trim();
-      const moduleOverride = normalizeOverride(item?.override);
+    await updateGrowthOSBrandCapabilityOverrides({
+      workspaceId,
+      brandId,
+      moduleOverrides: moduleOverrides
+        .map((item: any) => ({
+          moduleId: String(item?.moduleId || '').trim(),
+          override: normalizeOverride(item?.override),
+        }))
+        .filter((item: any) => item.moduleId),
+      submoduleOverrides: submoduleOverrides
+        .map((item: any) => ({
+          moduleId: String(item?.moduleId || '').trim(),
+          submoduleId: String(item?.submoduleId || '').trim(),
+          override: normalizeOverride(item?.override),
+        }))
+        .filter((item: any) => item.moduleId && item.submoduleId),
+    });
 
-      if (!moduleId) {
-        continue;
-      }
-
-      await upsertGrowthOSBrandModuleOverride({
-        workspaceId,
-        brandId,
-        moduleId,
-        moduleOverride,
-      });
-    }
-
-    for (const item of submoduleOverrides) {
-      const moduleId = String(item?.moduleId || '').trim();
-      const submoduleId = String(item?.submoduleId || '').trim();
-      const submoduleOverride = normalizeOverride(item?.override);
-
-      if (!moduleId || !submoduleId) {
-        continue;
-      }
-
-      await upsertGrowthOSBrandSubmoduleOverride({
-        workspaceId,
-        brandId,
-        moduleId,
-        submoduleId,
-        submoduleOverride,
-      });
-    }
+    invalidateAdminSnapshots('admin:modules', 'admin:client-options');
 
     await writeGrowthOSAuditEventSafe({
       workspaceId,

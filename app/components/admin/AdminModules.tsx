@@ -106,30 +106,29 @@ const RELEASE_STAGES = [
 export default function AdminModules() {
   const [data, setData] = useState<ModulesResponse | null>(null);
   const [clients, setClients] = useState<AdminClient[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
 
-  async function load() {
+  async function load(fresh = false) {
     setLoading(true);
     setError(null);
 
     try {
-      const [moduleResponse, clientResponse] = await Promise.all([
-        fetch('/api/admin/modules', { cache: 'no-store', credentials: 'same-origin' }),
-        fetch('/api/admin/clients', { cache: 'no-store', credentials: 'same-origin' }),
-      ]);
+      const response = await fetch(
+        `/api/admin/modules${fresh ? '?fresh=1' : ''}`,
+        { cache: 'no-store', credentials: 'same-origin' }
+      );
 
-      const moduleJson: ModulesResponse = await moduleResponse.json();
-      const clientJson: ClientsResponse = await clientResponse.json();
+      const json: ModulesResponse = await response.json();
 
-      if (!moduleResponse.ok || !moduleJson.ok) {
-        throw new Error(moduleJson.error || 'Unable to load modules');
+      if (!response.ok || !json.ok) {
+        throw new Error(json.error || 'Unable to load modules');
       }
 
-      setData(moduleJson);
-      setClients(clientJson.ok ? clientJson.clients || [] : []);
+      setData(json);
     } catch (err: any) {
       setError(String(err?.message || 'Unable to load modules'));
     } finally {
@@ -137,9 +136,34 @@ export default function AdminModules() {
     }
   }
 
+  async function loadClients(fresh = false) {
+    if (clientsLoading) return;
+    if (!fresh && clients.length > 0) return;
+
+    setClientsLoading(true);
+    try {
+      const response = await fetch(
+        `/api/admin/clients?mode=options${fresh ? '&fresh=1' : ''}`,
+        { cache: 'no-store', credentials: 'same-origin' }
+      );
+      const json: ClientsResponse = await response.json();
+      if (response.ok && json.ok) {
+        setClients(json.clients || []);
+      }
+    } finally {
+      setClientsLoading(false);
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (selectedModuleId) {
+      void loadClients();
+    }
+  }, [selectedModuleId]);
 
   const modules = data?.modules || [];
   const filtered = useMemo(() => {
@@ -165,9 +189,10 @@ export default function AdminModules() {
       <ModuleDetail
         module={selected}
         clients={clients}
+        clientsLoading={clientsLoading}
         onBack={() => setSelectedModuleId(null)}
         onSaved={async () => {
-          await load();
+          await load(true);
         }}
       />
     );
@@ -188,7 +213,7 @@ export default function AdminModules() {
           </div>
           <button
             type="button"
-            onClick={load}
+            onClick={() => load(true)}
             disabled={loading}
             className="inline-flex h-8 items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-[9px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
@@ -273,11 +298,13 @@ export default function AdminModules() {
 function ModuleDetail({
   module,
   clients,
+  clientsLoading,
   onBack,
   onSaved,
 }: {
   module: AdminModule;
   clients: AdminClient[];
+  clientsLoading: boolean;
   onBack: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -418,7 +445,7 @@ function ModuleDetail({
               Parent audience control is intentionally disabled for Settings.
             </div>
           ) : releaseStage === 'beta' ? (
-            <AudiencePicker clients={clients} selected={audience} onChange={setAudience} />
+            <AudiencePicker clients={clients} selected={audience} onChange={setAudience} loading={clientsLoading} />
           ) : (
             <div className="mt-3 rounded-[8px] border border-slate-200 bg-slate-50 p-3 text-[9px] text-slate-500">
               {releaseStage === 'live'
@@ -447,6 +474,7 @@ function ModuleDetail({
                 key={`${submodule.moduleId}:${submodule.submoduleId}`}
                 submodule={submodule}
                 clients={clients}
+                clientsLoading={clientsLoading}
                 onSaved={onSaved}
               />
             ))
@@ -460,10 +488,12 @@ function ModuleDetail({
 function SubmoduleControl({
   submodule,
   clients,
+  clientsLoading,
   onSaved,
 }: {
   submodule: AdminSubmodule;
   clients: AdminClient[];
+  clientsLoading: boolean;
   onSaved: () => Promise<void>;
 }) {
   const [status, setStatus] = useState(submodule.status || 'active');
@@ -544,7 +574,7 @@ function SubmoduleControl({
           </div>
           {releaseStage === 'beta' && (
             <div className="mt-3">
-              <AudiencePicker clients={clients} selected={audience} onChange={setAudience} compact />
+              <AudiencePicker clients={clients} selected={audience} onChange={setAudience} compact loading={clientsLoading} />
             </div>
           )}
           <div className="mt-3 flex items-center justify-between gap-3">
@@ -570,11 +600,13 @@ function AudiencePicker({
   selected,
   onChange,
   compact = false,
+  loading = false,
 }: {
   clients: AdminClient[];
   selected: string[];
   onChange: (next: string[]) => void;
   compact?: boolean;
+  loading?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const visible = useMemo(() => {
@@ -599,7 +631,9 @@ function AudiencePicker({
         />
       </div>
       <div className="mt-2 max-h-[220px] space-y-1 overflow-y-auto rounded-[8px] border border-slate-200 p-1.5">
-        {visible.length === 0 ? (
+        {loading ? (
+          <div className="p-3 text-center text-[8px] text-slate-400">Loading clients…</div>
+        ) : visible.length === 0 ? (
           <div className="p-3 text-center text-[8px] text-slate-400">No clients found.</div>
         ) : visible.map(client => {
           const key = `${client.workspaceId}:${client.brandId}`;

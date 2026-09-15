@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { getCachedAdminSnapshot } from '@/lib/admin/snapshot-cache';
+
 import {
   bigquery,
 } from '@/lib/bigquery';
@@ -173,7 +175,7 @@ function requireProjectId() {
 // No retries triggered.
 // ============================================================
 
-export async function getAdminSyncHistory():
+async function loadAdminSyncHistory():
 
   Promise<
     AdminSyncHistorySnapshot
@@ -631,3 +633,18 @@ export async function getAdminSyncHistory():
   };
 
 }
+
+// ============================================================
+// CACHED ADMIN READER
+// ============================================================
+
+export async function getAdminSyncHistory(
+  options?: { fresh?: boolean }
+): Promise<AdminSyncHistorySnapshot> {
+  return getCachedAdminSnapshot(
+    'admin:sync-history',
+    loadAdminSyncHistory,
+    { fresh: options?.fresh }
+  );
+}
+

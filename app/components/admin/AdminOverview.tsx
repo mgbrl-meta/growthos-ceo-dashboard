@@ -300,7 +300,7 @@ export default function AdminOverview() {
   // LOAD
   // ==========================================================
 
-  async function loadOverview() {
+  async function loadOverview(fresh = false) {
 
     setLoading(
       true
@@ -316,7 +316,7 @@ export default function AdminOverview() {
 
       const response =
         await fetch(
-          '/api/admin/overview',
+          fresh ? '/api/admin/overview?fresh=1' : '/api/admin/overview',
           {
 
             cache:
@@ -504,9 +504,9 @@ export default function AdminOverview() {
 
             type="button"
 
-            onClick={
-              loadOverview
-            }
+            onClick={() => {
+              void loadOverview();
+            }}
 
             className="
               h-7
@@ -612,9 +612,9 @@ export default function AdminOverview() {
 
           type="button"
 
-          onClick={
-            loadOverview
-          }
+          onClick={() => {
+            void loadOverview(true);
+          }}
 
           disabled={
             loading

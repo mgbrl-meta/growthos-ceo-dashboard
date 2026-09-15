@@ -100,6 +100,153 @@ export type AuthIdentity = {
 };
 
 
+type AdminLiveAuthCacheEntry = {
+  identity?: AuthIdentity;
+  expiresAt: number;
+  promise?: Promise<AuthIdentity | null>;
+  sessionId?: string;
+  userId?: string;
+};
+
+type GlobalWithAdminLiveAuthCache = typeof globalThis & {
+  __growthosAdminLiveAuthCache?: Map<string, AdminLiveAuthCacheEntry>;
+};
+
+const adminLiveAuthGlobal = globalThis as GlobalWithAdminLiveAuthCache;
+const adminLiveAuthCache =
+  adminLiveAuthGlobal.__growthosAdminLiveAuthCache
+  || new Map<string, AdminLiveAuthCacheEntry>();
+adminLiveAuthGlobal.__growthosAdminLiveAuthCache = adminLiveAuthCache;
+
+const ADMIN_LIVE_AUTH_TTL_MS = Math.max(
+  5000,
+  Number(process.env.GROWTHOS_ADMIN_AUTH_CACHE_TTL_MS || 120000)
+);
+
+function isAdminRequestPath(request: NextRequest) {
+  const pathname = request.nextUrl?.pathname || '';
+  return pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWith('/api/admin/');
+}
+
+function adminAuthDebug(message: string) {
+  if (String(process.env.GROWTHOS_ADMIN_CACHE_DEBUG || '').trim().toLowerCase() === 'true') {
+    console.log(message);
+  }
+}
+
+async function authenticateAdminPasswordSessionFast(
+  request: NextRequest,
+  session: Awaited<ReturnType<typeof verifyGrowthOsSession>>
+): Promise<AuthIdentity | null> {
+  if (!isAdminRequestPath(request) || !session.sessionId) {
+    return null;
+  }
+
+  const cacheKey = [
+    session.sessionId,
+    session.userId,
+    session.workspaceId,
+    session.brandId,
+  ].join(':');
+
+  const now = Date.now();
+  const existing = adminLiveAuthCache.get(cacheKey);
+
+  if (existing?.identity && existing.expiresAt > now) {
+    adminAuthDebug(`[ADMIN_AUTH] LIVE_IDENTITY HIT user=${session.userId}`);
+    return existing.identity;
+  }
+
+  if (existing?.promise) {
+    adminAuthDebug(`[ADMIN_AUTH] LIVE_IDENTITY INFLIGHT user=${session.userId}`);
+    return existing.promise;
+  }
+
+  adminAuthDebug(`[ADMIN_AUTH] LIVE_IDENTITY MISS user=${session.userId}`);
+
+  const promise = Promise.all([
+    getGrowthOSSecuritySessionFast(session.sessionId, session.userId),
+    getActiveBrandMembershipFast(
+      session.userId,
+      session.workspaceId,
+      session.brandId
+    ),
+  ])
+    .then(([liveSecuritySession, membership]) => {
+      if (
+        !liveSecuritySession
+        || liveSecuritySession.workspace_id !== session.workspaceId
+        || liveSecuritySession.brand_id !== session.brandId
+        || !membership
+      ) {
+        adminLiveAuthCache.delete(cacheKey);
+        return null;
+      }
+
+      const identity: AuthIdentity = {
+        authSource: 'public',
+        userId: session.userId,
+        authSessionId: session.sessionId,
+        email: session.email,
+        workspaceId: membership.workspace_id,
+        brandId: membership.brand_id,
+        role: membership.role,
+        authMethod: session.authMethod,
+        tenantId: session.tenantId,
+      };
+
+      adminLiveAuthCache.set(cacheKey, {
+        identity,
+        expiresAt: Date.now() + ADMIN_LIVE_AUTH_TTL_MS,
+        sessionId: session.sessionId,
+        userId: session.userId,
+      });
+
+      return identity;
+    })
+    .catch(error => {
+      adminLiveAuthCache.delete(cacheKey);
+      throw error;
+    });
+
+  adminLiveAuthCache.set(cacheKey, {
+    expiresAt: 0,
+    promise,
+    sessionId: session.sessionId,
+    userId: session.userId,
+  });
+
+  return promise;
+}
+
+
+export function invalidateAdminLiveAuthCache(options?: {
+  sessionId?: string;
+  userId?: string;
+}) {
+  const sessionId = String(options?.sessionId || '').trim();
+  const userId = String(options?.userId || '').trim();
+
+  if (!sessionId && !userId) {
+    adminAuthDebug('[ADMIN_AUTH] LIVE_IDENTITY INVALIDATE all');
+    adminLiveAuthCache.clear();
+    return;
+  }
+
+  for (const [key, entry] of adminLiveAuthCache.entries()) {
+    const matchesSession = !sessionId || entry.sessionId === sessionId;
+    const matchesUser = !userId || entry.userId === userId;
+
+    if (matchesSession && matchesUser) {
+      adminAuthDebug(
+        `[ADMIN_AUTH] LIVE_IDENTITY INVALIDATE user=${entry.userId || userId || 'unknown'} session=${entry.sessionId || sessionId || 'unknown'}`
+      );
+      adminLiveAuthCache.delete(key);
+    }
+  }
+}
+
+
 // ============================================================
 // AUTHENTICATE
 //
@@ -274,6 +421,17 @@ if (!session.sessionId) {
 
   return null;
 
+}
+
+
+const adminIdentity =
+  await authenticateAdminPasswordSessionFast(
+    request,
+    session
+  );
+
+if (adminIdentity) {
+  return adminIdentity;
 }
 
 

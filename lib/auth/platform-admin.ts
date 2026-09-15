@@ -38,6 +38,60 @@ const LOCATION =
   'asia-south1';
 
 
+type PlatformAdminCacheEntry = {
+  value: PlatformAdminRecord | null;
+  expiresAt: number;
+  promise?: Promise<PlatformAdminRecord | null>;
+};
+
+type GlobalWithPlatformAdminCache = typeof globalThis & {
+  __growthosPlatformAdminCache?: Map<string, PlatformAdminCacheEntry>;
+};
+
+const platformAdminGlobal = globalThis as GlobalWithPlatformAdminCache;
+const platformAdminCache =
+  platformAdminGlobal.__growthosPlatformAdminCache
+  || new Map<string, PlatformAdminCacheEntry>();
+platformAdminGlobal.__growthosPlatformAdminCache = platformAdminCache;
+
+const PLATFORM_ADMIN_CACHE_TTL_MS = Math.max(
+  5000,
+  Number(process.env.GROWTHOS_PLATFORM_ADMIN_CACHE_TTL_MS || 60000)
+);
+
+function adminAuthDebug(message: string) {
+  if (String(process.env.GROWTHOS_ADMIN_CACHE_DEBUG || '').trim().toLowerCase() === 'true') {
+    console.log(message);
+  }
+}
+
+function readProxyAuthIdentity(request: NextRequest): AuthIdentity | null {
+  if (request.headers.get('x-growthos-proxy-authenticated') !== '1') {
+    return null;
+  }
+
+  const authSource = request.headers.get('x-growthos-auth-source');
+  const userId = request.headers.get('x-growthos-user-id');
+  const tenantId = request.headers.get('x-growthos-tenant-id');
+
+  if ((authSource !== 'public' && authSource !== 'shopify') || !userId || !tenantId) {
+    return null;
+  }
+
+  return {
+    authSource,
+    userId,
+    tenantId,
+    workspaceId: request.headers.get('x-growthos-workspace-id') || undefined,
+    brandId: request.headers.get('x-growthos-brand-id') || undefined,
+    role: (request.headers.get('x-growthos-role') || undefined) as AuthIdentity['role'],
+    authMethod: (request.headers.get('x-growthos-auth-method') || undefined) as AuthIdentity['authMethod'],
+    shopId: request.headers.get('x-growthos-shop-id') || undefined,
+    shopDomain: request.headers.get('x-growthos-shop-domain') || undefined,
+  };
+}
+
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -124,7 +178,7 @@ function requireProjectId() {
 // admin
 // ============================================================
 
-export async function getPlatformAdminByUserId(
+async function loadPlatformAdminByUserId(
 
   userId:
     string
@@ -296,6 +350,62 @@ export async function getPlatformAdminByUserId(
 }
 
 
+export async function getPlatformAdminByUserId(
+  userId: string
+): Promise<PlatformAdminRecord | null> {
+  const normalizedUserId = String(userId || '').trim();
+
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  const now = Date.now();
+  const existing = platformAdminCache.get(normalizedUserId);
+
+  if (existing?.value !== undefined && existing.expiresAt > now) {
+    adminAuthDebug(`[ADMIN_AUTH] PLATFORM_ADMIN HIT user=${normalizedUserId}`);
+    return existing.value;
+  }
+
+  if (existing?.promise) {
+    adminAuthDebug(`[ADMIN_AUTH] PLATFORM_ADMIN INFLIGHT user=${normalizedUserId}`);
+    return existing.promise;
+  }
+
+  adminAuthDebug(`[ADMIN_AUTH] PLATFORM_ADMIN MISS user=${normalizedUserId}`);
+
+  const promise = loadPlatformAdminByUserId(normalizedUserId)
+    .then(value => {
+      platformAdminCache.set(normalizedUserId, {
+        value,
+        expiresAt: Date.now() + PLATFORM_ADMIN_CACHE_TTL_MS,
+      });
+      return value;
+    })
+    .catch(error => {
+      platformAdminCache.delete(normalizedUserId);
+      throw error;
+    });
+
+  platformAdminCache.set(normalizedUserId, {
+    value: existing?.value ?? null,
+    expiresAt: existing?.expiresAt || 0,
+    promise,
+  });
+
+  return promise;
+}
+
+export function invalidatePlatformAdminCache(userId?: string) {
+  if (userId) {
+    platformAdminCache.delete(String(userId).trim());
+    return;
+  }
+
+  platformAdminCache.clear();
+}
+
+
 // ============================================================
 // IS PLATFORM ADMIN
 // ============================================================
@@ -391,7 +501,15 @@ export async function requirePlatformAdmin(
   // 1. REQUIRE AUTHENTICATED SESSION
   // ==========================================================
 
+  const proxyIdentity = readProxyAuthIdentity(request);
+
+  if (proxyIdentity) {
+    adminAuthDebug(`[ADMIN_AUTH] PROXY_IDENTITY user=${proxyIdentity.userId}`);
+  }
+
   const identity =
+    proxyIdentity
+    ||
     await requireRequestAuth(
       request
     );

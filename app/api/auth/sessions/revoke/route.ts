@@ -5,6 +5,7 @@ import {
 
 import {
   authenticateRequest,
+  invalidateAdminLiveAuthCache,
 } from '@/lib/auth/request-auth';
 
 import {
@@ -140,6 +141,11 @@ export async function POST(
       identity.userId,
       sessionId
     );
+
+    invalidateAdminLiveAuthCache({
+      userId: identity.userId,
+      sessionId,
+    });
 
 
     const currentRevoked =

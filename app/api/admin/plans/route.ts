@@ -19,6 +19,10 @@ import {
   writeGrowthOSAuditEventSafe,
 } from '@/lib/audit';
 
+import {
+  invalidateAdminSnapshots,
+} from '@/lib/admin/snapshot-cache';
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -27,7 +31,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const admin = await requirePlatformAdmin(request);
-    const snapshot = await getAdminPlansSnapshot();
+    const url = new URL(request.url);
+    const fresh = url.searchParams.get('fresh') === '1';
+    const snapshot = await getAdminPlansSnapshot({ fresh });
 
     return NextResponse.json({
       ok: true,
@@ -88,12 +94,10 @@ export async function PATCH(request: NextRequest) {
       request,
     });
 
-    const snapshot = await getAdminPlansSnapshot();
+    invalidateAdminSnapshots('admin:plans', 'admin:modules');
 
     return NextResponse.json({
       ok: true,
-      summary: snapshot.summary,
-      plans: snapshot.plans,
       meta: {
         durationMs: Date.now() - startedAt,
         authorization: 'platform_admin',

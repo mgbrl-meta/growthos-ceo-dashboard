@@ -241,7 +241,7 @@ export default function AdminDataHealth() {
   // LOAD
   // ==========================================================
 
-  async function loadDataHealth() {
+  async function loadDataHealth(fresh = false) {
 
     setLoading(
       true
@@ -257,7 +257,7 @@ export default function AdminDataHealth() {
 
       const response =
         await fetch(
-          '/api/admin/data-health',
+          fresh ? '/api/admin/data-health?fresh=1' : '/api/admin/data-health',
           {
             cache:
               'no-store',
@@ -727,9 +727,9 @@ export default function AdminDataHealth() {
 
             type="button"
 
-            onClick={
-              loadDataHealth
-            }
+            onClick={() => {
+              void loadDataHealth();
+            }}
 
             className="
               h-7
@@ -855,9 +855,9 @@ export default function AdminDataHealth() {
 
           type="button"
 
-          onClick={
-            loadDataHealth
-          }
+          onClick={() => {
+            void loadDataHealth(true);
+          }}
 
           disabled={
             loading
