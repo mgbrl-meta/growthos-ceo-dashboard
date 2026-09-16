@@ -457,6 +457,247 @@ const CUSTOMERS_QUERY = `
 `;
 
 // ============================================================
+// PRODUCTS QUERY
+//
+// Canonical Product representation.
+//
+// SAME field set must be used by:
+//
+// manual Product sync
+// future incremental reconciliation
+// Bulk historical backfill
+// realtime webhook GraphQL re-fetch
+//
+// IMPORTANT:
+//
+// ProductVariant is intentionally NOT embedded here.
+//
+// Products and ProductVariants are different Shopify entities.
+// This prevents variant pagination/truncation from changing the
+// canonical Product hash between realtime and historical paths.
+//
+// Incremental contract:
+//
+// [from, to)
+//
+// updated_at >= from
+// updated_at <  to
+// ============================================================
+
+const PRODUCTS_QUERY = `
+
+  query GrowthOsProductsPage(
+    $first: Int!
+    $after: String
+    $searchQuery: String
+    $reverse: Boolean!
+  ) {
+
+    products(
+      first: $first
+      after: $after
+      query: $searchQuery
+      sortKey: UPDATED_AT
+      reverse: $reverse
+    ) {
+
+      pageInfo {
+
+        hasNextPage
+        endCursor
+
+      }
+
+
+      nodes {
+
+        id
+
+        legacyResourceId
+
+        title
+        handle
+
+        descriptionHtml
+
+        vendor
+        productType
+
+        status
+
+        tags
+
+        createdAt
+        updatedAt
+        publishedAt
+
+        templateSuffix
+
+        hasOnlyDefaultVariant
+
+        totalInventory
+        tracksInventory
+
+
+        variantsCount {
+
+          count
+
+        }
+
+
+        priceRangeV2 {
+
+          minVariantPrice {
+
+            amount
+            currencyCode
+
+          }
+
+          maxVariantPrice {
+
+            amount
+            currencyCode
+
+          }
+
+        }
+
+
+        options {
+
+          id
+          name
+          position
+          values
+
+        }
+
+
+        seo {
+
+          title
+          description
+
+        }
+
+      }
+
+    }
+
+  }
+
+`;
+
+
+// ============================================================
+// ONE PRODUCT QUERY
+//
+// Realtime webhook path.
+//
+// IMPORTANT:
+//
+// Field set intentionally matches PRODUCTS_QUERY exactly.
+//
+// Webhook payload
+//      ↓
+// Product GID
+//      ↓
+// canonical GraphQL Product
+//      ↓
+// same Product writer used by all ingestion paths.
+// ============================================================
+
+const PRODUCT_BY_ID_QUERY = `
+
+  query GrowthOsProductById(
+    $id: ID!
+  ) {
+
+    product(
+      id: $id
+    ) {
+
+      id
+
+      legacyResourceId
+
+      title
+      handle
+
+      descriptionHtml
+
+      vendor
+      productType
+
+      status
+
+      tags
+
+      createdAt
+      updatedAt
+      publishedAt
+
+      templateSuffix
+
+      hasOnlyDefaultVariant
+
+      totalInventory
+      tracksInventory
+
+
+      variantsCount {
+
+        count
+
+      }
+
+
+      priceRangeV2 {
+
+        minVariantPrice {
+
+          amount
+          currencyCode
+
+        }
+
+        maxVariantPrice {
+
+          amount
+          currencyCode
+
+        }
+
+      }
+
+
+      options {
+
+        id
+        name
+        position
+        values
+
+      }
+
+
+      seo {
+
+        title
+        description
+
+      }
+
+    }
+
+  }
+
+`;
+
+
+// ============================================================
 // ONE CUSTOMER QUERY
 //
 // Realtime Customer webhook path.
@@ -822,6 +1063,86 @@ function buildCustomersUpdatedSearch(
 
     `updated_at:<'${normalizedTo}'`,
 
+  ].join(
+    ' '
+  );
+
+}
+
+// ============================================================
+// PRODUCT UPDATED_AT SEARCH
+//
+// Canonical incremental range:
+//
+// [from, to)
+//
+// Shopify search narrows the source request.
+// Growth OS still performs its own local boundary check.
+// ============================================================
+
+function buildProductsUpdatedSearch(
+  from,
+  to
+) {
+
+  if (
+    !from
+    &&
+    !to
+  ) {
+
+    return null;
+
+  }
+
+
+  if (
+    !from
+    ||
+    !to
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_UPDATED_WINDOW_INCOMPLETE'
+    );
+
+  }
+
+
+  const normalizedFrom =
+    normalizeTimestamp(
+      from,
+      'SHOPIFY_PRODUCTS_UPDATED_FROM_INVALID'
+    );
+
+
+  const normalizedTo =
+    normalizeTimestamp(
+      to,
+      'SHOPIFY_PRODUCTS_UPDATED_TO_INVALID'
+    );
+
+
+  if (
+    Date.parse(
+      normalizedFrom
+    )
+    >=
+    Date.parse(
+      normalizedTo
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_UPDATED_WINDOW_INVALID'
+    );
+
+  }
+
+
+  return [
+    `updated_at:>='${normalizedFrom}'`,
+    `updated_at:<'${normalizedTo}'`,
   ].join(
     ' '
   );
@@ -1803,6 +2124,439 @@ export async function fetchCustomersPage(
 
 }
 
+// ============================================================
+// FETCH PRODUCTS PAGE
+//
+// Same pagination / recovery contract as Orders + Customers.
+//
+// Manual:
+//
+// first = 25
+// latest → oldest
+//
+// Incremental:
+//
+// first = 250
+// after = cursor
+// [from, to)
+// UPDATED_AT
+// oldest → newest
+// ============================================================
+
+export async function fetchProductsPage(
+  runtime,
+  options = {}
+) {
+
+  // ==========================================================
+  // PAGE SIZE
+  // ==========================================================
+
+  const first =
+    Math.min(
+      Math.max(
+        Number(
+          options.first
+          ??
+          25
+        ),
+        1
+      ),
+      250
+    );
+
+
+  // ==========================================================
+  // CURSOR
+  // ==========================================================
+
+  const after =
+    String(
+      options.after
+      ??
+      ''
+    ).trim()
+    ||
+    null;
+
+
+  // ==========================================================
+  // UPDATED WINDOW
+  // ==========================================================
+
+  const searchQuery =
+    buildProductsUpdatedSearch(
+
+      options.from
+      ??
+      null,
+
+      options.to
+      ??
+      null
+
+    );
+
+
+  // ==========================================================
+  // DIRECTION
+  //
+  // windowed:
+  // oldest → newest
+  //
+  // manual:
+  // latest → oldest
+  // ==========================================================
+
+  const reverse =
+    searchQuery
+      ?
+        false
+      :
+        Boolean(
+          options.reverse
+          ??
+          true
+        );
+
+
+  // ==========================================================
+  // VALID / REFRESHED TOKEN
+  // ==========================================================
+
+  let token =
+    await getValidShopifyAccessToken(
+      runtime
+    );
+
+
+  const variables = {
+
+    first,
+
+    after,
+
+    searchQuery,
+
+    reverse,
+
+  };
+
+
+  // ==========================================================
+  // FIRST REQUEST
+  // ==========================================================
+
+  let result =
+    await executeGraphQL({
+
+      shopDomain:
+        runtime
+          .credential
+          .shopDomain,
+
+      accessToken:
+        token.accessToken,
+
+      query:
+        PRODUCTS_QUERY,
+
+      variables,
+
+    });
+
+
+  // ==========================================================
+  // 401 RECOVERY
+  // ==========================================================
+
+  if (
+    result
+      .response
+      .status ===
+        401
+  ) {
+
+    token =
+      await getValidShopifyAccessToken(
+
+        runtime,
+
+        {
+
+          forceRefresh:
+            true,
+
+        }
+
+      );
+
+
+    result =
+      await executeGraphQL({
+
+        shopDomain:
+          runtime
+            .credential
+            .shopDomain,
+
+        accessToken:
+          token.accessToken,
+
+        query:
+          PRODUCTS_QUERY,
+
+        variables,
+
+      });
+
+  }
+
+
+  // ==========================================================
+  // HTTP ERROR
+  // ==========================================================
+
+  if (
+    !result
+      .response
+      .ok
+  ) {
+
+    console.error(
+      'SHOPIFY_PRODUCTS_HTTP_ERROR',
+      {
+
+        status:
+          result
+            .response
+            .status,
+
+      }
+    );
+
+
+    throw new Error(
+      `SHOPIFY_PRODUCTS_HTTP_${result.response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL ERROR
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      result
+        .json
+        ?.errors
+    )
+    &&
+    result
+      .json
+      .errors
+      .length >
+        0
+  ) {
+
+    console.error(
+      'SHOPIFY_PRODUCTS_GRAPHQL_ERROR',
+      {
+
+        errors:
+          result
+            .json
+            .errors
+            .map(
+              error => ({
+
+                message:
+                  String(
+                    error?.message
+                    ??
+                    'Unknown GraphQL error'
+                  ),
+
+              })
+            ),
+
+      }
+    );
+
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_GRAPHQL_ERROR'
+    );
+
+  }
+
+
+  // ==========================================================
+  // CONNECTION
+  // ==========================================================
+
+  const connection =
+    result
+      .json
+      ?.data
+      ?.products;
+
+
+  if (!connection) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_RESPONSE_MISSING'
+    );
+
+  }
+
+
+  const sourceProducts =
+    Array.isArray(
+      connection.nodes
+    )
+      ?
+        connection.nodes
+      :
+        [];
+
+
+  // ==========================================================
+  // LOCAL [FROM, TO) GUARD
+  // ==========================================================
+
+  let products =
+    sourceProducts;
+
+
+  if (
+    options.from
+    &&
+    options.to
+  ) {
+
+    const fromTime =
+      Date.parse(
+        options.from
+      );
+
+
+    const toTime =
+      Date.parse(
+        options.to
+      );
+
+
+    products =
+      sourceProducts.filter(
+        product => {
+
+          const updatedTime =
+            Date.parse(
+              String(
+                product?.updatedAt
+                ??
+                ''
+              )
+            );
+
+
+          if (
+            Number.isNaN(
+              updatedTime
+            )
+          ) {
+
+            throw new Error(
+              'SHOPIFY_PRODUCT_UPDATED_AT_INVALID'
+            );
+
+          }
+
+
+          return (
+            updatedTime >=
+              fromTime
+            &&
+            updatedTime <
+              toTime
+          );
+
+        }
+      );
+
+  }
+
+
+  // ==========================================================
+  // RESULT
+  // ==========================================================
+
+  return {
+
+    products,
+
+    pageInfo: {
+
+      hasNextPage:
+        Boolean(
+          connection
+            .pageInfo
+            ?.hasNextPage
+        ),
+
+      endCursor:
+        connection
+          .pageInfo
+          ?.endCursor
+        ??
+        null,
+
+    },
+
+    query: {
+
+      from:
+        options.from
+        ??
+        null,
+
+      to:
+        options.to
+        ??
+        null,
+
+      searchQuery,
+
+      reverse,
+
+      cursorPresent:
+        Boolean(
+          after
+        ),
+
+      sourceRecordsFetched:
+        sourceProducts.length,
+
+      recordsFilteredOut:
+        sourceProducts.length
+        -
+        products.length,
+
+    },
+
+    tokenRefreshed:
+      Boolean(
+        token
+          ?.refreshed
+      ),
+
+  };
+
+}
+
 
 // ============================================================
 // FETCH ONE SHOPIFY ORDER
@@ -2223,6 +2977,223 @@ export async function fetchShopifyCustomerById(
         .json
         ?.data
         ?.customer
+      ??
+      null,
+
+    tokenRefreshed:
+      Boolean(
+        token
+          ?.refreshed
+      ),
+
+  };
+
+}
+
+// ============================================================
+// FETCH ONE SHOPIFY PRODUCT
+//
+// Used by future realtime Product webhook processing.
+//
+// Uses exactly the same canonical Product field set as
+// fetchProductsPage().
+// ============================================================
+
+export async function fetchShopifyProductById(
+  runtime,
+  productId
+) {
+
+  const id =
+    String(
+      productId
+      ??
+      ''
+    ).trim();
+
+
+  if (
+    !id.startsWith(
+      'gid://shopify/Product/'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_ID_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // VALID TOKEN
+  // ==========================================================
+
+  let token =
+    await getValidShopifyAccessToken(
+      runtime
+    );
+
+
+  // ==========================================================
+  // QUERY
+  // ==========================================================
+
+  let result =
+    await executeGraphQL({
+
+      shopDomain:
+        runtime
+          .credential
+          .shopDomain,
+
+      accessToken:
+        token.accessToken,
+
+      query:
+        PRODUCT_BY_ID_QUERY,
+
+      variables: {
+
+        id,
+
+      },
+
+    });
+
+
+  // ==========================================================
+  // 401 RECOVERY
+  // ==========================================================
+
+  if (
+    result
+      .response
+      .status ===
+        401
+  ) {
+
+    token =
+      await getValidShopifyAccessToken(
+
+        runtime,
+
+        {
+
+          forceRefresh:
+            true,
+
+        }
+
+      );
+
+
+    result =
+      await executeGraphQL({
+
+        shopDomain:
+          runtime
+            .credential
+            .shopDomain,
+
+        accessToken:
+          token.accessToken,
+
+        query:
+          PRODUCT_BY_ID_QUERY,
+
+        variables: {
+
+          id,
+
+        },
+
+      });
+
+  }
+
+
+  // ==========================================================
+  // HTTP ERROR
+  // ==========================================================
+
+  if (
+    !result
+      .response
+      .ok
+  ) {
+
+    throw new Error(
+      `SHOPIFY_PRODUCT_HTTP_${result.response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL ERROR
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      result
+        .json
+        ?.errors
+    )
+    &&
+    result
+      .json
+      .errors
+      .length >
+        0
+  ) {
+
+    console.error(
+      'SHOPIFY_PRODUCT_GRAPHQL_ERROR',
+      {
+
+        productId:
+          id,
+
+        errors:
+          result
+            .json
+            .errors
+            .map(
+              error => ({
+
+                message:
+                  String(
+                    error?.message
+                    ??
+                    'Unknown GraphQL error'
+                  ),
+
+              })
+            ),
+
+      }
+    );
+
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_GRAPHQL_ERROR'
+    );
+
+  }
+
+
+  // ==========================================================
+  // RESULT
+  // ==========================================================
+
+  return {
+
+    product:
+      result
+        .json
+        ?.data
+        ?.product
       ??
       null,
 

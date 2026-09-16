@@ -7,9 +7,11 @@ import {
 import {
   fetchOrdersPage,
   fetchCustomersPage,
+  fetchProductsPage,
   fetchEarliestShopifyOrder,
   fetchShopifyOrderById,
   fetchShopifyCustomerById,
+  fetchShopifyProductById,
 } from './shopify-api.js';
 
 import {
@@ -19,6 +21,10 @@ import {
 import {
   writeShopifyCustomers,
 } from './shopify-customer-writer.js';
+
+import {
+  writeShopifyProducts,
+} from './shopify-product-writer.js';
 
 import {
   startOrdersBulkOperation,
@@ -1505,6 +1511,181 @@ app.post(
 
       }
 
+            // ======================================================
+      // PRODUCTS — MANUAL SYNC
+      //
+      // Manual Product jobs are handled here.
+      //
+      // This is the controlled validation path for the
+      // canonical Product API + Product warehouse writer.
+      //
+      // Historical Product backfill, incremental,
+      // reconciliation and realtime webhook processing remain
+      // fail-closed until their dedicated production paths are
+      // implemented and validated.
+      // ======================================================
+
+      if (
+        job.entity ===
+          'products'
+        &&
+        job.syncType ===
+          'manual'
+      ) {
+
+
+        // ====================================================
+        // RUNTIME / CREDENTIAL
+        // ====================================================
+
+        const runtime =
+          await resolveShopifyRuntimeContext(
+            job
+          );
+
+
+        // ====================================================
+        // FETCH LATEST 25 PRODUCTS
+        // ====================================================
+
+        const page =
+          await fetchProductsPage(
+
+            runtime,
+
+            {
+
+              first:
+                25,
+
+              after:
+                null,
+
+              reverse:
+                true,
+
+            }
+
+          );
+
+
+        // ====================================================
+        // CANONICAL WAREHOUSE WRITE
+        // ====================================================
+
+        const warehouse =
+          await writeShopifyProducts({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            products:
+              page.products,
+
+          });
+
+
+        // ====================================================
+        // RESULT
+        // ====================================================
+
+        console.log(
+          'SHOPIFY_PRODUCTS_SYNC_COMPLETED',
+          {
+
+            pubsubMessageId:
+              message.messageId
+              ??
+              null,
+
+            jobId:
+              job.jobId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            entity:
+              'products',
+
+            syncType:
+              job.syncType,
+
+            recordsFetched:
+              page.products.length,
+
+            firstProductId:
+              page.products[0]
+                ?.id
+              ??
+              null,
+
+            firstProductUpdatedAt:
+              page.products[0]
+                ?.updatedAt
+              ??
+              null,
+
+            lastProductId:
+              page.products[
+                page.products.length - 1
+              ]
+                ?.id
+              ??
+              null,
+
+            lastProductUpdatedAt:
+              page.products[
+                page.products.length - 1
+              ]
+                ?.updatedAt
+              ??
+              null,
+
+            hasNextPage:
+              page.pageInfo.hasNextPage,
+
+            tokenRefreshed:
+              page.tokenRefreshed,
+
+            warehouseReceived:
+              warehouse.received,
+
+            warehouseChanged:
+              warehouse.changed,
+
+            warehouseSkipped:
+              warehouse.skipped,
+
+            warehouseLoaded:
+              warehouse.loaded,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          }
+        );
+
+
+        return res
+          .status(204)
+          .end();
+
+      }
+
 
       // ======================================================
       // SUPPORTED ROUTING
@@ -1517,6 +1698,9 @@ app.post(
       //   reconciliation
       //
       // customers
+      //   manual is handled above
+      //
+      // products
       //   manual is handled above
       //
       // Historical backfill:
