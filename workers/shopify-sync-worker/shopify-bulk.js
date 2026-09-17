@@ -329,6 +329,139 @@ function buildCustomersBulkQuery(
 }
 
 // ============================================================
+// PRODUCTS BULK QUERY
+//
+// Historical Product bootstrap contract:
+//
+// [from, to)
+//
+// created_at >= start
+// created_at <  end
+//
+// IMPORTANT:
+//
+// This field set intentionally matches PRODUCTS_QUERY and
+// PRODUCT_BY_ID_QUERY from shopify-api.js.
+//
+// Therefore:
+//
+// manual
+// future incremental/reconciliation
+// future realtime webhook
+// historical Bulk
+//
+// all converge on exactly the same canonical Product payload.
+//
+// ProductVariants are intentionally NOT expanded as a nested
+// connection here. Product remains the canonical root entity.
+// ============================================================
+
+function buildProductsBulkQuery(
+  from,
+  to
+) {
+
+  const search =
+    `created_at:>='${from}' AND created_at:<'${to}'`;
+
+
+  return `
+
+    {
+
+      products(
+        query: "${search}"
+        sortKey: CREATED_AT
+      ) {
+
+        edges {
+
+          node {
+
+            id
+
+            legacyResourceId
+
+            title
+            handle
+
+            descriptionHtml
+
+            vendor
+            productType
+
+            status
+
+            tags
+
+            createdAt
+            updatedAt
+            publishedAt
+
+            templateSuffix
+
+            hasOnlyDefaultVariant
+
+            totalInventory
+            tracksInventory
+
+
+            variantsCount {
+
+              count
+
+            }
+
+
+            priceRangeV2 {
+
+              minVariantPrice {
+
+                amount
+                currencyCode
+
+              }
+
+              maxVariantPrice {
+
+                amount
+                currencyCode
+
+              }
+
+            }
+
+
+            options {
+
+              id
+              name
+              position
+              values
+
+            }
+
+
+            seo {
+
+              title
+              description
+
+            }
+
+          }
+
+        }
+
+      }
+
+    }
+
+  `;
+
+}
+
+// ============================================================
 // EXECUTE
 // ============================================================
 
@@ -834,6 +967,271 @@ export async function startCustomersBulkOperation(
 
   }
 
+
+  return {
+
+    id:
+      operation.id,
+
+    status:
+      operation.status,
+
+    createdAt:
+      operation.createdAt
+      ??
+      null,
+
+    tokenRefreshed:
+      token.refreshed,
+
+  };
+
+}
+
+// ============================================================
+// START PRODUCTS BULK OPERATION
+//
+// Same credential + Shopify Bulk lifecycle as Orders and
+// Customers.
+//
+// This function ONLY starts the Shopify source operation.
+//
+// It does not:
+//
+// - modify Growth OS backfill state
+// - download/store the result
+// - stage BigQuery
+// - write Product RAW / STATE
+//
+// Those responsibilities remain in the existing shared
+// backfill orchestration.
+// ============================================================
+
+export async function startProductsBulkOperation(
+  runtime,
+  input
+) {
+
+  // ==========================================================
+  // WINDOW
+  // ==========================================================
+
+  if (
+    !input?.from
+    ||
+    !input?.to
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_BULK_WINDOW_MISSING'
+    );
+
+  }
+
+
+  // ==========================================================
+  // TOKEN
+  // ==========================================================
+
+  let token =
+    await getValidShopifyAccessToken(
+      runtime
+    );
+
+
+  // ==========================================================
+  // BULK QUERY
+  // ==========================================================
+
+  const bulkQuery =
+    buildProductsBulkQuery(
+      input.from,
+      input.to
+    );
+
+
+  // ==========================================================
+  // START OPERATION
+  // ==========================================================
+
+  let result =
+    await execute(
+
+      runtime,
+
+      token.accessToken,
+
+      START_BULK_MUTATION,
+
+      {
+
+        query:
+          bulkQuery,
+
+        groupObjects:
+          false,
+
+      }
+
+    );
+
+
+  // ==========================================================
+  // 401 → REFRESH ONCE → RETRY
+  // ==========================================================
+
+  if (
+    result.response.status ===
+      401
+  ) {
+
+    token =
+      await getValidShopifyAccessToken(
+
+        runtime,
+
+        {
+
+          forceRefresh:
+            true,
+
+        }
+
+      );
+
+
+    result =
+      await execute(
+
+        runtime,
+
+        token.accessToken,
+
+        START_BULK_MUTATION,
+
+        {
+
+          query:
+            bulkQuery,
+
+          groupObjects:
+            false,
+
+        }
+
+      );
+
+  }
+
+
+  // ==========================================================
+  // HTTP FAILURE
+  // ==========================================================
+
+  if (
+    !result.response.ok
+  ) {
+
+    throw new Error(
+      `SHOPIFY_PRODUCTS_BULK_HTTP_${result.response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL FAILURE
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      result.json?.errors
+    )
+    &&
+    result.json.errors.length >
+      0
+  ) {
+
+    console.error(
+      'SHOPIFY_PRODUCTS_BULK_GRAPHQL_ERROR',
+      {
+
+        errors:
+          result.json.errors.map(
+            error =>
+              error?.message
+              ??
+              'Unknown GraphQL error'
+          ),
+
+      }
+    );
+
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_BULK_GRAPHQL_FAILED'
+    );
+
+  }
+
+
+  // ==========================================================
+  // MUTATION PAYLOAD
+  // ==========================================================
+
+  const payload =
+    result
+      .json
+      ?.data
+      ?.bulkOperationRunQuery;
+
+
+  const userErrors =
+    payload?.userErrors
+    ??
+    [];
+
+
+  if (
+    userErrors.length >
+      0
+  ) {
+
+    console.error(
+      'SHOPIFY_PRODUCTS_BULK_USER_ERRORS',
+      userErrors
+    );
+
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_BULK_USER_ERROR'
+    );
+
+  }
+
+
+  // ==========================================================
+  // OPERATION
+  // ==========================================================
+
+  const operation =
+    payload?.bulkOperation;
+
+
+  if (
+    !operation?.id
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCTS_BULK_OPERATION_ID_MISSING'
+    );
+
+  }
+
+
+  // ==========================================================
+  // RESULT
+  // ==========================================================
 
   return {
 

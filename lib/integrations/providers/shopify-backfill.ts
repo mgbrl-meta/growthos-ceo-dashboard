@@ -52,7 +52,8 @@ const BACKFILL_STRATEGY =
 
 export type ShopifyBackfillEntity =
   | 'orders'
-  | 'customers';
+  | 'customers'
+  | 'products';
 
 
 // ============================================================
@@ -162,6 +163,9 @@ function requireBackfillEntity(
     &&
     entity !==
       'customers'
+    &&
+    entity !==
+      'products'  
   ) {
 
     throw new Error(
@@ -551,6 +555,37 @@ export function planShopifyCustomersBackfillWindows(
 
 
 // ============================================================
+// PRODUCTS WINDOW PLAN
+// ============================================================
+
+export function planShopifyProductsBackfillWindows(
+  input: {
+
+    from:
+      string;
+
+    to:
+      string;
+
+  }
+) {
+
+  return planShopifyBackfillWindows({
+
+    entity:
+      'products',
+
+    from:
+      input.from,
+
+    to:
+      input.to,
+
+  });
+
+}
+
+// ============================================================
 // CREATE GENERIC SHOPIFY BACKFILL
 //
 // RESPONSIBILITY:
@@ -710,7 +745,7 @@ export async function createShopifyBackfill(
             ?
               idempotencyKey
             :
-              `customers:${idempotencyKey}`
+              `${entity}:${idempotencyKey}`
         )
       :
         '';
@@ -1294,7 +1329,7 @@ export async function createShopifyBackfill(
               ?
                 'legacy_orders'
               :
-                'customers'
+                entity
           )
         :
           null,
@@ -1452,6 +1487,63 @@ export async function createShopifyCustomersBackfill(
 
 }
 
+// ============================================================
+// PRODUCTS BACKFILL
+//
+// Same persisted run/window architecture as Orders/Customers.
+//
+// Product deterministic bootstrap IDs use:
+//
+// products:<original-key>
+//
+// so Product history can never collide with Orders or
+// Customers using the same logical bootstrap key.
+// ============================================================
+
+export async function createShopifyProductsBackfill(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+    integrationAccountId:
+      string;
+
+    providerAccountId:
+      string;
+
+    from:
+      string;
+
+    to:
+      string;
+
+    requestedBy?:
+      string | null;
+
+    idempotencyKey?:
+      string | null;
+
+  }
+) {
+
+  return createShopifyBackfill({
+
+    ...input,
+
+    entity:
+      'products',
+
+  });
+
+}
+
 
 // ============================================================
 // DIAGNOSTIC CONFIG
@@ -1474,6 +1566,7 @@ export const SHOPIFY_BACKFILL_OPS = {
   supportedEntities: [
     'orders',
     'customers',
+    'products',
   ] as const,
 
 };

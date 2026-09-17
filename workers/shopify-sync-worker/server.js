@@ -29,6 +29,7 @@ import {
 import {
   startOrdersBulkOperation,
   startCustomersBulkOperation,
+  startProductsBulkOperation,
   getBulkOperation,
 } from './shopify-bulk.js';
 
@@ -1707,6 +1708,7 @@ app.post(
       //
       // orders
       // customers
+      // products
       //
       // All other entity/sync combinations remain fail-closed.
       // ======================================================
@@ -1721,6 +1723,9 @@ app.post(
           ||
           job.entity ===
             'customers'
+          ||
+          job.entity ===
+            'products'  
         );
 
 
@@ -2041,6 +2046,16 @@ if (
 
             startBulkOperation =
               startCustomersBulkOperation;
+
+          }
+
+          if (
+              backfillEntity ===
+                'products'
+          ) {
+
+            startBulkOperation =
+                startProductsBulkOperation;
 
           }
 

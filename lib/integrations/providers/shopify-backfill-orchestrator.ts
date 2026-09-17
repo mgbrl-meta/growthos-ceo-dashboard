@@ -64,6 +64,11 @@ type CandidateWindow = {
   provider_account_id:
     string;
 
+  entity:
+    'orders'
+    | 'customers'
+    | 'products';  
+
   window_start:
     any;
 
@@ -238,6 +243,8 @@ async function findNextWindow(
 
           w.provider_account_id,
 
+          w.entity,
+
           w.window_start,
 
           w.window_end
@@ -261,6 +268,9 @@ async function findNextWindow(
           AND r.brand_id =
             w.brand_id
 
+          AND r.entity =
+            w.entity  
+
         WHERE
 
           w.workspace_id =
@@ -272,8 +282,12 @@ async function findNextWindow(
           AND w.backfill_run_id =
             @backfill_run_id
 
-          AND w.entity =
-            'orders'
+          AND w.entity IN
+            (
+              'orders',
+              'customers',
+              'products'
+            )
 
           AND w.status IN
             (
@@ -847,7 +861,7 @@ export async function runShopifyBackfillOrchestrator(
           candidate.provider_account_id,
 
         entity:
-          'orders',
+          candidate.entity,
 
         syncType:
           'backfill',

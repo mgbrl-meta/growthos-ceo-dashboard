@@ -23,6 +23,10 @@ import {
 } from './shopify-customer-bulk-warehouse.js';
 
 import {
+  writeShopifyProductBulkStage,
+} from './shopify-product-bulk-warehouse.js';
+
+import {
   getBackfillWindow,
   markBackfillResultReady,
   markBackfillBulkFailed,
@@ -133,6 +137,10 @@ function resolveBackfillEntity(
     &&
     entity !==
       'customers'
+    &&
+    entity !==
+      'products'
+
   ) {
 
     throw new Error(
@@ -171,6 +179,15 @@ function getBackfillWarehouseWriter(
   ) {
 
     return writeShopifyCustomerBulkStage;
+
+  }
+
+  if (
+    entity ===
+      'products'
+  ) {
+
+    return writeShopifyProductBulkStage;
 
   }
 
