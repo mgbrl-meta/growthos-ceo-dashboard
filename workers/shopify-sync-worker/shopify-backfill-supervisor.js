@@ -151,6 +151,9 @@ function requireBackfillEntity(
     &&
     entity !==
       'customers'
+    &&
+    entity !==
+      'products'
   ) {
 
     throw new Error(
@@ -435,7 +438,8 @@ async function findProcessCandidates() {
           w.entity IN
             (
               'orders',
-              'customers'
+              'customers',
+              'products'
             )
 
           AND w.status IN
@@ -1455,7 +1459,7 @@ async function dispatchEligibleWindows() {
 // One invocation:
 //
 // 1. recover abandoned dispatch reservations
-// 2. progress active Orders/Customer Bulk/load windows
+// 2. progress active Orders/Customers/Product Bulk/load windows
 // 3. dispatch eligible queued work
 //
 // Calling repeatedly is safe.
