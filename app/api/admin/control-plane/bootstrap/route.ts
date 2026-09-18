@@ -17,6 +17,10 @@ import {
   listGrowthOSPlans,
 } from '@/lib/admin/control-plane';
 
+import {
+  registerCallCommerceCapabilities,
+} from '@/lib/call-commerce/admin-registration';
+
 
 export const dynamic =
   'force-dynamic';
@@ -158,6 +162,12 @@ export async function POST(
     // ========================================================
 
     await migrateGrowthOSAdminControlPlane();
+
+    // Call Commerce registration is isolated from the global Growth OS
+    // capability migration path. Existing module/submodule behavior remains
+    // unchanged; only missing Call Commerce rows are inserted/reconciled.
+    await registerCallCommerceCapabilities();
+
     invalidateAdminSnapshots();
 
 

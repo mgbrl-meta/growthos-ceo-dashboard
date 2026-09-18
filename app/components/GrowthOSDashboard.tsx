@@ -22,6 +22,9 @@ import MetaOS
 import ProductOS
   from './ProductOS';
 
+import CallCommerce
+  from './CallCommerce';
+
 import RetentionOS
   from './RetentionOS';
 
@@ -114,6 +117,14 @@ const MODULE_NAVIGATION = [
 
     tab:
       'Retention OS',
+  },
+
+  {
+    moduleId:
+      'call-commerce',
+
+    tab:
+      'Call Commerce',
   },
 
   {
@@ -370,6 +381,9 @@ export default function GrowthOSDashboard() {
 
     'Retention OS':
       'Mission Control',
+
+    'Call Commerce':
+      'Summary',
 
     'Product OS':
       'Overview',
@@ -2415,6 +2429,30 @@ export default function GrowthOSDashboard() {
                   }
 
                   
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  CALL COMMERCE
+              ============================================== */}
+
+              {activeTab ===
+                'Call Commerce'
+                &&
+                moduleVisible(
+                  'call-commerce'
+                ) && (
+
+                <CallCommerce
+                  activeTab={
+                    activeSubTabs[
+                      'Call Commerce'
+                    ]
+                  }
+                  start={start}
+                  end={end}
                 />
 
               )}

@@ -320,6 +320,25 @@ function resolveMetaPolicy(
 }
 
 
+
+// ============================================================
+// CALL COMMERCE ROUTE FAMILY
+// ============================================================
+
+const CALL_COMMERCE_PREFIX_POLICIES:
+  Array<{
+    prefix: string;
+    submoduleId: string;
+  }> = [
+  { prefix: '/api/call-commerce/summary', submoduleId: 'summary' },
+  { prefix: '/api/call-commerce/calls', submoduleId: 'calls' },
+  { prefix: '/api/call-commerce/meta-events', submoduleId: 'meta-events' },
+  { prefix: '/api/call-commerce/meta-worker', submoduleId: 'meta-events' },
+  { prefix: '/api/call-commerce/archive', submoduleId: 'archive' },
+  { prefix: '/api/call-commerce/reports', submoduleId: 'reports' },
+  { prefix: '/api/call-commerce/system-status', submoduleId: 'system-status' },
+];
+
 // ============================================================
 // RESOLVE POLICY
 // ============================================================
@@ -340,6 +359,23 @@ export function resolveGrowthOSApiPolicy(
   const pathname =
     url.pathname;
 
+
+  if (pathname.startsWith('/api/call-commerce/')) {
+    for (const policy of CALL_COMMERCE_PREFIX_POLICIES) {
+      if (pathname.startsWith(policy.prefix)) {
+        return {
+          moduleId: 'call-commerce',
+          submoduleId: policy.submoduleId,
+        };
+      }
+    }
+
+    // Unknown Call Commerce APIs never bypass module protection.
+    return {
+      moduleId: 'call-commerce',
+      submoduleId: 'calls',
+    };
+  }
 
   if (
     pathname ===

@@ -1,0 +1,266 @@
+import 'server-only';
+
+import crypto from 'crypto';
+import { bigquery } from '@/lib/bigquery';
+import { CALL_COMMERCE_DATASET, CALL_COMMERCE_DEFAULTS, CALL_COMMERCE_LOCATION } from './config';
+import { ensureCallCommerceSchema } from './schema';
+import { getIntegrationConnection } from '@/lib/integrations/store';
+import type { CallingFieldMapping, CallingValueMapping, CanonicalCallEvent } from './types';
+
+const PROJECT_ID = process.env.GCP_PROJECT_ID || process.env.BQ_PROJECT_ID || '';
+const table = (name: string) => `\`${PROJECT_ID}.${CALL_COMMERCE_DATASET}.${name}\``;
+const id = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
+const deterministic = (prefix: string, parts: string[]) => `${prefix}_${crypto.createHash('sha256').update(parts.join(':')).digest('hex').slice(0, 24)}`;
+
+function requireProject() {
+  if (!PROJECT_ID) throw new Error('Call Commerce requires GCP project configuration');
+}
+
+export async function listCallingConnections(workspaceId: string, brandId: string) {
+  requireProject(); await ensureCallCommerceSchema();
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('calling_connections')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id ORDER BY created_at DESC`,
+    params: { workspace_id: workspaceId, brand_id: brandId },
+  });
+  return rows as any[];
+}
+
+export async function getCallingConnectionById(connectionId: string) {
+  requireProject(); await ensureCallCommerceSchema();
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('calling_connections')} WHERE connection_id=@connection_id LIMIT 1`,
+    params: { connection_id: connectionId },
+  });
+  return (rows as any[])[0] || null;
+}
+
+export async function createCallingConnection(input: {
+  workspaceId: string; brandId: string; connectionName: string; providerKey: string;
+}) {
+  requireProject(); await ensureCallCommerceSchema();
+  const connectionId = id('ccn');
+  const webhookSecret = crypto.randomBytes(24).toString('hex');
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `INSERT INTO ${table('calling_connections')} (connection_id,workspace_id,brand_id,connection_name,provider_key,status,webhook_secret,created_at,updated_at) VALUES (@connection_id,@workspace_id,@brand_id,@connection_name,@provider_key,'testing',@webhook_secret,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())`,
+    params: { connection_id: connectionId, workspace_id: input.workspaceId, brand_id: input.brandId, connection_name: input.connectionName, provider_key: input.providerKey, webhook_secret: webhookSecret },
+  });
+  return { connectionId, webhookSecret };
+}
+
+export async function saveMappingVersion(input: {
+  workspaceId: string; brandId: string; connectionId: string;
+  fieldMappings: CallingFieldMapping[]; valueMappings: CallingValueMapping[]; activate?: boolean;
+}) {
+  requireProject(); await ensureCallCommerceSchema();
+  const [countRows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT COALESCE(MAX(version),0)+1 AS next_version FROM ${table('calling_mapping_versions')} WHERE connection_id=@connection_id`,
+    params: { connection_id: input.connectionId },
+  });
+  const version = Number((countRows as any[])?.[0]?.next_version || 1);
+  const mappingVersionId = id('map');
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `INSERT INTO ${table('calling_mapping_versions')} (mapping_version_id,connection_id,workspace_id,brand_id,version,status,field_mappings,value_mappings,created_at,activated_at) VALUES (@mapping_version_id,@connection_id,@workspace_id,@brand_id,@version,@status,PARSE_JSON(@field_mappings),PARSE_JSON(@value_mappings),CURRENT_TIMESTAMP(),IF(@activate,CURRENT_TIMESTAMP(),NULL))`,
+    params: { mapping_version_id: mappingVersionId, connection_id: input.connectionId, workspace_id: input.workspaceId, brand_id: input.brandId, version, status: input.activate ? 'active' : 'draft', field_mappings: JSON.stringify(input.fieldMappings), value_mappings: JSON.stringify(input.valueMappings), activate: Boolean(input.activate) },
+  });
+  if (input.activate) {
+    await bigquery.query({
+      location: CALL_COMMERCE_LOCATION,
+      query: `UPDATE ${table('calling_connections')} SET active_mapping_version_id=@mapping_version_id,status='active',updated_at=CURRENT_TIMESTAMP() WHERE connection_id=@connection_id AND workspace_id=@workspace_id AND brand_id=@brand_id`,
+      params: { mapping_version_id: mappingVersionId, connection_id: input.connectionId, workspace_id: input.workspaceId, brand_id: input.brandId },
+    });
+  }
+  return { mappingVersionId, version };
+}
+
+export async function getActiveMapping(connectionId: string) {
+  const connection = await getCallingConnectionById(connectionId);
+  if (!connection?.active_mapping_version_id) return null;
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('calling_mapping_versions')} WHERE mapping_version_id=@mapping_version_id LIMIT 1`,
+    params: { mapping_version_id: connection.active_mapping_version_id },
+  });
+  return (rows as any[])[0] || null;
+}
+
+export async function storeTestEvent(input: { connection: any; payload: unknown; discoveredFields: unknown }) {
+  const testEventId = id('tst');
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `INSERT INTO ${table('calling_test_events')} (test_event_id,connection_id,workspace_id,brand_id,provider_key,payload,discovered_fields,received_at) VALUES (@test_event_id,@connection_id,@workspace_id,@brand_id,@provider_key,PARSE_JSON(@payload),PARSE_JSON(@discovered_fields),CURRENT_TIMESTAMP())`,
+    params: { test_event_id: testEventId, connection_id: input.connection.connection_id, workspace_id: input.connection.workspace_id, brand_id: input.connection.brand_id, provider_key: input.connection.provider_key, payload: JSON.stringify(input.payload ?? {}), discovered_fields: JSON.stringify(input.discoveredFields ?? []) },
+  });
+  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('calling_connections')} SET last_event_at=CURRENT_TIMESTAMP(),updated_at=CURRENT_TIMESTAMP() WHERE connection_id=@connection_id`, params: { connection_id: input.connection.connection_id } });
+  return testEventId;
+}
+
+export async function getLatestTestEvent(connectionId: string) {
+  const [rows] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('calling_test_events')} WHERE connection_id=@connection_id ORDER BY received_at DESC LIMIT 1`, params: { connection_id: connectionId } });
+  return (rows as any[])[0] || null;
+}
+
+export async function insertRawEvent(input: { event: CanonicalCallEvent | null; connection: any; payload: unknown; mappingVersionId?: string | null; status: string; error?: string | null }) {
+  const rawEventId = id('raw');
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `INSERT INTO ${table('raw_call_events')} (raw_event_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,provider_event_id,raw_event_type,raw_status,payload,mapping_version_id,processing_status,processing_error,received_at,processed_at) VALUES (@raw_event_id,@workspace_id,@brand_id,@connection_id,@provider_key,@provider_call_id,@provider_event_id,@raw_event_type,@raw_status,PARSE_JSON(@payload),@mapping_version_id,@processing_status,@processing_error,CURRENT_TIMESTAMP(),IF(@processing_status='processed',CURRENT_TIMESTAMP(),NULL))`,
+    params: { raw_event_id: rawEventId, workspace_id: input.connection.workspace_id, brand_id: input.connection.brand_id, connection_id: input.connection.connection_id, provider_key: input.connection.provider_key, provider_call_id: input.event?.providerCallId || null, provider_event_id: input.event?.providerEventId || null, raw_event_type: input.event?.rawEventType || null, raw_status: input.event?.rawStatus || null, payload: JSON.stringify(input.payload ?? {}), mapping_version_id: input.mappingVersionId || null, processing_status: input.status, processing_error: input.error || null },
+  });
+  return rawEventId;
+}
+
+function isAnswered(status: string) { return status === 'ANSWERED'; }
+function isUnanswered(status: string) { return ['MISSED','NO_ANSWER','BUSY','REJECTED','FAILED'].includes(status); }
+
+export async function ingestCanonicalEvent(event: CanonicalCallEvent, actor = 'calling-webhook') {
+  await ensureCallCommerceSchema();
+  const attemptId = deterministic('att', [event.workspaceId,event.brandId,event.connectionId,event.providerCallId]);
+
+  const [existingLeadRows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT lead_id,status,updated_at FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND phone=@phone AND is_archived=FALSE ORDER BY CASE WHEN status IN ('NEW','QUALIFIED','FOLLOW_UP') THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`,
+    params: { workspace_id: event.workspaceId, brand_id: event.brandId, phone: event.customerPhone },
+  });
+  let lead = (existingLeadRows as any[])[0] || null;
+
+  if (lead && ['PURCHASED','UNQUALIFIED','CLOSED_LOST'].includes(String(lead.status))) {
+    const ageMs = Date.now() - new Date(lead.updated_at?.value || lead.updated_at || 0).getTime();
+    if (ageMs > CALL_COMMERCE_DEFAULTS.reopenGraceMinutes * 60_000) lead = null;
+  }
+
+  const leadId = lead?.lead_id || id('CL');
+
+  if (!lead) {
+    await bigquery.query({
+      location: CALL_COMMERCE_LOCATION,
+      query: `INSERT INTO ${table('call_leads')} (lead_id,workspace_id,brand_id,phone,status,currency,first_call_at,latest_call_at,latest_call_status,latest_agent_name,call_attempt_count,answered_attempt_count,unanswered_attempt_count,is_archived,created_at,updated_at,created_by,updated_by) VALUES (@lead_id,@workspace_id,@brand_id,@phone,'NEW','INR',COALESCE(@started_at,CURRENT_TIMESTAMP()),COALESCE(@started_at,CURRENT_TIMESTAMP()),@call_status,@agent_name,0,0,0,FALSE,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),@actor,@actor)`,
+      params: { lead_id: leadId, workspace_id: event.workspaceId, brand_id: event.brandId, phone: event.customerPhone, started_at: event.startedAt || null, call_status: event.callStatus, agent_name: event.agentName || null, actor },
+      types: { started_at: 'TIMESTAMP' },
+    });
+  }
+
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `MERGE ${table('call_attempts')} t USING (SELECT @attempt_id attempt_id) s ON t.attempt_id=s.attempt_id WHEN MATCHED THEN UPDATE SET lead_id=@lead_id,event_type=@event_type,call_status=@call_status,direction=@direction,agent_id=@agent_id,agent_name=@agent_name,agent_phone=@agent_phone,call_started_at=COALESCE(@started_at,t.call_started_at),call_answered_at=COALESCE(@answered_at,t.call_answered_at),call_ended_at=COALESCE(@ended_at,t.call_ended_at),duration_seconds=COALESCE(@duration_seconds,t.duration_seconds),disconnected_by=@disconnected_by,recording_url=@recording_url,reason=@reason,ivr_inputs=PARSE_JSON(@ivr_inputs),raw_event_type=@raw_event_type,raw_status=@raw_status,updated_at=CURRENT_TIMESTAMP() WHEN NOT MATCHED THEN INSERT (attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,lead_id,phone,event_type,call_status,direction,agent_id,agent_name,agent_phone,call_started_at,call_answered_at,call_ended_at,duration_seconds,disconnected_by,recording_url,reason,ivr_inputs,raw_event_type,raw_status,created_at,updated_at) VALUES (@attempt_id,@workspace_id,@brand_id,@connection_id,@provider_key,@provider_call_id,@lead_id,@phone,@event_type,@call_status,@direction,@agent_id,@agent_name,@agent_phone,@started_at,@answered_at,@ended_at,@duration_seconds,@disconnected_by,@recording_url,@reason,PARSE_JSON(@ivr_inputs),@raw_event_type,@raw_status,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())`,
+    params: { attempt_id: attemptId, workspace_id: event.workspaceId, brand_id: event.brandId, connection_id: event.connectionId, provider_key: event.callingProvider, provider_call_id: event.providerCallId, lead_id: leadId, phone: event.customerPhone, event_type: event.eventType, call_status: event.callStatus, direction: event.direction, agent_id: event.agentId || null, agent_name: event.agentName || null, agent_phone: event.agentPhone || null, started_at: event.startedAt || null, answered_at: event.answeredAt || null, ended_at: event.endedAt || null, duration_seconds: event.durationSeconds ?? null, disconnected_by: event.disconnectedBy || null, recording_url: event.recordingUrl || null, reason: event.reason || null, ivr_inputs: JSON.stringify(event.ivrInputs ?? null), raw_event_type: event.rawEventType || null, raw_status: event.rawStatus || null },
+    types: { started_at: 'TIMESTAMP', answered_at: 'TIMESTAMP', ended_at: 'TIMESTAMP' },
+  });
+
+  const [counts] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT COUNT(*) total,COUNTIF(call_status='ANSWERED') answered,COUNTIF(call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED')) unanswered FROM ${table('call_attempts')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`,
+    params: { workspace_id: event.workspaceId, brand_id: event.brandId, lead_id: leadId },
+  });
+  const c = (counts as any[])[0] || {};
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `UPDATE ${table('call_leads')} SET latest_call_at=COALESCE(@started_at,CURRENT_TIMESTAMP()),latest_call_status=@call_status,latest_agent_name=@agent_name,call_attempt_count=@total,answered_attempt_count=@answered,unanswered_attempt_count=@unanswered,updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE lead_id=@lead_id AND workspace_id=@workspace_id AND brand_id=@brand_id`,
+    params: { started_at: event.startedAt || null, call_status: event.callStatus, agent_name: event.agentName || null, total: Number(c.total || 0), answered: Number(c.answered || 0), unanswered: Number(c.unanswered || 0), actor, lead_id: leadId, workspace_id: event.workspaceId, brand_id: event.brandId },
+    types: { started_at: 'TIMESTAMP' },
+  });
+
+  if (isAnswered(event.callStatus) && Number(event.durationSeconds || 0) >= CALL_COMMERCE_DEFAULTS.contactMinDurationSeconds) {
+    await queueMetaEvent({ workspaceId: event.workspaceId, brandId: event.brandId, leadId, callId: event.providerCallId, eventKey: 'CALL_LEAD_CONNECTED', eventName: 'ConnectedCallLead', payload: { lead_type:'call', source_module:'call_commerce', lead_id:leadId, call_id:event.providerCallId, phone:event.customerPhone, duration_seconds:event.durationSeconds } });
+  }
+
+  return { leadId, attemptId };
+}
+
+export async function listLeads(input: { workspaceId: string; brandId: string; archived?: boolean; status?: string; search?: string; limit?: number; offset?: number }) {
+  await ensureCallCommerceSchema();
+  const limit = Math.min(Math.max(Number(input.limit || 50), 1), 500);
+  const offset = Math.max(Number(input.offset || 0), 0);
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=@archived AND (@status='' OR status=@status) AND (@search='' OR LOWER(CONCAT(COALESCE(phone,''),' ',COALESCE(customer_name,''),' ',COALESCE(email,''),' ',COALESCE(product,''),' ',COALESCE(order_id,''))) LIKE CONCAT('%',LOWER(@search),'%')) ORDER BY latest_call_at DESC,updated_at DESC LIMIT @limit OFFSET @offset`,
+    params: { workspace_id: input.workspaceId, brand_id: input.brandId, archived: Boolean(input.archived), status: input.status || '', search: input.search || '', limit, offset },
+    types: { limit: 'INT64', offset: 'INT64' },
+  });
+  const [counts] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT COUNT(*) total FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=@archived`, params: { workspace_id: input.workspaceId, brand_id: input.brandId, archived: Boolean(input.archived) } });
+  return { rows, total: Number((counts as any[])?.[0]?.total || 0) };
+}
+
+export async function getLeadHistory(workspaceId: string, brandId: string, leadId: string) {
+  const [attempts] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('call_attempts')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id ORDER BY COALESCE(call_started_at,created_at) DESC LIMIT 50`, params: { workspace_id: workspaceId, brand_id: brandId, lead_id: leadId } });
+  const [activity] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('activity_log')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id ORDER BY created_at DESC LIMIT 100`, params: { workspace_id: workspaceId, brand_id: brandId, lead_id: leadId } });
+  return { attempts, activity };
+}
+
+const transitions: Record<string, string[]> = {
+  NEW: ['QUALIFIED','UNQUALIFIED'],
+  QUALIFIED: ['FOLLOW_UP','PURCHASED'],
+  FOLLOW_UP: ['FOLLOW_UP','PURCHASED','CLOSED_LOST'],
+};
+
+export async function updateLeadWorkflow(input: { workspaceId:string; brandId:string; leadId:string; actorUserId:string; action:string; data?:Record<string,unknown> }) {
+  const [rows] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id LIMIT 1`, params: { workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId } });
+  const lead = (rows as any[])[0];
+  if (!lead) throw new Error('CALL_LEAD_NOT_FOUND');
+  if (['PURCHASED','UNQUALIFIED','CLOSED_LOST'].includes(String(lead.status)) && input.action !== 'update_details') throw new Error('CALL_LEAD_FINALIZED');
+
+  if (input.action === 'update_details') {
+    await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET customer_name=@customer_name,email=@email,product=@product,notes=@notes,next_follow_up_at=@next_follow_up_at,updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { customer_name: input.data?.customerName || null, email: input.data?.email || null, product: input.data?.product || null, notes: input.data?.notes || null, next_follow_up_at: input.data?.nextFollowUpAt || null, actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at: 'TIMESTAMP' } });
+    return { status: lead.status };
+  }
+
+  const targetByAction: Record<string,string> = { qualify:'QUALIFIED', unqualify:'UNQUALIFIED', follow_up:'FOLLOW_UP', purchase:'PURCHASED', close_lost:'CLOSED_LOST' };
+  const target = targetByAction[input.action];
+  if (!target || !(transitions[String(lead.status)] || []).includes(target)) throw new Error('INVALID_CALL_LEAD_TRANSITION');
+
+  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET status=@target,unqualified_reason=IF(@target='UNQUALIFIED',@reason,unqualified_reason),closed_lost_reason=IF(@target='CLOSED_LOST',@reason,closed_lost_reason),next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,next_follow_up_at),order_id=IF(@target='PURCHASED',@order_id,order_id),order_amount=IF(@target='PURCHASED',@order_amount,order_amount),purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),purchased_at),updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { target, reason: input.data?.reason || null, next_follow_up_at: input.data?.nextFollowUpAt || null, order_id: input.data?.orderId || null, order_amount: input.data?.orderAmount === undefined ? null : Number(input.data?.orderAmount), actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at:'TIMESTAMP', order_amount:'NUMERIC' } });
+
+  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `INSERT INTO ${table('activity_log')} (activity_id,workspace_id,brand_id,lead_id,activity_type,from_status,to_status,details,actor_user_id,created_at) VALUES (@activity_id,@workspace_id,@brand_id,@lead_id,@activity_type,@from_status,@to_status,PARSE_JSON(@details),@actor,CURRENT_TIMESTAMP())`, params: { activity_id:id('act'), workspace_id:input.workspaceId, brand_id:input.brandId, lead_id:input.leadId, activity_type:input.action, from_status:String(lead.status), to_status:target, details:JSON.stringify(input.data || {}), actor:input.actorUserId } });
+
+  const eventMap: Record<string,[string,string]> = {
+    QUALIFIED:['CALL_LEAD_QUALIFIED','QualifiedCallLead'],
+    UNQUALIFIED:['CALL_LEAD_UNQUALIFIED','UnqualifiedCallLead'],
+    PURCHASED:['CALL_LEAD_CONVERTED','ConvertedCallLead'],
+  };
+  if (eventMap[target]) {
+    const [eventKey,eventName] = eventMap[target];
+    await queueMetaEvent({ workspaceId:input.workspaceId, brandId:input.brandId, leadId:input.leadId, callId:null, eventKey, eventName, payload:{ lead_type:'call', source_module:'call_commerce', lead_id:input.leadId, phone:lead.phone, lead_status:target, order_id:target==='PURCHASED' ? input.data?.orderId || null : null, value:target==='PURCHASED' ? Number(input.data?.orderAmount || 0) : null, currency:lead.currency || 'INR' } });
+  }
+  return { status: target };
+}
+
+export async function createManualLead(input:{ workspaceId:string;brandId:string;actorUserId:string;phone:string;customerName?:string;email?:string;product?:string;notes?:string }) {
+  const leadId=id('CL');
+  await bigquery.query({ location:CALL_COMMERCE_LOCATION, query:`INSERT INTO ${table('call_leads')} (lead_id,workspace_id,brand_id,phone,customer_name,email,product,status,notes,currency,first_call_at,latest_call_at,latest_call_status,call_attempt_count,answered_attempt_count,unanswered_attempt_count,is_archived,created_at,updated_at,created_by,updated_by) VALUES (@lead_id,@workspace_id,@brand_id,@phone,@customer_name,@email,@product,'NEW',@notes,'INR',CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),'MANUAL',1,1,0,FALSE,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),@actor,@actor)`, params:{ lead_id:leadId,workspace_id:input.workspaceId,brand_id:input.brandId,phone:input.phone.replace(/[^0-9+]/g,''),customer_name:input.customerName||null,email:input.email||null,product:input.product||null,notes:input.notes||null,actor:input.actorUserId } });
+  return { leadId };
+}
+
+export async function queueMetaEvent(input:{ workspaceId:string;brandId:string;leadId:string;callId:string|null;eventKey:string;eventName:string;payload:unknown }) {
+  const metaConnection = await getIntegrationConnection(input.workspaceId, input.brandId, 'meta_events');
+  if (!metaConnection || metaConnection.status !== 'connected') {
+    return null;
+  }
+  const eventId = deterministic('cc_meta', [input.workspaceId,input.brandId,input.eventKey,input.leadId,input.callId || '', input.eventKey==='CALL_LEAD_CONVERTED' ? String((input.payload as any)?.order_id || '') : '']);
+  const queueId = deterministic('queue',[input.workspaceId,input.brandId,eventId]);
+  await bigquery.query({ location:CALL_COMMERCE_LOCATION, query:`MERGE ${table('meta_event_queue')} t USING (SELECT @event_id event_id) s ON t.workspace_id=@workspace_id AND t.brand_id=@brand_id AND t.event_id=s.event_id WHEN NOT MATCHED THEN INSERT (queue_id,workspace_id,brand_id,lead_id,call_id,event_key,event_name,event_id,payload,status,attempts,next_attempt_at,created_at,updated_at) VALUES (@queue_id,@workspace_id,@brand_id,@lead_id,@call_id,@event_key,@event_name,@event_id,PARSE_JSON(@payload),'PENDING',0,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())`, params:{ queue_id:queueId,workspace_id:input.workspaceId,brand_id:input.brandId,lead_id:input.leadId,call_id:input.callId,event_key:input.eventKey,event_name:input.eventName,event_id:eventId,payload:JSON.stringify(input.payload ?? {}) } });
+  return eventId;
+}
+
+export async function getSummary(workspaceId:string,brandId:string,start?:string,end?:string) {
+  const [rows] = await bigquery.query({ location:CALL_COMMERCE_LOCATION, query:`SELECT COUNT(*) calls,COUNTIF(answered_attempt_count>0) connected,COUNTIF(status IN ('QUALIFIED','FOLLOW_UP','PURCHASED','CLOSED_LOST')) qualified,COUNTIF(status='PURCHASED') purchased,COALESCE(SUM(IF(status='PURCHASED',order_amount,0)),0) revenue,SAFE_DIVIDE(COUNTIF(status IN ('QUALIFIED','FOLLOW_UP','PURCHASED','CLOSED_LOST')),COUNT(*))*100 qualification_rate,SAFE_DIVIDE(COUNTIF(status='PURCHASED'),COUNTIF(status IN ('QUALIFIED','FOLLOW_UP','PURCHASED','CLOSED_LOST')))*100 qualified_purchase_rate FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE AND (@start='' OR DATE(created_at)>=DATE(@start)) AND (@end='' OR DATE(created_at)<=DATE(@end))`, params:{workspace_id:workspaceId,brand_id:brandId,start:start||'',end:end||''} });
+  return (rows as any[])[0] || {};
+}
+
+export async function listMetaEvents(workspaceId:string,brandId:string,limit=100) {
+  const [rows]=await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`SELECT * FROM ${table('meta_event_queue')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id ORDER BY created_at DESC LIMIT @limit`,params:{workspace_id:workspaceId,brand_id:brandId,limit:Math.min(limit,500)},types:{limit:'INT64'}}); return rows;
+}
+
+export async function getSystemStatus(workspaceId:string,brandId:string) {
+  const [connectionRows]=await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`SELECT COUNT(*) total,COUNTIF(status='active') active,MAX(last_event_at) last_event_at,MAX(last_success_at) last_success_at FROM ${table('calling_connections')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id`,params:{workspace_id:workspaceId,brand_id:brandId}});
+  const [metaRows]=await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`SELECT COUNTIF(status='PENDING') pending,COUNTIF(status='RETRY') retry,COUNTIF(status='NEEDS_ATTENTION') needs_attention FROM ${table('meta_event_queue')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id`,params:{workspace_id:workspaceId,brand_id:brandId}});
+  const [leadRows]=await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`SELECT MAX(latest_call_at) last_call_at,COUNT(*) active_leads FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE`,params:{workspace_id:workspaceId,brand_id:brandId}});
+  return { calling:(connectionRows as any[])[0]||{}, meta:(metaRows as any[])[0]||{}, leads:(leadRows as any[])[0]||{} };
+}
+
+export async function archiveEligibleLeads(workspaceId:string,brandId:string) {
+  await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`UPDATE ${table('call_leads')} AS l SET is_archived=TRUE,archived_at=CURRENT_TIMESTAMP(),updated_at=CURRENT_TIMESTAMP() WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE AND NOT EXISTS (SELECT 1 FROM ${table('meta_event_queue')} q WHERE q.workspace_id=l.workspace_id AND q.brand_id=l.brand_id AND q.lead_id=l.lead_id AND q.status NOT IN ('SUCCESS')) AND ((status IN ('UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status='PURCHASED' AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status NOT IN ('PURCHASED','UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.generalArchiveDays} DAY)))`,params:{workspace_id:workspaceId,brand_id:brandId}});
+}

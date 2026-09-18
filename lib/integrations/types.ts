@@ -2,20 +2,25 @@ export type IntegrationProviderId =
   | 'shopify'
   | 'meta_ads'
   | 'google_ads'
-  | 'bigquery';
+  | 'bigquery'
+  | 'calling'
+  | 'meta_events';
 
 
 export type IntegrationCategory =
   | 'commerce'
   | 'advertising'
-  | 'warehouse';
+  | 'warehouse'
+  | 'calling'
+  | 'meta_events';
 
 
 export type IntegrationAuthType =
   | 'oauth'
   | 'shopify_oauth'
   | 'service_account'
-  | 'internal';
+  | 'internal'
+  | 'webhook';
 
 
 export type IntegrationStatus =

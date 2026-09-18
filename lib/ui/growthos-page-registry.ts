@@ -254,6 +254,23 @@ const PAGE_REGISTRY: Record<string, ModulePageDefinitions> = {
     },
   },
 
+  'Call Commerce': {
+    default: {
+      eyebrow: 'Call Commerce',
+      title: 'Call Commerce',
+      description: 'Operate inbound call leads from first call through qualification, follow-up and manually recorded conversion.',
+      dateMode: 'global',
+    },
+    pages: {
+      Summary: {},
+      Calls: { title: 'Calls', description: 'Manage active call leads, repeated call attempts and agent workflow.' },
+      'Meta Events': { title: 'Meta Events', description: 'Review call-specific Meta signal queue and delivery state.', dateMode: 'none' },
+      Archive: { title: 'Archive', description: 'Review finalized and aged call leads retained by Call Commerce.', dateMode: 'none' },
+      Reports: { title: 'Reports', description: 'Search and review call lead outcomes for operational reporting.' },
+      'System Status': { title: 'System Status', description: 'Monitor calling connection, lead and Meta queue health.', dateMode: 'none' },
+    },
+  },
+
   'Product OS': {
     default: {
       eyebrow: 'Product OS',

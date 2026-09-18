@@ -233,4 +233,86 @@ export const integrationRegistry:
       true,
   },
 
+
+  // =========================================================
+  // CALLING
+  // =========================================================
+
+  {
+    id:
+      'calling',
+
+    name:
+      'Calling Platform',
+
+    shortName:
+      'Calling',
+
+    description:
+      'Connect MSG91 or any webhook-based calling platform to Call Commerce through field and status mapping.',
+
+    category:
+      'calling',
+
+    authType:
+      'webhook',
+
+    capabilities: [
+      'Inbound Calls',
+      'Generic Webhook',
+      'Field Mapping',
+      'Status Mapping',
+      'Call Attempts',
+      'Agent Attribution',
+    ],
+
+    status:
+      'not_connected',
+
+    accountName:
+      null,
+
+    accountId:
+      null,
+
+    lastSyncAt:
+      null,
+
+    nextSyncAt:
+      null,
+
+    error:
+      null,
+
+    connectionManaged:
+      false,
+  },
+
+
+  // =========================================================
+  // META EVENTS / CAPI
+  // =========================================================
+
+  {
+    id: 'meta_events',
+    name: 'Meta Events',
+    shortName: 'Meta Events',
+    description: 'Send first-party lead and commerce signals to Meta Conversions API. Shared by Call Commerce and future lead modules.',
+    category: 'advertising',
+    authType: 'internal',
+    capabilities: [
+      'Conversions API',
+      'Custom Lead Events',
+      'Call Lead Events',
+      'Event Deduplication',
+    ],
+    status: 'not_connected',
+    accountName: null,
+    accountId: null,
+    lastSyncAt: null,
+    nextSyncAt: null,
+    error: null,
+    connectionManaged: false,
+  },
+
 ];

@@ -354,6 +354,20 @@ function resolveModulePermission({
   }
 
 
+  // Workspace owners automatically receive editor access to every
+  // commercially enabled + release-eligible module. Owner access does not
+  // bypass plan, brand override, module status or release controls because
+  // those are already represented by brandEnabled above. Per-user permission
+  // rows are intentionally ignored for owners so newly launched modules become
+  // available without a separate self-assignment step.
+
+  if (role === 'owner') {
+
+    return 'editor';
+
+  }
+
+
   // Verified Shopify session:
   //
   // no brand_memberships row exists.
@@ -418,6 +432,7 @@ function resolveSubmodulePermission({
   parentPermission,
   brandEnabled,
   configuredPermission,
+  role,
   syntheticMembership,
   allowImplicitInherit,
 
@@ -432,6 +447,9 @@ function resolveSubmodulePermission({
   configuredPermission:
     GrowthOSConfiguredPermission |
     null;
+
+  role:
+    GrowthOSEffectiveRole;
 
   syntheticMembership:
     boolean;
@@ -449,6 +467,17 @@ function resolveSubmodulePermission({
   ) {
 
     return 'disabled';
+
+  }
+
+
+  // Owners inherit the parent module permission for every enabled submodule.
+  // This preserves commercial/release gating while ensuring new submodules do
+  // not require explicit owner-level permission rows.
+
+  if (role === 'owner') {
+
+    return parentPermission;
 
   }
 
@@ -914,6 +943,8 @@ export async function resolveGrowthOSEffectiveAccess(
 
           configuredPermission:
             configuredSubmodulePermission,
+
+          role,
 
           syntheticMembership,
 

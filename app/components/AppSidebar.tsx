@@ -13,6 +13,7 @@ import {
   LogOut,
   Megaphone,
   PackageSearch,
+  PhoneCall,
   Repeat2,
   Search,
   Settings,
@@ -317,6 +318,31 @@ const groups:
       'Commerce',
 
     items: [
+
+      {
+
+        name:
+          'Call Commerce',
+
+        label:
+          'Call Commerce',
+
+        icon:
+          PhoneCall,
+
+        moduleId:
+          'call-commerce',
+
+        children:
+          getGrowthOSSubmodules(
+            'call-commerce'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
 
       {
 

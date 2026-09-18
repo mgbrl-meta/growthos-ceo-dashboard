@@ -18,6 +18,9 @@ import {
   Unplug,
 } from 'lucide-react';
 
+import CallingIntegrationManager from './CallingIntegrationManager';
+import MetaEventsIntegrationManager from './MetaEventsIntegrationManager';
+
 import type {
   IntegrationProvider,
   IntegrationStatus,
@@ -388,6 +391,31 @@ export default function AppIntegrations() {
 
 
       {/* =====================================================
+          CALLING
+      ===================================================== */}
+
+      <IntegrationSection
+
+        title="Calling"
+
+        description="Connect MSG91 or any calling platform through a generic webhook and mapping layer for Call Commerce."
+
+        integrations={
+          integrations.filter(
+            item =>
+              item.category ===
+              'calling'
+          )
+        }
+
+        onSelect={
+          setSelected
+        }
+
+      />
+
+
+      {/* =====================================================
           WAREHOUSE
       ===================================================== */}
 
@@ -708,6 +736,11 @@ function IntegrationModal({
 
         <div className="space-y-3 p-3.5">
 
+          {integration.id === 'calling' ? (
+            <CallingIntegrationManager />
+          ) : integration.id === 'meta_events' ? (
+            <MetaEventsIntegrationManager />
+          ) : (<>
 
           {integration.accountName && (
 
@@ -832,6 +865,8 @@ function IntegrationModal({
             )}
 
           </div>
+
+          </>)}
 
         </div>
 
