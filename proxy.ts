@@ -54,6 +54,13 @@ const PUBLIC_API_PATHS = new Set([
   '/api/integrations/shopify/webhooks/customers',
 ]);
 
+// External provider webhooks cannot carry a Growth OS browser session.
+// Keep the public surface narrowly scoped; each webhook route must perform
+// its own provider/connection authentication before processing payloads.
+const PUBLIC_API_PREFIXES = [
+  '/api/webhooks/calling/',
+] as const;
+
 
 // ============================================================
 // HELPERS
@@ -74,8 +81,14 @@ function isPublicApi(
   pathname: string
 ) {
 
-  return PUBLIC_API_PATHS.has(
-    pathname
+  return (
+    PUBLIC_API_PATHS.has(
+      pathname
+    )
+    ||
+    PUBLIC_API_PREFIXES.some(
+      (prefix) => pathname.startsWith(prefix)
+    )
   );
 
 }
