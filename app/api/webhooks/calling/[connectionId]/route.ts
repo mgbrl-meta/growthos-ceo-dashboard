@@ -23,7 +23,7 @@ function readJson(value: any, fallback: any) {
 export async function POST(request: NextRequest, context: { params: Promise<{ connectionId: string }> }) {
   const { connectionId } = await context.params;
   const connection = await getCallingConnectionById(connectionId);
-  if (!connection) return NextResponse.json({ ok: false, error: 'CALLING_CONNECTION_NOT_FOUND' }, { status: 404 });
+  if (!connection || connection.status === 'deleted') return NextResponse.json({ ok: false, error: 'CALLING_CONNECTION_NOT_FOUND' }, { status: 404 });
 
   const suppliedSecret = request.headers.get('x-growthos-webhook-secret') || new URL(request.url).searchParams.get('secret') || '';
   if (String(connection.webhook_secret || '') !== String(suppliedSecret)) {

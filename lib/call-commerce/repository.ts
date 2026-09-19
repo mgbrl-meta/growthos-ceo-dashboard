@@ -20,7 +20,7 @@ export async function listCallingConnections(workspaceId: string, brandId: strin
   requireProject(); await ensureCallCommerceSchema();
   const [rows] = await bigquery.query({
     location: CALL_COMMERCE_LOCATION,
-    query: `SELECT * FROM ${table('calling_connections')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id ORDER BY created_at DESC`,
+    query: `SELECT * FROM ${table('calling_connections')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND status != 'deleted' ORDER BY created_at DESC`,
     params: { workspace_id: workspaceId, brand_id: brandId },
   });
   return rows as any[];
@@ -48,6 +48,28 @@ export async function createCallingConnection(input: {
     params: { connection_id: connectionId, workspace_id: input.workspaceId, brand_id: input.brandId, connection_name: input.connectionName, provider_key: input.providerKey, webhook_secret: webhookSecret },
   });
   return { connectionId, webhookSecret };
+}
+
+
+export async function deleteCallingConnection(input: {
+  workspaceId: string; brandId: string; connectionId: string;
+}) {
+  requireProject(); await ensureCallCommerceSchema();
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT connection_id FROM ${table('calling_connections')} WHERE connection_id=@connection_id AND workspace_id=@workspace_id AND brand_id=@brand_id AND status != 'deleted' LIMIT 1`,
+    params: { connection_id: input.connectionId, workspace_id: input.workspaceId, brand_id: input.brandId },
+  });
+  if (!(rows as any[])?.length) throw new Error('CALLING_CONNECTION_NOT_FOUND');
+
+  // Soft-delete the connector so historical call/audit rows remain referentially intact.
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `UPDATE ${table('calling_connections')} SET status='deleted',active_mapping_version_id=NULL,updated_at=CURRENT_TIMESTAMP() WHERE connection_id=@connection_id AND workspace_id=@workspace_id AND brand_id=@brand_id`,
+    params: { connection_id: input.connectionId, workspace_id: input.workspaceId, brand_id: input.brandId },
+  });
+
+  return { connectionId: input.connectionId, deleted: true };
 }
 
 export async function saveMappingVersion(input: {

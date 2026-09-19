@@ -4,14 +4,40 @@ import { authenticateRequest } from '@/lib/auth/request-auth';
 import { upsertIntegrationConnection } from '@/lib/integrations/store';
 import {
   createCallingConnection,
+  deleteCallingConnection,
+  getCallingConnectionById,
   getLatestTestEvent,
   listCallingConnections,
   saveMappingVersion,
+  storeTestEvent,
 } from '@/lib/call-commerce/repository';
 import { getCallingProviderPreset, CALLING_PROVIDER_PRESETS } from '@/lib/call-commerce/presets';
+import { discoverPayloadFields } from '@/lib/call-commerce/mapping';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+async function syncCallingIntegrationSummary(workspaceId: string, brandId: string) {
+  const connections = await listCallingConnections(workspaceId, brandId);
+  const active = connections.find((item:any) => item.status === 'active');
+  const failed = connections.find((item:any) => item.status === 'failed' || item.last_error);
+  const current = active || failed || connections[0] || null;
+  const status = active ? 'connected' : failed ? 'failed' : connections.length ? 'needs_attention' : 'not_connected';
+
+  await upsertIntegrationConnection({
+    workspaceId,
+    brandId,
+    provider: 'calling',
+    connectionMode: 'webhook',
+    ingestionAdapter: 'generic_calling',
+    status,
+    providerAccountId: current?.connection_id || null,
+    providerAccountName: current?.connection_name || null,
+    error: failed?.last_error || null,
+  });
+
+  return { status, connections };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,21 +78,50 @@ export async function POST(request: NextRequest) {
       // backward-compatible Call Commerce change with no BigQuery schema migration.
       const created = await createCallingConnection({ workspaceId: tenant.workspaceId, brandId: tenant.brandId, connectionName, providerKey: platformName });
       const appUrl = process.env.GROWTHOS_APP_URL || new URL(request.url).origin;
-      await upsertIntegrationConnection({
-        workspaceId: tenant.workspaceId,
-        brandId: tenant.brandId,
-        provider: 'calling',
-        connectionMode: 'webhook',
-        ingestionAdapter: 'generic_calling',
-        status: 'connected',
-        providerAccountId: created.connectionId,
-        providerAccountName: connectionName,
-      });
+      await syncCallingIntegrationSummary(tenant.workspaceId, tenant.brandId);
       const preset = getCallingProviderPreset(platformName);
       if (preset) {
         await saveMappingVersion({ workspaceId: tenant.workspaceId, brandId: tenant.brandId, connectionId: created.connectionId, fieldMappings: preset.fieldMappings, valueMappings: preset.valueMappings, activate: false });
       }
-      return NextResponse.json({ ok: true, data: { ...created, platformName, presetDetected: preset?.name || null, webhookUrl: `${appUrl}/api/webhooks/calling/${created.connectionId}?secret=${encodeURIComponent(created.webhookSecret)}` } });
+      return NextResponse.json({ ok: true, data: { ...created, platformName, presetDetected: preset?.name || null, webhookUrl: `${appUrl}/api/webhooks/calling/${created.connectionId}` } });
+    }
+
+    if (action === 'capture_test_payload') {
+      const connectionId = String(body?.connectionId || '').trim();
+      if (!connectionId) return NextResponse.json({ ok: false, error: 'Connection ID is required' }, { status: 400 });
+
+      const connection = await getCallingConnectionById(connectionId);
+      if (!connection || connection.workspace_id !== tenant.workspaceId || connection.brand_id !== tenant.brandId || connection.status === 'deleted') {
+        return NextResponse.json({ ok: false, error: 'CALLING_CONNECTION_NOT_FOUND' }, { status: 404 });
+      }
+
+      let payload = body?.payload;
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); }
+        catch { return NextResponse.json({ ok: false, error: 'Sample payload must be valid JSON' }, { status: 400 }); }
+      }
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return NextResponse.json({ ok: false, error: 'Sample payload must be a JSON object' }, { status: 400 });
+      }
+
+      const discoveredFields = discoverPayloadFields(payload);
+      const testEventId = await storeTestEvent({ connection, payload, discoveredFields });
+      return NextResponse.json({ ok: true, data: { testEventId, discoveredFields } });
+    }
+
+
+    if (action === 'delete') {
+      const connectionId = String(body?.connectionId || '').trim();
+      if (!connectionId) return NextResponse.json({ ok: false, error: 'Connection ID is required' }, { status: 400 });
+
+      const connection = await getCallingConnectionById(connectionId);
+      if (!connection || connection.workspace_id !== tenant.workspaceId || connection.brand_id !== tenant.brandId || connection.status === 'deleted') {
+        return NextResponse.json({ ok: false, error: 'CALLING_CONNECTION_NOT_FOUND' }, { status: 404 });
+      }
+
+      await deleteCallingConnection({ workspaceId: tenant.workspaceId, brandId: tenant.brandId, connectionId });
+      const summary = await syncCallingIntegrationSummary(tenant.workspaceId, tenant.brandId);
+      return NextResponse.json({ ok: true, data: { connectionId, deleted: true, integrationStatus: summary.status } });
     }
 
     if (action === 'save_mapping' || action === 'activate_mapping') {
@@ -78,7 +133,11 @@ export async function POST(request: NextRequest) {
         valueMappings: Array.isArray(body?.valueMappings) ? body.valueMappings : [],
         activate: action === 'activate_mapping',
       });
-      return NextResponse.json({ ok: true, data });
+      let integrationStatus: string | null = null;
+      if (action === 'activate_mapping') {
+        integrationStatus = (await syncCallingIntegrationSummary(tenant.workspaceId, tenant.brandId)).status;
+      }
+      return NextResponse.json({ ok: true, data: { ...data, integrationStatus } });
     }
 
     return NextResponse.json({ ok: false, error: 'Unknown action' }, { status: 400 });

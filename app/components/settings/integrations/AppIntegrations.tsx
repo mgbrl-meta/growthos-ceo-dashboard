@@ -673,6 +673,8 @@ function IntegrationModal({
 
 }) {
 
+  const [callingRuntimeStatus, setCallingRuntimeStatus] = useState<'not_connected' | 'testing' | 'active' | 'error' | null>(null);
+
   const connected =
     integration.status ===
     'connected';
@@ -705,11 +707,15 @@ function IntegrationModal({
                 {integration.name}
               </h2>
 
-              <StatusBadge
-                status={
-                  integration.status
-                }
-              />
+              {integration.id === 'calling' ? (
+                <CallingRuntimeBadge status={callingRuntimeStatus} />
+              ) : (
+                <StatusBadge
+                  status={
+                    integration.status
+                  }
+                />
+              )}
 
             </div>
 
@@ -737,7 +743,7 @@ function IntegrationModal({
         <div className="space-y-3 p-3.5">
 
           {integration.id === 'calling' ? (
-            <CallingIntegrationManager />
+            <CallingIntegrationManager onStatusChange={setCallingRuntimeStatus} />
           ) : integration.id === 'meta_events' ? (
             <MetaEventsIntegrationManager />
           ) : (<>
@@ -1005,6 +1011,52 @@ function ProviderIcon({
 /* ============================================================
    STATUS
 ============================================================ */
+
+function CallingRuntimeBadge({ status }: { status: 'not_connected' | 'testing' | 'active' | 'error' | null }) {
+
+  if (status === 'active') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-semibold text-emerald-700">
+        <Check size={10} />
+        Active
+      </span>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-[9px] font-semibold text-rose-700">
+        <AlertTriangle size={10} />
+        Error
+      </span>
+    );
+  }
+
+  if (status === 'testing') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-700">
+        <RefreshCw size={10} />
+        Testing
+      </span>
+    );
+  }
+
+  if (status === 'not_connected') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-500">
+        <Unplug size={10} />
+        Not connected
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-semibold text-slate-500">
+      <RefreshCw size={10} className="animate-spin" />
+      Checking
+    </span>
+  );
+}
 
 function StatusBadge({
   status,

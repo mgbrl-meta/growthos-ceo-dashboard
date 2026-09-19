@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, RefreshCw, Webhook } from 'lucide-react';
+import { CheckCircle2, RefreshCw, Trash2, Webhook } from 'lucide-react';
 
 const canonicalFields = [
   'providerCallId','providerEventId','customerPhone','agentName','agentId','agentPhone',
@@ -9,7 +9,9 @@ const canonicalFields = [
   'disconnectedBy','recordingUrl','reason','ivrInputs',
 ];
 
-export default function CallingIntegrationManager() {
+type CallingRuntimeStatus = 'not_connected' | 'testing' | 'active' | 'error';
+
+export default function CallingIntegrationManager({ onStatusChange }: { onStatusChange?: (status: CallingRuntimeStatus) => void }) {
   const [data,setData]=useState<any>({connections:[],presets:[],latestTestEvent:null});
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -19,6 +21,8 @@ export default function CallingIntegrationManager() {
   const [created,setCreated]=useState<any>(null);
   const [fieldMappings,setFieldMappings]=useState<any[]>([]);
   const [valueMappings,setValueMappings]=useState<any[]>([]);
+  const [samplePayload,setSamplePayload]=useState('');
+  const [sampleError,setSampleError]=useState('');
 
   const selected = useMemo(() => data.connections.find((x:any)=>x.connection_id===selectedId) || data.connections[0] || null,[data.connections,selectedId]);
   const detectedPreset = useMemo(() => {
@@ -26,6 +30,18 @@ export default function CallingIntegrationManager() {
     if(!name) return null;
     return (data.presets||[]).find((p:any)=>String(p.key||'').toLowerCase()===name || String(p.name||'').toLowerCase()===name) || null;
   },[data.presets,platformName]);
+
+  useEffect(()=>{
+    const connections = data.connections || [];
+    const status: CallingRuntimeStatus = connections.some((x:any)=>x.status==='active')
+      ? 'active'
+      : connections.some((x:any)=>x.status==='failed' || x.last_error)
+        ? 'error'
+        : connections.length
+          ? 'testing'
+          : 'not_connected';
+    onStatusChange?.(status);
+  },[data.connections,onStatusChange]);
 
   async function load(connectionId?:string){
     setLoading(true);
@@ -35,7 +51,12 @@ export default function CallingIntegrationManager() {
     setLoading(false);
   }
   useEffect(()=>{load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(()=>{ if(selectedId) load(selectedId); },[selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    setFieldMappings([]);
+    setValueMappings([]);
+    setSampleError('');
+    if(selectedId) load(selectedId);
+  },[selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function create(){
     const cleanPlatformName=platformName.trim();
@@ -65,6 +86,51 @@ export default function CallingIntegrationManager() {
       setValueMappings(data.suggestedPreset.valueMappings);
     }
   },[data.latestTestEvent,data.suggestedPreset]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function captureSample(){
+    if(!selected) return;
+    setSampleError('');
+    let payload:any;
+    try { payload=JSON.parse(samplePayload); }
+    catch { setSampleError('Paste a valid JSON object.'); return; }
+    if(!payload || Array.isArray(payload) || typeof payload!=='object'){ setSampleError('Sample payload must be a JSON object.'); return; }
+
+    setBusy(true);
+    try {
+      const r=await fetch('/api/integrations/calling',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({action:'capture_test_payload',connectionId:selected.connection_id,payload}),
+      });
+      const j=await r.json();
+      if(!j?.ok){ setSampleError(j?.error || 'Unable to capture sample event'); return; }
+      setFieldMappings([]);
+      setValueMappings([]);
+      await load(selected.connection_id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteConnection(){
+    if(!selected) return;
+    const ok=window.confirm(`Delete calling connection "${selected.connection_name}"? Historical call/audit data will be retained, but this webhook connection will stop accepting events.`);
+    if(!ok) return;
+    setBusy(true);
+    try {
+      const r=await fetch('/api/integrations/calling',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'delete',connectionId:selected.connection_id})});
+      const j=await r.json();
+      if(!j?.ok){ alert(j?.error || 'Unable to delete calling connection'); return; }
+      setCreated(null);
+      setSelectedId('');
+      setFieldMappings([]);
+      setValueMappings([]);
+      setSamplePayload('');
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function activate(){
     if(!selected) return;
@@ -100,11 +166,30 @@ export default function CallingIntegrationManager() {
       </div>
 
       {selected && <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-        <div className="flex items-center justify-between gap-3"><div><div className="text-[11px] font-semibold text-slate-950">{selected.connection_name}</div><div className="mt-0.5 text-[9px] text-slate-500">Platform: {selected.provider_key} · Status: {selected.status}</div>{data.suggestedPreset&&<div className="mt-0.5 text-[8px] font-medium text-emerald-600">Preset recognized: {data.suggestedPreset.name}</div>}</div>{selected.status==='active'&&<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-semibold text-emerald-700"><CheckCircle2 size={11}/>Active</span>}</div>
-        <div className="rounded-lg bg-slate-50 p-2.5"><div className="text-[9px] font-semibold uppercase text-slate-400">Webhook endpoint</div><div className="mt-1 break-all font-mono text-[9px] text-slate-700">{created?.connectionId===selected.connection_id?created.webhookUrl:(typeof window!=='undefined'?`${window.location.origin}/api/webhooks/calling/${selected.connection_id}`:'')}</div><div className="mt-2 text-[9px] text-slate-500">Send header <code>x-growthos-webhook-secret</code>. The secret is returned only when the connection is created.</div></div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[11px] font-semibold text-slate-950">{selected.connection_name}</div>
+              {selected.status==='active' ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-semibold text-emerald-700"><CheckCircle2 size={11}/>Active</span> : selected.last_error ? <span className="rounded-full bg-rose-50 px-2 py-1 text-[9px] font-semibold text-rose-700">Error</span> : <span className="rounded-full bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-700">Testing</span>}
+            </div>
+            <div className="mt-0.5 text-[9px] text-slate-500">Platform: {selected.provider_key}</div>
+            {data.suggestedPreset&&<div className="mt-0.5 text-[8px] font-medium text-emerald-600">Preset recognized: {data.suggestedPreset.name}</div>}
+          </div>
+          <button disabled={busy} onClick={deleteConnection} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1.5 text-[9px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-40"><Trash2 size={11}/>Delete Connection</button>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-2.5"><div className="text-[9px] font-semibold uppercase text-slate-400">Webhook endpoint</div><div className="mt-1 break-all font-mono text-[9px] text-slate-700">{created?.connectionId===selected.connection_id?created.webhookUrl:(typeof window!=='undefined'?`${window.location.origin}/api/webhooks/calling/${selected.connection_id}`:'')}</div><div className="mt-2 text-[9px] text-slate-500">Preferred authentication: send header <code>x-growthos-webhook-secret</code>. The secret is returned only when the connection is created. Providers that cannot send custom headers can still use the supported query-token fallback during setup.</div></div>
         {created?.connectionId===selected.connection_id && <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[9px] text-amber-800"><b>Save this webhook secret now:</b><div className="mt-1 break-all font-mono">{created.webhookSecret}</div></div>}
 
-        <div className="flex items-center justify-between"><div><div className="text-[10px] font-semibold text-slate-900">Test event & mapping</div><div className="text-[9px] text-slate-500">Send a provider test event while this connection is in testing mode, then refresh.</div></div><button onClick={()=>load(selected.connection_id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[9px] font-semibold"><RefreshCw size={11}/>Refresh Test</button></div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3"><div><div className="text-[10px] font-semibold text-slate-900">Test event & mapping</div><div className="text-[9px] text-slate-500">Use a live webhook event, or paste a sample JSON payload to configure mapping before the provider is publicly reachable.</div></div><button onClick={()=>load(selected.connection_id)} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[9px] font-semibold"><RefreshCw size={11}/>Refresh Test</button></div>
+          <div className="rounded-lg border border-slate-200 bg-white p-2.5">
+            <div className="text-[9px] font-semibold text-slate-700">Paste sample provider JSON</div>
+            <p className="mt-1 text-[8px] leading-4 text-slate-400">Useful during localhost setup. Paste one real webhook example from your calling platform; Growth OS will discover its fields exactly like a received test webhook.</p>
+            <textarea value={samplePayload} onChange={e=>{setSamplePayload(e.target.value);setSampleError('');}} placeholder={'{\n  \"call_id\": \"example-123\",\n  \"phone\": \"919999999999\"\n}'} className="mt-2 min-h-28 w-full rounded-lg border border-slate-200 p-2 font-mono text-[9px]"/>
+            {sampleError&&<div className="mt-1 text-[8px] font-medium text-rose-600">{sampleError}</div>}
+            <button disabled={busy||!samplePayload.trim()} onClick={captureSample} className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[9px] font-semibold text-slate-700 disabled:opacity-40">Use Sample Event</button>
+          </div>
+        </div>
 
         {data.latestTestEvent ? <div className="space-y-2">
           <div className="overflow-hidden rounded-lg border border-slate-200"><div className="grid grid-cols-[1.2fr_1fr_1fr] bg-slate-50 px-2 py-1.5 text-[9px] font-semibold text-slate-500"><span>Provider field</span><span>Example</span><span>Growth OS field</span></div>{fieldMappings.map((m:any,i:number)=><div key={`${m.sourcePath}-${i}`} className="grid grid-cols-[1.2fr_1fr_1fr] items-center border-t border-slate-100 px-2 py-1.5 text-[9px]"><code className="truncate">{m.sourcePath}</code><span className="truncate text-slate-500">{String(m.example??'')}</span><select value={m.canonicalField} onChange={e=>setFieldMappings(x=>x.map((v,j)=>j===i?{...v,canonicalField:e.target.value}:v))} className="h-7 rounded border border-slate-200 bg-white px-1"><option value="">Ignore</option>{canonicalFields.map(f=><option key={f} value={f}>{f}</option>)}</select></div>)}</div>
