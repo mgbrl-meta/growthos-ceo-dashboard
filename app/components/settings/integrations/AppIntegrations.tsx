@@ -740,7 +740,13 @@ function IntegrationModal({
         </div>
 
 
-        <div className="space-y-3 p-3.5">
+        <div
+          className={
+            integration.id === 'calling'
+              ? 'max-h-[calc(100vh-180px)] space-y-3 overflow-y-auto p-3.5 pr-2'
+              : 'space-y-3 p-3.5'
+          }
+        >
 
           {integration.id === 'calling' ? (
             <CallingIntegrationManager onStatusChange={setCallingRuntimeStatus} />
