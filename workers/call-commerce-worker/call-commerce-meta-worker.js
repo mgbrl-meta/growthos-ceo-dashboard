@@ -102,6 +102,11 @@ function readJson(value, fallback) {
   return value;
 }
 
+function nullableString(value) {
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
 
 async function getMetaEventsConnection(workspaceId, brandId) {
   const [rows] =
@@ -313,15 +318,15 @@ export async function processMetaQueue(workspaceId, brandId) {
           @workspace_id,
           @brand_id,
           @lead_id,
-          @call_id,
+          NULLIF(@call_id,''),
           @event_key,
           @event_name,
           @event_id,
           PARSE_JSON(@request_payload),
           PARSE_JSON(@response_payload),
           @success,
-          @http_status,
-          @error,
+          NULLIF(@http_status,0),
+          NULLIF(@error,''),
           CURRENT_TIMESTAMP()
         )
       `,
@@ -330,15 +335,15 @@ export async function processMetaQueue(workspaceId, brandId) {
         workspace_id: workspaceId,
         brand_id: brandId,
         lead_id: row.lead_id,
-        call_id: row.call_id || null,
+        call_id: nullableString(row.call_id),
         event_key: row.event_key,
         event_name: row.event_name,
         event_id: row.event_id,
         request_payload: JSON.stringify(body),
         response_payload: JSON.stringify(responsePayload || {}),
         success: ok,
-        http_status: status || null,
-        error: errorMessage,
+        http_status: status || 0,
+        error: nullableString(errorMessage),
       },
     });
 
@@ -358,7 +363,7 @@ export async function processMetaQueue(workspaceId, brandId) {
         SET
           status=@status,
           attempts=@attempts,
-          last_error=@last_error,
+          last_error=NULLIF(@last_error,''),
           next_attempt_at=IF(
             @status='RETRY',
             TIMESTAMP_ADD(
@@ -373,7 +378,7 @@ export async function processMetaQueue(workspaceId, brandId) {
       params: {
         status: nextStatus,
         attempts,
-        last_error: errorMessage,
+        last_error: nullableString(errorMessage),
         queue_id: row.queue_id,
       },
     });

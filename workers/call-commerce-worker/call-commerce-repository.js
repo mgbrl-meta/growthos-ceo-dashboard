@@ -176,6 +176,18 @@ function normalizeAcceptedAt(value) {
   return date?.toISOString() || new Date().toISOString();
 }
 
+function nullableString(value) {
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
+
+function nullableIntegerString(value) {
+  if (value === null || value === undefined || value === '') return '';
+  const number = Number(value);
+  return Number.isFinite(number) ? String(Math.trunc(number)) : '';
+}
+
 
 // ============================================================
 // CALLING CONTEXT INTEGRITY
@@ -275,7 +287,7 @@ export async function beginRawEventDelivery(input) {
 
       WHEN MATCHED THEN
         UPDATE SET
-          pubsub_message_id=COALESCE(@pubsub_message_id,t.pubsub_message_id),
+          pubsub_message_id=COALESCE(NULLIF(@pubsub_message_id,''),t.pubsub_message_id),
           processing_status=IF(t.processing_status='processed',t.processing_status,'processing'),
           processing_error=IF(t.processing_status='processed',t.processing_error,NULL)
 
@@ -298,7 +310,7 @@ export async function beginRawEventDelivery(input) {
         VALUES (
           @raw_event_id,
           @delivery_id,
-          @pubsub_message_id,
+          NULLIF(@pubsub_message_id,''),
           @workspace_id,
           @brand_id,
           @connection_id,
@@ -314,7 +326,7 @@ export async function beginRawEventDelivery(input) {
     params: {
       raw_event_id: rawEventId,
       delivery_id: input.deliveryId,
-      pubsub_message_id: input.pubsubMessageId || null,
+      pubsub_message_id: nullableString(input.pubsubMessageId),
       workspace_id: input.workspaceId,
       brand_id: input.brandId,
       connection_id: input.connectionId,
@@ -335,12 +347,12 @@ export async function finalizeRawEventDelivery(input) {
     query: `
       UPDATE ${table('raw_call_events')}
       SET
-        provider_call_id=COALESCE(@provider_call_id,provider_call_id),
-        provider_event_id=COALESCE(@provider_event_id,provider_event_id),
-        raw_event_type=COALESCE(@raw_event_type,raw_event_type),
-        raw_status=COALESCE(@raw_status,raw_status),
+        provider_call_id=COALESCE(NULLIF(@provider_call_id,''),provider_call_id),
+        provider_event_id=COALESCE(NULLIF(@provider_event_id,''),provider_event_id),
+        raw_event_type=COALESCE(NULLIF(@raw_event_type,''),raw_event_type),
+        raw_status=COALESCE(NULLIF(@raw_status,''),raw_status),
         processing_status=@processing_status,
-        processing_error=@processing_error,
+        processing_error=NULLIF(@processing_error,''),
         processed_at=IF(
           @processing_status IN ('processed','raw_only','failed'),
           CURRENT_TIMESTAMP(),
@@ -350,12 +362,12 @@ export async function finalizeRawEventDelivery(input) {
     `,
     params: {
       raw_event_id: input.rawEventId,
-      provider_call_id: input.event?.providerCallId || null,
-      provider_event_id: input.event?.providerEventId || null,
-      raw_event_type: input.event?.rawEventType || null,
-      raw_status: input.event?.rawStatus || null,
+      provider_call_id: nullableString(input.event?.providerCallId),
+      provider_event_id: nullableString(input.event?.providerEventId),
+      raw_event_type: nullableString(input.event?.rawEventType),
+      raw_status: nullableString(input.event?.rawStatus),
       processing_status: input.status,
-      processing_error: input.error || null,
+      processing_error: nullableString(input.error),
     },
   });
 }
@@ -376,7 +388,7 @@ export async function markCallingConnectionProcessingResult(input) {
           last_event_at
         ),
         last_success_at=IF(@success,CURRENT_TIMESTAMP(),last_success_at),
-        last_error=IF(@success,NULL,@last_error),
+        last_error=IF(@success,NULL,NULLIF(@last_error,'')),
         updated_at=CURRENT_TIMESTAMP()
       WHERE connection_id=@connection_id
     `,
@@ -384,7 +396,7 @@ export async function markCallingConnectionProcessingResult(input) {
       connection_id: input.connectionId,
       accepted_at: acceptedAt,
       success: Boolean(input.success),
-      last_error: input.error || null,
+      last_error: nullableString(input.error),
     },
   });
 }
@@ -530,11 +542,11 @@ async function createCallLead(input) {
         @workspace_id,
         @brand_id,
         @phone,
-        @customer_name,
-        @email,
-        @product,
+        NULLIF(@customer_name,''),
+        NULLIF(@email,''),
+        NULLIF(@product,''),
         'NEW',
-        @notes,
+        NULLIF(@notes,''),
         'INR',
         CURRENT_TIMESTAMP(),
         COALESCE(SAFE_CAST(@started_at AS TIMESTAMP),CURRENT_TIMESTAMP()),
@@ -554,10 +566,10 @@ async function createCallLead(input) {
       workspace_id: input.workspaceId,
       brand_id: input.brandId,
       phone: normalizePhone(input.phone),
-      customer_name: input.customerName || null,
-      email: input.email || null,
-      product: input.product || null,
-      notes: input.notes || null,
+      customer_name: nullableString(input.customerName),
+      email: nullableString(input.email),
+      product: nullableString(input.product),
+      notes: nullableString(input.notes),
       started_at: input.startedAt || '',
       actor: input.actor,
     },
@@ -647,24 +659,24 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
       WHEN MATCHED THEN
         UPDATE SET
           lead_id=@lead_id,
-          business_number=COALESCE(@business_number,t.business_number),
+          business_number=COALESCE(NULLIF(@business_number,''),t.business_number),
           event_type=@event_type,
           call_status=@call_status,
           direction=@direction,
-          agent_id=@agent_id,
-          agent_name=@agent_name,
-          agent_phone=@agent_phone,
+          agent_id=NULLIF(@agent_id,''),
+          agent_name=NULLIF(@agent_name,''),
+          agent_phone=NULLIF(@agent_phone,''),
           call_started_at=COALESCE(SAFE_CAST(@started_at AS TIMESTAMP),t.call_started_at),
           call_answered_at=COALESCE(SAFE_CAST(@answered_at AS TIMESTAMP),t.call_answered_at),
           call_ended_at=COALESCE(SAFE_CAST(@ended_at AS TIMESTAMP),t.call_ended_at),
           provider_updated_at=COALESCE(SAFE_CAST(@provider_updated_at AS TIMESTAMP),t.provider_updated_at),
           duration_seconds=GREATEST(COALESCE(t.duration_seconds,0),COALESCE(@duration_seconds,0)),
-          disconnected_by=@disconnected_by,
-          recording_url=COALESCE(@recording_url,t.recording_url),
-          reason=@reason,
+          disconnected_by=NULLIF(@disconnected_by,''),
+          recording_url=COALESCE(NULLIF(@recording_url,''),t.recording_url),
+          reason=NULLIF(@reason,''),
           ivr_inputs=PARSE_JSON(@ivr_inputs),
-          raw_event_type=@raw_event_type,
-          raw_status=@raw_status,
+          raw_event_type=NULLIF(@raw_event_type,''),
+          raw_status=NULLIF(@raw_status,''),
           updated_at=CURRENT_TIMESTAMP()
 
       WHEN NOT MATCHED THEN
@@ -707,30 +719,39 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
           @provider_call_id,
           @lead_id,
           @phone,
-          @business_number,
+          NULLIF(@business_number,''),
           @event_type,
           @call_status,
           @direction,
-          @agent_id,
-          @agent_name,
-          @agent_phone,
+          NULLIF(@agent_id,''),
+          NULLIF(@agent_name,''),
+          NULLIF(@agent_phone,''),
           SAFE_CAST(@started_at AS TIMESTAMP),
           SAFE_CAST(@answered_at AS TIMESTAMP),
           SAFE_CAST(@ended_at AS TIMESTAMP),
           SAFE_CAST(@provider_updated_at AS TIMESTAMP),
           @duration_seconds,
-          @disconnected_by,
-          @recording_url,
-          @reason,
+          NULLIF(@disconnected_by,''),
+          NULLIF(@recording_url,''),
+          NULLIF(@reason,''),
           PARSE_JSON(@ivr_inputs),
-          @raw_event_type,
-          @raw_status,
+          NULLIF(@raw_event_type,''),
+          NULLIF(@raw_status,''),
           CURRENT_TIMESTAMP(),
           CURRENT_TIMESTAMP()
         )
     `,
     params: {
       ...values,
+      business_number: nullableString(values.business_number),
+      agent_id: nullableString(values.agent_id),
+      agent_name: nullableString(values.agent_name),
+      agent_phone: nullableString(values.agent_phone),
+      disconnected_by: nullableString(values.disconnected_by),
+      recording_url: nullableString(values.recording_url),
+      reason: nullableString(values.reason),
+      raw_event_type: nullableString(values.raw_event_type),
+      raw_status: nullableString(values.raw_status),
       started_at: values.started_at || '',
       answered_at: values.answered_at || '',
       ended_at: values.ended_at || '',
@@ -823,12 +844,12 @@ async function refreshLeadCallSummary(input) {
       SET
         first_call_at=COALESCE(SAFE_CAST(@first_call_at AS TIMESTAMP),first_call_at),
         latest_call_at=SAFE_CAST(@latest_call_at AS TIMESTAMP),
-        latest_call_status=@latest_call_status,
-        latest_agent_name=@latest_agent_name,
-        latest_attempt_id=@latest_attempt_id,
-        latest_provider_call_id=@latest_provider_call_id,
-        latest_business_number=@latest_business_number,
-        latest_duration_seconds=@latest_duration_seconds,
+        latest_call_status=NULLIF(@latest_call_status,''),
+        latest_agent_name=NULLIF(@latest_agent_name,''),
+        latest_attempt_id=NULLIF(@latest_attempt_id,''),
+        latest_provider_call_id=NULLIF(@latest_provider_call_id,''),
+        latest_business_number=NULLIF(@latest_business_number,''),
+        latest_duration_seconds=SAFE_CAST(NULLIF(@latest_duration_seconds,'') AS INT64),
         call_attempt_count=@total,
         answered_attempt_count=@answered,
         unanswered_attempt_count=@unanswered,
@@ -841,15 +862,13 @@ async function refreshLeadCallSummary(input) {
     params: {
       first_call_at: firstCallAt,
       latest_call_at: latestCallAt,
-      latest_call_status: latest.call_status || null,
-      latest_agent_name: latest.agent_name || null,
-      latest_attempt_id: latest.attempt_id || null,
-      latest_provider_call_id: latest.provider_call_id || null,
-      latest_business_number: latest.business_number || null,
+      latest_call_status: nullableString(latest.call_status),
+      latest_agent_name: nullableString(latest.agent_name),
+      latest_attempt_id: nullableString(latest.attempt_id),
+      latest_provider_call_id: nullableString(latest.provider_call_id),
+      latest_business_number: nullableString(latest.business_number),
       latest_duration_seconds:
-        latest.duration_seconds == null
-          ? null
-          : Number(latest.duration_seconds),
+        nullableIntegerString(latest.duration_seconds),
       total: Number(summary.total || 0),
       answered: Number(summary.answered || 0),
       unanswered: Number(summary.unanswered || 0),
@@ -973,7 +992,7 @@ export async function queueMetaEvent(input) {
           @workspace_id,
           @brand_id,
           @lead_id,
-          @call_id,
+          NULLIF(@call_id,''),
           @event_key,
           @event_name,
           @event_id,
@@ -990,7 +1009,7 @@ export async function queueMetaEvent(input) {
       workspace_id: input.workspaceId,
       brand_id: input.brandId,
       lead_id: input.leadId,
-      call_id: input.callId,
+      call_id: nullableString(input.callId),
       event_key: input.eventKey,
       event_name: input.eventName,
       event_id: eventId,

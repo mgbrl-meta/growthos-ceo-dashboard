@@ -100,6 +100,21 @@ function decodePubSubData(encodedData) {
 }
 
 
+async function safeMarkCallingConnectionProcessingResult(input) {
+  try {
+    await markCallingConnectionProcessingResult(input);
+  } catch (error) {
+    console.error(
+      'CALL_COMMERCE_CONNECTION_HEALTH_FAILED',
+      {
+        connectionId: input?.connectionId ?? null,
+        error: error?.message || 'CONNECTION_HEALTH_FAILED',
+      }
+    );
+  }
+}
+
+
 // ============================================================
 // VALIDATE JOB
 // ============================================================
@@ -276,7 +291,7 @@ async function processCallEvent(job, message) {
         error: messageText,
       });
 
-      await markCallingConnectionProcessingResult({
+      await safeMarkCallingConnectionProcessingResult({
         connectionId: context.connection_id,
         acceptedAt,
         success: false,
@@ -315,7 +330,7 @@ async function processCallEvent(job, message) {
     });
 
     if (event.eventType === 'RINGING') {
-      await markCallingConnectionProcessingResult({
+      await safeMarkCallingConnectionProcessingResult({
         connectionId: context.connection_id,
         acceptedAt,
         success: true,
@@ -341,7 +356,7 @@ async function processCallEvent(job, message) {
       error: null,
     });
 
-    await markCallingConnectionProcessingResult({
+    await safeMarkCallingConnectionProcessingResult({
       connectionId: context.connection_id,
       acceptedAt,
       success: true,
@@ -398,7 +413,7 @@ async function processCallEvent(job, message) {
     }
 
     try {
-      await markCallingConnectionProcessingResult({
+      await safeMarkCallingConnectionProcessingResult({
         connectionId: job.connectionId,
         acceptedAt,
         success: false,
