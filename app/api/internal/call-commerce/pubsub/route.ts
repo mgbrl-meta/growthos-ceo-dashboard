@@ -23,13 +23,17 @@ function readJson(value: unknown, fallback: any) {
   return value;
 }
 
-function decodeJob(body: any): { job: CallCommerceJob; messageId: string | null } {
+function decodeJob(body: any): { job: CallCommerceJob; messageId: string | null; publishTime: string | null } {
   const encoded = body?.message?.data;
   if (!encoded || typeof encoded !== 'string') throw new Error('PUBSUB_MESSAGE_DATA_MISSING');
   const json = Buffer.from(encoded, 'base64').toString('utf8');
   const job = JSON.parse(json) as CallCommerceJob;
   if (!job || job.version !== 1 || !job.jobType) throw new Error('CALL_COMMERCE_JOB_INVALID');
-  return { job, messageId: String(body?.message?.messageId || body?.message?.message_id || '') || null };
+  return {
+    job,
+    messageId: String(body?.message?.messageId || body?.message?.message_id || '') || null,
+    publishTime: String(body?.message?.publishTime || body?.message?.publish_time || '') || null,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -40,7 +44,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: error?.message || 'PUBSUB_UNAUTHENTICATED' }, { status: 401 });
   }
 
-  let decoded: { job: CallCommerceJob; messageId: string | null };
+  let decoded: { job: CallCommerceJob; messageId: string | null; publishTime: string | null };
   try {
     decoded = decodeJob(await request.json());
   } catch (error: any) {
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, acknowledged: true, error: error?.message || 'PUBSUB_MESSAGE_INVALID' });
   }
 
-  const { job, messageId } = decoded;
+  const { job, messageId, publishTime } = decoded;
 
   if (job.jobType === 'meta_flush') {
     try {
@@ -61,12 +65,29 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // received_at is Growth OS ingestion time, not a provider-mapped timestamp.
+  // Prefer the timestamp captured by the public webhook, then Pub/Sub publishTime,
+  // and finally worker time. This also makes retries of older queued messages safe.
+  const acceptedAtCandidate = String(job.acceptedAt || publishTime || '').trim();
+  const acceptedAt = Number.isFinite(Date.parse(acceptedAtCandidate))
+    ? new Date(acceptedAtCandidate).toISOString()
+    : new Date().toISOString();
+
+  if (!job.acceptedAt) {
+    console.warn('CALL_COMMERCE_ACCEPTED_AT_FALLBACK', {
+      deliveryId: job.deliveryId,
+      messageId,
+      publishTime,
+      acceptedAt,
+    });
+  }
+
   let rawEventId: string | null = null;
   try {
     rawEventId = await beginRawEventDelivery({
       deliveryId: job.deliveryId,
       pubsubMessageId: messageId,
-      acceptedAt: job.acceptedAt,
+      acceptedAt,
       workspaceId: job.workspaceId,
       brandId: job.brandId,
       connectionId: job.connectionId,
@@ -84,7 +105,7 @@ export async function POST(request: NextRequest) {
       });
       await markCallingConnectionProcessingResult({
         connectionId: job.connectionId,
-        acceptedAt: job.acceptedAt,
+        acceptedAt,
         success: false,
         error: 'CALLING_MAPPING_VERSION_NOT_FOUND',
       });
@@ -108,7 +129,7 @@ export async function POST(request: NextRequest) {
       await finalizeRawEventDelivery({ rawEventId, status: 'failed', error: message });
       await markCallingConnectionProcessingResult({
         connectionId: job.connectionId,
-        acceptedAt: job.acceptedAt,
+        acceptedAt,
         success: false,
         error: message,
       });
@@ -126,7 +147,7 @@ export async function POST(request: NextRequest) {
     if (event.eventType === 'RINGING') {
       await markCallingConnectionProcessingResult({
         connectionId: job.connectionId,
-        acceptedAt: job.acceptedAt,
+        acceptedAt,
         success: true,
       });
       return NextResponse.json({ ok: true, jobType: job.jobType, rawOnly: true, rawEventId });
@@ -143,7 +164,7 @@ export async function POST(request: NextRequest) {
 
     await markCallingConnectionProcessingResult({
       connectionId: job.connectionId,
-      acceptedAt: job.acceptedAt,
+      acceptedAt,
       success: true,
     });
 
@@ -172,7 +193,7 @@ export async function POST(request: NextRequest) {
     try {
       await markCallingConnectionProcessingResult({
         connectionId: job.connectionId,
-        acceptedAt: job.acceptedAt,
+        acceptedAt,
         success: false,
         error: error?.message || 'CALL_JOB_FAILED',
       });
