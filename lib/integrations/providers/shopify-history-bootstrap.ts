@@ -12,13 +12,16 @@ import {
 import {
   queryEarliestCustomerWithStoredShopifyCredential,
   queryEarliestOrderWithStoredShopifyCredential,
+  queryEarliestProductWithStoredShopifyCredential,
 } from '@/lib/integrations/providers/shopify-credentials';
 
 import {
   createShopifyCustomersBackfill,
   createShopifyOrdersBackfill,
+  createShopifyProductsBackfill,
   planShopifyCustomersBackfillWindows,
   planShopifyOrdersBackfillWindows,
+  planShopifyProductsBackfillWindows,
 } from '@/lib/integrations/providers/shopify-backfill';
 
 
@@ -469,6 +472,135 @@ async function getExistingCustomerCoverage(
 
 }
 
+// ============================================================
+// EXISTING LOCAL PRODUCT COVERAGE
+// ============================================================
+
+async function getExistingProductCoverage(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    integrationAccountId:
+      string;
+
+  }
+) {
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT
+
+          COUNT(*) AS product_count,
+
+          MIN(created_at)
+            AS earliest_product,
+
+          MAX(created_at)
+            AS latest_product,
+
+          MAX(updated_at)
+            AS latest_product_update,
+
+          MAX(loaded_at)
+            AS latest_load
+
+        FROM
+          \`${PROJECT_ID}.${DATA_DATASET}.shopify_products_current\`
+
+        WHERE
+
+          workspace_id =
+            @workspace_id
+
+          AND brand_id =
+            @brand_id
+
+          AND integration_account_id =
+            @integration_account_id
+
+      `,
+
+      location:
+        DATA_LOCATION,
+
+      params: {
+
+        workspace_id:
+          input.workspaceId,
+
+        brand_id:
+          input.brandId,
+
+        integration_account_id:
+          input.integrationAccountId,
+
+      },
+
+      types: {
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+        integration_account_id:
+          'STRING',
+
+      },
+
+    });
+
+
+  const row =
+    rows?.[0]
+    ??
+    {};
+
+
+  return {
+
+    productCount:
+      Number(
+        row.product_count
+        ??
+        0
+      ),
+
+    earliestProduct:
+      timestampToIso(
+        row.earliest_product
+      ),
+
+    latestProduct:
+      timestampToIso(
+        row.latest_product
+      ),
+
+    latestProductUpdate:
+      timestampToIso(
+        row.latest_product_update
+      ),
+
+    latestLoad:
+      timestampToIso(
+        row.latest_load
+      ),
+
+  };
+
+}
+
 
 // ============================================================
 // EXISTING EQUIVALENT BACKFILL
@@ -481,7 +613,7 @@ async function getExistingCustomerCoverage(
 // existing.from <= missing.from
 // existing.to   >= missing.to
 //
-// Entity is mandatory so Orders and Customers can never cover
+// Entity is mandatory so Orders and Customers and products can never cover
 // one another accidentally.
 // ============================================================
 
@@ -498,7 +630,7 @@ async function findCoveringBackfill(
       string;
 
     entity:
-      'orders' | 'customers';
+      'orders' | 'customers'  | 'products';
 
     from:
       string;
@@ -2039,6 +2171,724 @@ export async function inspectShopifyInitialCustomersHistory(
 
 }
 
+// ============================================================
+// INSPECT INITIAL SHOPIFY PRODUCT HISTORY
+//
+// READ-ONLY.
+//
+// Determines whether Growth OS is missing a definite
+// historical Product prefix.
+//
+// Does NOT:
+//
+// create a backfill
+// publish Pub/Sub
+// mutate warehouse state
+// ============================================================
+
+export async function inspectShopifyInitialProductsHistory(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // CONFIG
+  // ==========================================================
+
+  if (!PROJECT_ID) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_PROJECT_MISSING'
+    );
+
+  }
+
+
+  const workspaceId =
+    requireValue(
+      input.workspaceId,
+      'SHOPIFY_PRODUCT_HISTORY_WORKSPACE_MISSING'
+    );
+
+
+  const brandId =
+    requireValue(
+      input.brandId,
+      'SHOPIFY_PRODUCT_HISTORY_BRAND_MISSING'
+    );
+
+
+  const connectionId =
+    requireValue(
+      input.connectionId,
+      'SHOPIFY_PRODUCT_HISTORY_CONNECTION_MISSING'
+    );
+
+
+  // ==========================================================
+  // CONNECTION
+  // ==========================================================
+
+  const connection =
+    await getIntegrationConnectionById(
+      connectionId
+    );
+
+
+  if (!connection) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_CONNECTION_NOT_FOUND'
+    );
+
+  }
+
+
+  if (
+    connection.workspace_id !==
+      workspaceId
+    ||
+    connection.brand_id !==
+      brandId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_CONNECTION_TENANT_MISMATCH'
+    );
+
+  }
+
+
+  if (
+    connection.provider !==
+      'shopify'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_PROVIDER_INVALID'
+    );
+
+  }
+
+
+  const providerAccountId =
+    requireValue(
+      connection.provider_account_id,
+      'SHOPIFY_PRODUCT_HISTORY_PROVIDER_ACCOUNT_MISSING'
+    );
+
+
+  const secretName =
+    requireValue(
+      connection.secret_name,
+      'SHOPIFY_PRODUCT_HISTORY_SECRET_MISSING'
+    );
+
+
+  // ==========================================================
+  // EXACT SHOPIFY ACCOUNT
+  // ==========================================================
+
+  const account =
+    await getIntegrationAccountByProviderAccountId(
+
+      'shopify',
+
+      providerAccountId
+
+    );
+
+
+  if (!account) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_ACCOUNT_NOT_FOUND'
+    );
+
+  }
+
+
+  if (
+    account.workspace_id !==
+      workspaceId
+    ||
+    account.brand_id !==
+      brandId
+    ||
+    account.connection_id !==
+      connectionId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_ACCOUNT_IDENTITY_MISMATCH'
+    );
+
+  }
+
+
+  const integrationAccountId =
+    requireValue(
+      account.integration_account_id,
+      'SHOPIFY_PRODUCT_HISTORY_INTEGRATION_ACCOUNT_MISSING'
+    );
+
+
+  const metadata =
+    normalizeMetadata(
+      account.metadata
+    );
+
+
+  const shopDomain =
+    requireValue(
+      metadata.shop_domain,
+      'SHOPIFY_PRODUCT_HISTORY_SHOP_DOMAIN_MISSING'
+    );
+
+
+  // ==========================================================
+  // SHOPIFY SOURCE BOUNDARY
+  // ==========================================================
+
+  const source =
+    await queryEarliestProductWithStoredShopifyCredential({
+
+      workspaceId,
+
+      brandId,
+
+      secretName,
+
+      expectedShopId:
+        providerAccountId,
+
+      expectedShopDomain:
+        shopDomain,
+
+    });
+
+
+  const earliestShopifyProduct =
+    source.product?.createdAt
+    ??
+    null;
+
+
+  // ==========================================================
+  // EMPTY PRODUCT BASE
+  // ==========================================================
+
+  if (!earliestShopifyProduct) {
+
+    return {
+
+      ok:
+        true,
+
+      decision:
+        'no_products',
+
+      backfillRequired:
+        false,
+
+      workspaceId,
+
+      brandId,
+
+      connectionId,
+
+      integrationAccountId,
+
+      providerAccountId,
+
+      shopDomain,
+
+      source: {
+
+        hasProducts:
+          false,
+
+        earliestProduct:
+          null,
+
+        tokenRefreshed:
+          source.tokenRefreshed,
+
+      },
+
+      warehouse: {
+
+        productCount:
+          0,
+
+        earliestProduct:
+          null,
+
+        latestProduct:
+          null,
+
+        latestProductUpdate:
+          null,
+
+        latestLoad:
+          null,
+
+      },
+
+      missingRange:
+        null,
+
+      plannedBackfill:
+        null,
+
+      existingBackfill:
+        null,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // LOCAL WAREHOUSE COVERAGE
+  // ==========================================================
+
+  const warehouse =
+    await getExistingProductCoverage({
+
+      workspaceId,
+
+      brandId,
+
+      integrationAccountId,
+
+    });
+
+
+  let missingFrom:
+    string | null =
+      null;
+
+
+  let missingTo:
+    string | null =
+      null;
+
+
+  let decision:
+    string =
+      'history_complete';
+
+
+  // ==========================================================
+  // BRAND NEW GROWTH OS PRODUCT WAREHOUSE
+  //
+  // Shopify earliest Product
+  //        ↓
+  // stable installation/setup cutoff
+  // ==========================================================
+
+  if (
+    warehouse.productCount ===
+      0
+    ||
+    !warehouse.earliestProduct
+  ) {
+
+    missingFrom =
+      earliestShopifyProduct;
+
+
+    // ========================================================
+    // STABLE BOOTSTRAP CUTOFF
+    //
+    // Use the same stable installation metadata as Orders and
+    // Customers.
+    //
+    // Repeated setup calls therefore produce the same logical
+    // initial Product history range.
+    // ========================================================
+
+    const bootstrapCutoffRaw =
+      String(
+        metadata.setup_required_at
+        ??
+        metadata.installed_at
+        ??
+        ''
+      ).trim();
+
+
+    const bootstrapCutoffTimestamp =
+      Date.parse(
+        bootstrapCutoffRaw
+      );
+
+
+    if (
+      !Number.isFinite(
+        bootstrapCutoffTimestamp
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_PRODUCT_HISTORY_BOOTSTRAP_CUTOFF_MISSING'
+      );
+
+    }
+
+
+    missingTo =
+      new Date(
+        bootstrapCutoffTimestamp
+      ).toISOString();
+
+
+    decision =
+      'full_history_required';
+
+  } else {
+
+    // ========================================================
+    // EXISTING PRODUCT DATA
+    //
+    // Fill only the definite historical prefix.
+    //
+    // Example:
+    //
+    // Shopify earliest Product:
+    // 2021-01-01
+    //
+    // Growth OS earliest Product:
+    // 2024-03-01
+    //
+    // Backfill:
+    //
+    // [2021-01-01, 2024-03-01)
+    //
+    // Internal-gap reconciliation remains a separate concern.
+    // ========================================================
+
+    const sourceStart =
+      Date.parse(
+        earliestShopifyProduct
+      );
+
+
+    const localStart =
+      Date.parse(
+        warehouse.earliestProduct
+      );
+
+
+    if (
+      !Number.isFinite(
+        sourceStart
+      )
+      ||
+      !Number.isFinite(
+        localStart
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_PRODUCT_HISTORY_BOUNDARY_INVALID'
+      );
+
+    }
+
+
+    if (
+      sourceStart <
+        localStart
+    ) {
+
+      missingFrom =
+        earliestShopifyProduct;
+
+      missingTo =
+        warehouse.earliestProduct;
+
+      decision =
+        'historical_prefix_required';
+
+    }
+
+  }
+
+
+  // ==========================================================
+  // NOTHING MISSING AT PREFIX LEVEL
+  // ==========================================================
+
+  if (
+    !missingFrom
+    ||
+    !missingTo
+  ) {
+
+    return {
+
+      ok:
+        true,
+
+      decision,
+
+      backfillRequired:
+        false,
+
+      workspaceId,
+
+      brandId,
+
+      connectionId,
+
+      integrationAccountId,
+
+      providerAccountId,
+
+      shopDomain,
+
+      source: {
+
+        hasProducts:
+          true,
+
+        earliestProduct:
+          earliestShopifyProduct,
+
+        tokenRefreshed:
+          source.tokenRefreshed,
+
+      },
+
+      warehouse,
+
+      missingRange:
+        null,
+
+      plannedBackfill:
+        null,
+
+      existingBackfill:
+        null,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // VALIDATE MISSING RANGE
+  // ==========================================================
+
+  const missingStart =
+    Date.parse(
+      missingFrom
+    );
+
+
+  const missingEnd =
+    Date.parse(
+      missingTo
+    );
+
+
+  if (
+    !Number.isFinite(
+      missingStart
+    )
+    ||
+    !Number.isFinite(
+      missingEnd
+    )
+    ||
+    missingStart >=
+      missingEnd
+  ) {
+
+    throw new Error(
+      'SHOPIFY_PRODUCT_HISTORY_MISSING_RANGE_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // READ-ONLY PRODUCT WINDOW PREVIEW
+  // ==========================================================
+
+  const plannedBackfill =
+    planShopifyProductsBackfillWindows({
+
+      from:
+        missingFrom,
+
+      to:
+        missingTo,
+
+    });
+
+
+  // ==========================================================
+  // DUPLICATE / COVERING PRODUCT RUN CHECK
+  // ==========================================================
+
+  const existingBackfill =
+    await findCoveringBackfill({
+
+      workspaceId,
+
+      brandId,
+
+      integrationAccountId,
+
+      entity:
+        'products',
+
+      from:
+        missingFrom,
+
+      to:
+        missingTo,
+
+    });
+
+
+  const lastPlannedWindow =
+    plannedBackfill.windows[
+      plannedBackfill.windows.length - 1
+    ]
+    ??
+    null;
+
+
+  return {
+
+    ok:
+      true,
+
+    decision:
+      existingBackfill
+        ?
+          'already_planned'
+        :
+          decision,
+
+    backfillRequired:
+      !existingBackfill,
+
+    workspaceId,
+
+    brandId,
+
+    connectionId,
+
+    integrationAccountId,
+
+    providerAccountId,
+
+    shopDomain,
+
+    source: {
+
+      hasProducts:
+        true,
+
+      earliestProduct:
+        earliestShopifyProduct,
+
+      tokenRefreshed:
+        source.tokenRefreshed,
+
+    },
+
+    warehouse,
+
+    missingRange: {
+
+      from:
+        missingFrom,
+
+      to:
+        missingTo,
+
+    },
+
+    plannedBackfill: {
+
+      strategy:
+        plannedBackfill.strategy,
+
+      totalWindows:
+        plannedBackfill.totalWindows,
+
+      firstWindow:
+        plannedBackfill.windows[0]
+        ??
+        null,
+
+      lastWindow:
+        lastPlannedWindow,
+
+      windows:
+        plannedBackfill.windows,
+
+    },
+
+    existingBackfill:
+      existingBackfill
+        ?
+          {
+
+            backfillRunId:
+              String(
+                existingBackfill
+                  .backfill_run_id
+              ),
+
+            entity:
+              String(
+                existingBackfill
+                  .entity
+              ),
+
+            status:
+              String(
+                existingBackfill
+                  .status
+              ),
+
+            requestedFrom:
+              timestampToIso(
+                existingBackfill
+                  .requested_from
+              ),
+
+            requestedTo:
+              timestampToIso(
+                existingBackfill
+                  .requested_to
+              ),
+
+          }
+        :
+          null,
+
+  };
+
+}
+
 
 // ============================================================
 // ENSURE INITIAL ORDERS HISTORY
@@ -2336,6 +3186,174 @@ export async function ensureShopifyInitialCustomersHistory(
 
   const backfill =
     await createShopifyCustomersBackfill({
+
+      workspaceId:
+        inspection.workspaceId,
+
+      brandId:
+        inspection.brandId,
+
+      connectionId:
+        inspection.connectionId,
+
+      integrationAccountId:
+        inspection.integrationAccountId,
+
+      providerAccountId:
+        inspection.providerAccountId,
+
+      from:
+        inspection.missingRange.from,
+
+      to:
+        inspection.missingRange.to,
+
+      requestedBy:
+        input.requestedBy
+        ??
+        null,
+
+      idempotencyKey,
+
+    });
+
+
+  return {
+
+    ...inspection,
+
+    created:
+      true,
+
+    idempotencyKey,
+
+    backfill,
+
+  };
+
+}
+
+// ============================================================
+// ENSURE INITIAL SHOPIFY PRODUCT HISTORY
+//
+// CONTROLLED WRITE PATH.
+//
+// inspect Product coverage
+//        ↓
+// determine definite historical prefix
+//        ↓
+// detect covering Product backfill
+//        ↓
+// create deterministic Product backfill when required
+//
+// IMPORTANT:
+//
+// This does NOT directly dispatch Pub/Sub work.
+//
+// Backfill Supervisor remains the execution authority.
+// ============================================================
+
+export async function ensureShopifyInitialProductsHistory(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    connectionId:
+      string;
+
+    requestedBy?:
+      string | null;
+
+  }
+) {
+
+  // ==========================================================
+  // INSPECT
+  // ==========================================================
+
+  const inspection =
+    await inspectShopifyInitialProductsHistory({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      connectionId:
+        input.connectionId,
+
+    });
+
+
+  // ==========================================================
+  // NO ACTION
+  // ==========================================================
+
+  if (
+    !inspection.backfillRequired
+    ||
+    !inspection.missingRange
+  ) {
+
+    return {
+
+      ...inspection,
+
+      created:
+        false,
+
+      idempotencyKey:
+        null,
+
+      backfill:
+        null,
+
+    };
+
+  }
+
+
+  // ==========================================================
+  // DETERMINISTIC PRODUCT IDEMPOTENCY KEY
+  //
+  // createShopifyProductsBackfill() additionally namespaces
+  // Product deterministic identity inside the shared generic
+  // backfill creator.
+  // ==========================================================
+
+  const idempotencyKey =
+    [
+
+      'shopify_initial_products_history_v1',
+
+      inspection.workspaceId,
+
+      inspection.brandId,
+
+      inspection.integrationAccountId,
+
+      inspection.missingRange.from,
+
+      inspection.missingRange.to,
+
+    ].join(
+      ':'
+    );
+
+
+  // ==========================================================
+  // CREATE / ENSURE PRODUCT BACKFILL
+  //
+  // No direct dispatch here.
+  // ==========================================================
+
+  const backfill =
+    await createShopifyProductsBackfill({
 
       workspaceId:
         inspection.workspaceId,

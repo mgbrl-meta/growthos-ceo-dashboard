@@ -128,10 +128,10 @@ function requireString(
 //
 // orders
 // customers
+// products
 //
-// Products and transactions may later use the same supervisor,
-// but they must not enter this execution path until their Bulk
-// source + warehouse adapters are complete.
+// All entities share the same Shopify-account Bulk execution
+// lock and supervisor lifecycle.
 // ============================================================
 
 function requireBackfillEntity(
@@ -346,7 +346,8 @@ async function recoverStaleDispatches() {
         entity IN
           (
             'orders',
-            'customers'
+            'customers',
+            'products'
           )
 
         AND status =
@@ -577,7 +578,8 @@ async function findDispatchCandidate() {
           w.entity IN
             (
               'orders',
-              'customers'
+              'customers',
+              'products'
             )
 
           AND w.status IN
@@ -1491,6 +1493,7 @@ export async function superviseShopifyBackfills() {
     supportedEntities: [
       'orders',
       'customers',
+      'products',
     ],
 
     staleDispatchesRecovered,

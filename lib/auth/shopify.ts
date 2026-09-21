@@ -1671,6 +1671,363 @@ export async function queryEarliestShopifyCustomer(
 }
 
 // ============================================================
+// EARLIEST SHOPIFY PRODUCT
+//
+// Read-only coverage probe.
+//
+// Used during Shopify onboarding/reconnection to discover the
+// actual beginning of accessible Shopify Product history.
+//
+// No warehouse writes.
+// No Bulk Operation.
+// ============================================================
+
+export type ShopifyEarliestProduct = {
+
+  id:
+    string;
+
+  legacyResourceId:
+    string | null;
+
+  createdAt:
+    string;
+
+  updatedAt:
+    string | null;
+
+};
+
+
+export async function queryEarliestShopifyProduct(
+  shopDomain: string,
+  accessToken: string
+):
+  Promise<
+    ShopifyEarliestProduct | null
+  > {
+
+  const normalizedShopDomain =
+    normalizeShopDomain(
+      shopDomain
+    );
+
+
+  // ==========================================================
+  // SHOP DOMAIN
+  // ==========================================================
+
+  if (
+    !normalizedShopDomain
+    ||
+    !normalizedShopDomain.endsWith(
+      '.myshopify.com'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_SHOP_DOMAIN_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // ACCESS TOKEN
+  // ==========================================================
+
+  if (!accessToken) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_ACCESS_TOKEN_MISSING'
+    );
+
+  }
+
+
+  const apiVersion =
+    getShopifyApiVersion();
+
+
+  // ==========================================================
+  // SHOPIFY ADMIN GRAPHQL
+  // ==========================================================
+
+  const response =
+    await fetch(
+
+      `https://${normalizedShopDomain}/admin/api/${apiVersion}/graphql.json`,
+
+      {
+
+        method:
+          'POST',
+
+        headers: {
+
+          'Content-Type':
+            'application/json',
+
+          'Accept':
+            'application/json',
+
+          'X-Shopify-Access-Token':
+            accessToken,
+
+        },
+
+        body:
+          JSON.stringify({
+
+            query:
+              `
+
+                query GrowthOsEarliestProduct {
+
+                  products(
+                    first: 1
+                    sortKey: CREATED_AT
+                    reverse: false
+                  ) {
+
+                    nodes {
+
+                      id
+                      legacyResourceId
+
+                      createdAt
+                      updatedAt
+
+                    }
+
+                  }
+
+                }
+
+              `,
+
+          }),
+
+        cache:
+          'no-store',
+
+      }
+
+    );
+
+
+  const raw =
+    await response.text();
+
+
+  let json:
+    any;
+
+
+  try {
+
+    json =
+      JSON.parse(
+        raw
+      );
+
+  } catch {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_RESPONSE_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // HTTP FAILURE
+  // ==========================================================
+
+  if (!response.ok) {
+
+    console.error(
+      'SHOPIFY_EARLIEST_PRODUCT_HTTP_FAILED',
+      {
+
+        status:
+          response.status,
+
+      }
+    );
+
+
+    throw new Error(
+      `SHOPIFY_EARLIEST_PRODUCT_HTTP_${response.status}`
+    );
+
+  }
+
+
+  // ==========================================================
+  // GRAPHQL FAILURE
+  // ==========================================================
+
+  if (
+    Array.isArray(
+      json?.errors
+    )
+    &&
+    json.errors.length >
+      0
+  ) {
+
+    console.error(
+      'SHOPIFY_EARLIEST_PRODUCT_GRAPHQL_FAILED',
+      json.errors
+    );
+
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_GRAPHQL_FAILED'
+    );
+
+  }
+
+
+  const nodes =
+    Array.isArray(
+      json?.data?.products?.nodes
+    )
+      ?
+        json.data.products.nodes
+      :
+        [];
+
+
+  const product =
+    nodes[0]
+    ??
+    null;
+
+
+  // ==========================================================
+  // EMPTY SHOPIFY PRODUCT BASE IS VALID
+  // ==========================================================
+
+  if (!product) {
+
+    return null;
+
+  }
+
+
+  const id =
+    String(
+      product?.id
+      ||
+      ''
+    ).trim();
+
+
+  const createdAt =
+    String(
+      product?.createdAt
+      ||
+      ''
+    ).trim();
+
+
+  if (
+    !id
+    ||
+    !createdAt
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_INCOMPLETE'
+    );
+
+  }
+
+
+  // ==========================================================
+  // TIMESTAMP VALIDATION
+  // ==========================================================
+
+  if (
+    !Number.isFinite(
+      Date.parse(
+        createdAt
+      )
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_CREATED_AT_INVALID'
+    );
+
+  }
+
+
+  const updatedAt =
+    product?.updatedAt
+      ?
+        String(
+          product.updatedAt
+        ).trim()
+      :
+        null;
+
+
+  if (
+    updatedAt
+    &&
+    !Number.isFinite(
+      Date.parse(
+        updatedAt
+      )
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_UPDATED_AT_INVALID'
+    );
+
+  }
+
+
+  return {
+
+    id,
+
+    legacyResourceId:
+      product?.legacyResourceId
+        ?
+          String(
+            product.legacyResourceId
+          )
+        :
+          null,
+
+    createdAt:
+      new Date(
+        Date.parse(
+          createdAt
+        )
+      ).toISOString(),
+
+    updatedAt:
+      updatedAt
+        ?
+          new Date(
+            Date.parse(
+              updatedAt
+            )
+          ).toISOString()
+        :
+          null,
+
+  };
+
+}
+
+// ============================================================
 // RESOLVE CANONICAL SHOP ID
 //
 // EXISTING SETUP / VERIFICATION PATH.

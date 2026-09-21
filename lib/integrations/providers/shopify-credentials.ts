@@ -12,6 +12,7 @@ import type {
 import {
   queryEarliestShopifyOrder,
   queryEarliestShopifyCustomer,
+  queryEarliestShopifyProduct,
 } from '@/lib/auth/shopify';
 
 import type {
@@ -1603,6 +1604,362 @@ export async function queryEarliestCustomerWithStoredShopifyCredential(
     return {
 
       customer,
+
+      tokenRefreshed,
+
+    };
+
+  }
+
+}
+
+// ============================================================
+// EARLIEST PRODUCT USING STORED SHOPIFY CREDENTIAL
+//
+// Same credential/runtime contract as Orders and Customers.
+//
+// Flow:
+//
+// verify stored credential
+//        ↓
+// refresh if near expiry
+//        ↓
+// reread Secret Manager
+//        ↓
+// validate tenant/shop identity
+//        ↓
+// query earliest Product
+//        ↓
+// 401 → refresh once → reread → retry once
+//
+// No warehouse writes.
+// No Bulk Operation.
+// ============================================================
+
+export async function queryEarliestProductWithStoredShopifyCredential(
+  input: {
+
+    workspaceId:
+      string;
+
+    brandId:
+      string;
+
+    secretName:
+      string;
+
+    expectedShopId:
+      string;
+
+    expectedShopDomain:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // 1. VERIFY EXISTING STORED IDENTITY
+  // ==========================================================
+
+  const verified =
+    await verifyStoredShopifyCredential({
+
+      secretName:
+        input.secretName,
+
+      expectedShopId:
+        input.expectedShopId,
+
+      expectedShopDomain:
+        input.expectedShopDomain,
+
+    });
+
+
+  // ==========================================================
+  // 2. REFRESH IF TOKEN IS EXPIRING
+  //
+  // Same five-minute safety margin as Orders / Customers.
+  // ==========================================================
+
+  let tokenRefreshed =
+    false;
+
+
+  const expiresAt =
+    verified.accessTokenExpiresAt
+      ?
+        Date.parse(
+          verified.accessTokenExpiresAt
+        )
+      :
+        null;
+
+
+  if (
+    expiresAt !==
+      null
+    &&
+    Number.isFinite(
+      expiresAt
+    )
+    &&
+    expiresAt <=
+      Date.now()
+      +
+      5 * 60 * 1000
+  ) {
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+  }
+
+
+  // ==========================================================
+  // 3. READ CURRENT SECRET VERSION
+  // ==========================================================
+
+  let stored =
+    await readIntegrationSecret<
+      StoredShopifyCredentialV1
+    >(
+      input.secretName
+    );
+
+
+  // ==========================================================
+  // 4. DEFENCE-IN-DEPTH CREDENTIAL VALIDATION
+  // ==========================================================
+
+  if (
+    stored.schema_version !==
+      1
+    ||
+    stored.credential_type !==
+      'shopify_offline_expiring'
+    ||
+    stored.provider !==
+      'shopify'
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_CREDENTIAL_INVALID'
+    );
+
+  }
+
+
+  if (
+    stored.shop_id !==
+      input.expectedShopId
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_SHOP_ID_MISMATCH'
+    );
+
+  }
+
+
+  if (
+    stored
+      .shop_domain
+      .toLowerCase()
+    !==
+    input
+      .expectedShopDomain
+      .toLowerCase()
+  ) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_SHOP_DOMAIN_MISMATCH'
+    );
+
+  }
+
+
+  if (!stored.access_token) {
+
+    throw new Error(
+      'SHOPIFY_EARLIEST_PRODUCT_ACCESS_TOKEN_MISSING'
+    );
+
+  }
+
+
+  // ==========================================================
+  // 5. QUERY SHOPIFY
+  //
+  // If Shopify unexpectedly rejects the token with 401:
+  //
+  // refresh once
+  // reread Secret Manager
+  // retry once
+  // ==========================================================
+
+  try {
+
+    const product =
+      await queryEarliestShopifyProduct(
+
+        stored.shop_domain,
+
+        stored.access_token
+
+      );
+
+
+    return {
+
+      product,
+
+      tokenRefreshed,
+
+    };
+
+
+  } catch (
+    error: any
+  ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        ''
+      );
+
+
+    if (
+      message !==
+        'SHOPIFY_EARLIEST_PRODUCT_HTTP_401'
+    ) {
+
+      throw error;
+
+    }
+
+
+    // ========================================================
+    // FORCED RECOVERY
+    // ========================================================
+
+    await refreshStoredShopifyCredential({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      secretName:
+        input.secretName,
+
+    });
+
+
+    tokenRefreshed =
+      true;
+
+
+    stored =
+      await readIntegrationSecret<
+        StoredShopifyCredentialV1
+      >(
+        input.secretName
+      );
+
+
+    // ========================================================
+    // VERIFY REFRESHED CREDENTIAL AGAIN
+    // ========================================================
+
+    if (
+      stored.schema_version !==
+        1
+      ||
+      stored.credential_type !==
+        'shopify_offline_expiring'
+      ||
+      stored.provider !==
+        'shopify'
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_PRODUCT_REFRESHED_CREDENTIAL_INVALID'
+      );
+
+    }
+
+
+    if (
+      stored.shop_id !==
+        input.expectedShopId
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_PRODUCT_REFRESHED_SHOP_ID_MISMATCH'
+      );
+
+    }
+
+
+    if (
+      stored
+        .shop_domain
+        .toLowerCase()
+      !==
+      input
+        .expectedShopDomain
+        .toLowerCase()
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_PRODUCT_REFRESHED_SHOP_DOMAIN_MISMATCH'
+      );
+
+    }
+
+
+    if (
+      !stored.access_token
+    ) {
+
+      throw new Error(
+        'SHOPIFY_EARLIEST_PRODUCT_REFRESHED_ACCESS_TOKEN_MISSING'
+      );
+
+    }
+
+
+    const product =
+      await queryEarliestShopifyProduct(
+
+        stored.shop_domain,
+
+        stored.access_token
+
+      );
+
+
+    return {
+
+      product,
 
       tokenRefreshed,
 

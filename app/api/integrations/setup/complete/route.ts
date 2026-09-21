@@ -15,6 +15,7 @@ import {
 import {
   ensureShopifyInitialCustomersHistory,
   ensureShopifyInitialOrdersHistory,
+  ensureShopifyInitialProductsHistory,
 } from '@/lib/integrations/providers/shopify-history-bootstrap';
 
 
@@ -308,6 +309,20 @@ export async function POST(
       string | null =
         null;
 
+    let productsBootstrap:
+      Awaited<
+        ReturnType<
+          typeof ensureShopifyInitialProductsHistory
+        >
+      >
+      | null =
+        null;
+
+
+    let productsBootstrapError:
+      string | null =
+        null;    
+
 
     if (
       connection.provider ===
@@ -522,6 +537,113 @@ export async function POST(
 
     }
 
+          // ======================================================
+      // 6C. PRODUCTS HISTORY
+      //
+      // IMPORTANT:
+      //
+      // This is independently non-fatal.
+      //
+      // Orders failure must not prevent Products.
+      // Customers failure must not prevent Products.
+      // Products failure must not affect setup completion.
+      // ======================================================
+
+      try {
+
+        productsBootstrap =
+          await ensureShopifyInitialProductsHistory({
+
+            workspaceId:
+              identity.workspaceId,
+
+            brandId:
+              identity.brandId,
+
+            connectionId,
+
+            requestedBy:
+              identity.userId
+              ??
+              null,
+
+          });
+
+
+        console.log(
+          'SHOPIFY_INITIAL_PRODUCTS_HISTORY_BOOTSTRAP_RESULT',
+          {
+
+            workspaceId:
+              identity.workspaceId,
+
+            brandId:
+              identity.brandId,
+
+            connectionId,
+
+            decision:
+              productsBootstrap?.decision
+              ??
+              null,
+
+            backfillRequired:
+              productsBootstrap?.backfillRequired
+              ??
+              false,
+
+            created:
+              productsBootstrap?.created
+              ??
+              false,
+
+            backfillRunId:
+              productsBootstrap
+                ?.backfill
+                ?.backfillRunId
+              ??
+              productsBootstrap
+                ?.existingBackfill
+                ?.backfillRunId
+              ??
+              null,
+
+          }
+        );
+
+
+      } catch (
+        bootstrapFailure: any
+      ) {
+
+        productsBootstrapError =
+          String(
+            bootstrapFailure?.message
+            ||
+            'Shopify initial Products history bootstrap failed'
+          );
+
+
+        console.error(
+          'SHOPIFY_INITIAL_PRODUCTS_HISTORY_BOOTSTRAP_NON_FATAL',
+          {
+
+            workspaceId:
+              identity.workspaceId,
+
+            brandId:
+              identity.brandId,
+
+            connectionId,
+
+            message:
+              productsBootstrapError,
+
+          }
+        );
+
+      }
+
 
     // ========================================================
     // 7. SUCCESS
@@ -693,6 +815,78 @@ export async function POST(
                 true,
 
             },
+
+            // ======================================================
+      // PRODUCT BOOTSTRAP RESPONSE
+      //
+      // Additive response field.
+      //
+      // Does not change Orders or Customers response contracts.
+      // ======================================================
+
+      productBootstrap:
+        connection.provider ===
+          'shopify'
+          ?
+            {
+
+              attempted:
+                true,
+
+              ok:
+                !productsBootstrapError,
+
+              decision:
+                productsBootstrap?.decision
+                ??
+                null,
+
+              backfillRequired:
+                productsBootstrap?.backfillRequired
+                ??
+                null,
+
+              created:
+                productsBootstrap?.created
+                ??
+                false,
+
+              backfillRunId:
+                productsBootstrap
+                  ?.backfill
+                  ?.backfillRunId
+                ??
+                productsBootstrap
+                  ?.existingBackfill
+                  ?.backfillRunId
+                ??
+                null,
+
+              totalWindows:
+                productsBootstrap
+                  ?.backfill
+                  ?.totalWindows
+                ??
+                productsBootstrap
+                  ?.plannedBackfill
+                  ?.totalWindows
+                ??
+                null,
+
+              error:
+                productsBootstrapError,
+
+            }
+          :
+            {
+
+              attempted:
+                false,
+
+              ok:
+                true,
+
+            },      
 
     });
 
