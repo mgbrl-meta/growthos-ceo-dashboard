@@ -141,12 +141,14 @@ export function normalizeCallingPayload(input: {
     callStatus,
     direction: ['INBOUND', 'OUTBOUND'].includes(direction) ? direction : 'UNKNOWN',
     customerPhone: normalizePhone(mapped.customerPhone),
+    businessNumber: mapped.businessNumber ? normalizePhone(mapped.businessNumber) : null,
     agentId: mapped.agentId ? String(mapped.agentId) : null,
     agentName: mapped.agentName ? String(mapped.agentName) : null,
     agentPhone: mapped.agentPhone ? normalizePhone(mapped.agentPhone) : null,
     startedAt: mapped.startedAt ? String(mapped.startedAt) : null,
     answeredAt: mapped.answeredAt ? String(mapped.answeredAt) : null,
     endedAt: mapped.endedAt ? String(mapped.endedAt) : null,
+    updatedAt: mapped.updatedAt ? String(mapped.updatedAt) : null,
     durationSeconds: mapped.durationSeconds === null || mapped.durationSeconds === undefined
       ? null
       : Number(mapped.durationSeconds),

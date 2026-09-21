@@ -94,6 +94,7 @@ export async function ensureCallCommerceSchema() {
         provider_call_id STRING NOT NULL,
         lead_id STRING,
         phone STRING NOT NULL,
+        business_number STRING,
         event_type STRING,
         call_status STRING,
         direction STRING,
@@ -103,6 +104,7 @@ export async function ensureCallCommerceSchema() {
         call_started_at TIMESTAMP,
         call_answered_at TIMESTAMP,
         call_ended_at TIMESTAMP,
+        provider_updated_at TIMESTAMP,
         duration_seconds INT64,
         disconnected_by STRING,
         recording_url STRING,
@@ -123,6 +125,7 @@ export async function ensureCallCommerceSchema() {
         email STRING,
         product STRING,
         status STRING NOT NULL,
+        status_changed_at TIMESTAMP,
         notes STRING,
         unqualified_reason STRING,
         closed_lost_reason STRING,
@@ -135,6 +138,10 @@ export async function ensureCallCommerceSchema() {
         latest_call_at TIMESTAMP,
         latest_call_status STRING,
         latest_agent_name STRING,
+        latest_attempt_id STRING,
+        latest_provider_call_id STRING,
+        latest_business_number STRING,
+        latest_duration_seconds INT64,
         call_attempt_count INT64,
         answered_attempt_count INT64,
         unanswered_attempt_count INT64,
@@ -207,6 +214,21 @@ export async function ensureCallCommerceSchema() {
     ];
 
     for (const query of ddl) {
+      await bigquery.query({ query, location: CALL_COMMERCE_LOCATION });
+    }
+
+    // Additive schema upgrades for warehouses where Call Commerce already exists.
+    const upgrades = [
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_attempts\` ADD COLUMN IF NOT EXISTS business_number STRING`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_attempts\` ADD COLUMN IF NOT EXISTS provider_updated_at TIMESTAMP`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMP`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` ADD COLUMN IF NOT EXISTS latest_attempt_id STRING`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` ADD COLUMN IF NOT EXISTS latest_provider_call_id STRING`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` ADD COLUMN IF NOT EXISTS latest_business_number STRING`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` ADD COLUMN IF NOT EXISTS latest_duration_seconds INT64`,
+      `UPDATE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` SET status_changed_at=COALESCE(status_changed_at,updated_at,created_at) WHERE status_changed_at IS NULL`,
+    ];
+    for (const query of upgrades) {
       await bigquery.query({ query, location: CALL_COMMERCE_LOCATION });
     }
 

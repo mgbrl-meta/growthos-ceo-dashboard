@@ -39,12 +39,14 @@ export type CanonicalCallEvent = {
   callStatus: CanonicalCallStatus;
   direction: CanonicalDirection;
   customerPhone: string;
+  businessNumber?: string | null;
   agentId?: string | null;
   agentName?: string | null;
   agentPhone?: string | null;
   startedAt?: string | null;
   answeredAt?: string | null;
   endedAt?: string | null;
+  updatedAt?: string | null;
   durationSeconds?: number | null;
   disconnectedBy?: string | null;
   recordingUrl?: string | null;

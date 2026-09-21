@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, RefreshCw, Trash2, Webhook } from 'lucide-react';
 
 const canonicalFields = [
-  'providerCallId','providerEventId','customerPhone','agentName','agentId','agentPhone',
-  'startedAt','answeredAt','endedAt','durationSeconds','rawEventType','rawStatus','direction',
+  'providerCallId','providerEventId','customerPhone','businessNumber','agentName','agentId','agentPhone',
+  'startedAt','answeredAt','endedAt','updatedAt','durationSeconds','rawEventType','rawStatus','direction',
   'disconnectedBy','recordingUrl','reason','ivrInputs',
 ];
 

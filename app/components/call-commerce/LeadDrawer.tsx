@@ -132,6 +132,15 @@ export default function LeadDrawer({
                       {attempt.agent_name || 'No agent'} · {attempt.duration_seconds || 0}s ·{' '}
                       {attempt.direction || 'UNKNOWN'}
                     </div>
+                    <div className="mt-1 text-[8px] text-slate-400">
+                      Call ID: {attempt.attempt_id || '—'}
+                      {attempt.business_number ? ` · Business ${attempt.business_number}` : ''}
+                    </div>
+                    {attempt.provider_call_id && (
+                      <div className="mt-0.5 text-[8px] text-slate-300">
+                        Provider ID: {attempt.provider_call_id}
+                      </div>
+                    )}
                   </div>
                 ))
               )}

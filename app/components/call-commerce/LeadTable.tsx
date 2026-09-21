@@ -63,7 +63,17 @@ export default function LeadTable({
                     <StatusPill status={row.status} />
                   </td>
                   <td className="px-3 py-2">{row.product || '—'}</td>
-                  <td className="px-3 py-2">{row.latest_call_status || '—'}</td>
+                  <td className="px-3 py-2">
+                    <div>{row.latest_call_status || '—'}</div>
+                    {(row.latest_business_number || row.latest_duration_seconds != null) && (
+                      <div className="mt-0.5 text-[8px] text-slate-400">
+                        {row.latest_business_number || '—'}
+                        {row.latest_duration_seconds != null
+                          ? ` · ${Number(row.latest_duration_seconds || 0)}s`
+                          : ''}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2">{row.call_attempt_count || 0}</td>
                   <td className="px-3 py-2">{row.latest_agent_name || '—'}</td>
                   <td className="px-3 py-2">

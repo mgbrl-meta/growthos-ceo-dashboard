@@ -136,61 +136,433 @@ export async function insertRawEvent(input: { event: CanonicalCallEvent | null; 
   return rawEventId;
 }
 
+const OPEN_LEAD_STATUSES = new Set(['NEW', 'QUALIFIED', 'FOLLOW_UP']);
+const TERMINAL_LEAD_STATUSES = new Set(['PURCHASED', 'UNQUALIFIED', 'CLOSED_LOST']);
+
 function isAnswered(status: string) { return status === 'ANSWERED'; }
 function isUnanswered(status: string) { return ['MISSED','NO_ANSWER','BUSY','REJECTED','FAILED'].includes(status); }
 
-export async function ingestCanonicalEvent(event: CanonicalCallEvent, actor = 'calling-webhook') {
-  await ensureCallCommerceSchema();
-  const attemptId = deterministic('att', [event.workspaceId,event.brandId,event.connectionId,event.providerCallId]);
+function normalizePhone(value: unknown) {
+  return String(value ?? '').replace(/[^0-9+]/g, '').trim();
+}
 
-  const [existingLeadRows] = await bigquery.query({
+function asDate(value: any): Date | null {
+  const raw = value?.value ?? value;
+  if (!raw) return null;
+  const date = raw instanceof Date ? raw : new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function earlierIso(a: any, b: any) {
+  const da = asDate(a);
+  const db = asDate(b);
+  if (!da) return db?.toISOString() || null;
+  if (!db) return da.toISOString();
+  return (da.getTime() <= db.getTime() ? da : db).toISOString();
+}
+
+function laterIso(a: any, b: any) {
+  const da = asDate(a);
+  const db = asDate(b);
+  if (!da) return db?.toISOString() || null;
+  if (!db) return da.toISOString();
+  return (da.getTime() >= db.getTime() ? da : db).toISOString();
+}
+
+function callStatusRank(status: string) {
+  const ranks: Record<string, number> = {
+    '': 0,
+    UNKNOWN: 1,
+    RINGING: 10,
+    MANUAL_CREATED: 20,
+    MISSED: 60,
+    NO_ANSWER: 65,
+    BUSY: 65,
+    REJECTED: 65,
+    FAILED: 65,
+    ANSWERED: 100,
+  };
+  return ranks[String(status || '').toUpperCase()] ?? 30;
+}
+
+async function getProviderAttempt(event: CanonicalCallEvent) {
+  const [rows] = await bigquery.query({
     location: CALL_COMMERCE_LOCATION,
-    query: `SELECT lead_id,status,updated_at FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND phone=@phone AND is_archived=FALSE ORDER BY CASE WHEN status IN ('NEW','QUALIFIED','FOLLOW_UP') THEN 0 ELSE 1 END, updated_at DESC LIMIT 1`,
-    params: { workspace_id: event.workspaceId, brand_id: event.brandId, phone: event.customerPhone },
+    query: `SELECT * FROM ${table('call_attempts')}
+      WHERE workspace_id=@workspace_id
+        AND brand_id=@brand_id
+        AND connection_id=@connection_id
+        AND provider_call_id=@provider_call_id
+      ORDER BY created_at ASC
+      LIMIT 1`,
+    params: {
+      workspace_id: event.workspaceId,
+      brand_id: event.brandId,
+      connection_id: event.connectionId,
+      provider_call_id: event.providerCallId,
+    },
   });
-  let lead = (existingLeadRows as any[])[0] || null;
+  return (rows as any[])[0] || null;
+}
 
-  if (lead && ['PURCHASED','UNQUALIFIED','CLOSED_LOST'].includes(String(lead.status))) {
-    const ageMs = Date.now() - new Date(lead.updated_at?.value || lead.updated_at || 0).getTime();
-    if (ageMs > CALL_COMMERCE_DEFAULTS.reopenGraceMinutes * 60_000) lead = null;
+async function findAttachableLead(input: {
+  workspaceId: string;
+  brandId: string;
+  phone: string;
+  callAt?: string | Date | null;
+}) {
+  const phone = normalizePhone(input.phone);
+  if (!phone) return null;
+
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT lead_id,status,status_changed_at,latest_call_at,updated_at,created_at
+      FROM ${table('call_leads')}
+      WHERE workspace_id=@workspace_id
+        AND brand_id=@brand_id
+        AND phone=@phone
+        AND is_archived=FALSE
+        AND status IN ('NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST')
+      ORDER BY COALESCE(latest_call_at,updated_at,created_at) DESC
+      LIMIT 50`,
+    params: {
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      phone,
+    },
+  });
+
+  const candidates = rows as any[];
+  const open = candidates.find(row => OPEN_LEAD_STATUSES.has(String(row.status || '').toUpperCase()));
+  if (open) return open;
+
+  const callAt = asDate(input.callAt) || new Date();
+  const graceMs = CALL_COMMERCE_DEFAULTS.reopenGraceMinutes * 60_000;
+  let bestTerminal: any = null;
+  let bestTerminalAt = -1;
+
+  for (const row of candidates) {
+    const status = String(row.status || '').toUpperCase();
+    if (!TERMINAL_LEAD_STATUSES.has(status)) continue;
+    // status_changed_at is intentionally separate from call/webhook updated_at.
+    // A later provider callback must never extend the terminal reopen grace window.
+    const terminalAt = asDate(row.status_changed_at) || asDate(row.updated_at);
+    if (!terminalAt) continue;
+    const delta = callAt.getTime() - terminalAt.getTime();
+    if (delta >= 0 && delta <= graceMs && terminalAt.getTime() > bestTerminalAt) {
+      bestTerminal = row;
+      bestTerminalAt = terminalAt.getTime();
+    }
   }
 
-  const leadId = lead?.lead_id || id('CL');
+  return bestTerminal;
+}
+
+async function createCallLead(input: {
+  workspaceId: string;
+  brandId: string;
+  phone: string;
+  actor: string;
+  startedAt?: string | null;
+  customerName?: string | null;
+  email?: string | null;
+  product?: string | null;
+  notes?: string | null;
+}) {
+  const leadId = id('CL');
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `INSERT INTO ${table('call_leads')} (
+      lead_id,workspace_id,brand_id,phone,customer_name,email,product,status,notes,currency,
+      status_changed_at,first_call_at,latest_call_at,call_attempt_count,answered_attempt_count,
+      unanswered_attempt_count,is_archived,created_at,updated_at,created_by,updated_by
+    ) VALUES (
+      @lead_id,@workspace_id,@brand_id,@phone,@customer_name,@email,@product,'NEW',@notes,'INR',
+      CURRENT_TIMESTAMP(),COALESCE(@started_at,CURRENT_TIMESTAMP()),COALESCE(@started_at,CURRENT_TIMESTAMP()),
+      0,0,0,FALSE,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),@actor,@actor
+    )`,
+    params: {
+      lead_id: leadId,
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      phone: normalizePhone(input.phone),
+      customer_name: input.customerName || null,
+      email: input.email || null,
+      product: input.product || null,
+      notes: input.notes || null,
+      started_at: input.startedAt || null,
+      actor: input.actor,
+    },
+    types: { started_at: 'TIMESTAMP' },
+  });
+  return leadId;
+}
+
+async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, existingAttempt: any) {
+  const created = !existingAttempt;
+  const attemptId = existingAttempt?.attempt_id || id('CA');
+  const oldStatus = String(existingAttempt?.call_status || '');
+  const incomingStatus = String(event.callStatus || '');
+  const oldUpdatedAt = asDate(existingAttempt?.provider_updated_at);
+  const incomingUpdatedAt = asDate(event.updatedAt) || asDate(event.endedAt) || asDate(event.startedAt) || new Date();
+  const incomingWins =
+    !oldStatus ||
+    callStatusRank(incomingStatus) > callStatusRank(oldStatus) ||
+    (
+      callStatusRank(incomingStatus) === callStatusRank(oldStatus) &&
+      (!oldUpdatedAt || incomingUpdatedAt.getTime() >= oldUpdatedAt.getTime())
+    );
+
+  const values = {
+    attempt_id: attemptId,
+    workspace_id: event.workspaceId,
+    brand_id: event.brandId,
+    connection_id: event.connectionId,
+    provider_key: event.callingProvider,
+    provider_call_id: event.providerCallId,
+    lead_id: existingAttempt?.lead_id || leadId,
+    phone: normalizePhone(existingAttempt?.phone || event.customerPhone),
+    business_number: event.businessNumber || existingAttempt?.business_number || null,
+    event_type: incomingWins ? event.eventType : (existingAttempt?.event_type || event.eventType),
+    call_status: incomingWins ? incomingStatus : oldStatus,
+    direction: incomingWins ? event.direction : (existingAttempt?.direction || event.direction),
+    agent_id: event.agentId || existingAttempt?.agent_id || null,
+    agent_name: event.agentName || existingAttempt?.agent_name || null,
+    agent_phone: event.agentPhone || existingAttempt?.agent_phone || null,
+    started_at: earlierIso(existingAttempt?.call_started_at, event.startedAt),
+    answered_at: earlierIso(existingAttempt?.call_answered_at, event.answeredAt),
+    ended_at: laterIso(existingAttempt?.call_ended_at, event.endedAt),
+    provider_updated_at: laterIso(existingAttempt?.provider_updated_at, incomingUpdatedAt),
+    duration_seconds: Math.max(Number(existingAttempt?.duration_seconds || 0), Number(event.durationSeconds || 0)),
+    disconnected_by: incomingWins ? (event.disconnectedBy || existingAttempt?.disconnected_by || null) : (existingAttempt?.disconnected_by || null),
+    recording_url: event.recordingUrl || existingAttempt?.recording_url || null,
+    reason: incomingWins ? (event.reason || existingAttempt?.reason || null) : (existingAttempt?.reason || null),
+    ivr_inputs: event.ivrInputs ?? existingAttempt?.ivr_inputs ?? null,
+    raw_event_type: incomingWins ? (event.rawEventType || existingAttempt?.raw_event_type || null) : (existingAttempt?.raw_event_type || null),
+    raw_status: incomingWins ? (event.rawStatus || existingAttempt?.raw_status || null) : (existingAttempt?.raw_status || null),
+  };
+
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `MERGE ${table('call_attempts')} t
+      USING (SELECT @workspace_id workspace_id,@brand_id brand_id,@connection_id connection_id,@provider_call_id provider_call_id) s
+      ON t.workspace_id=s.workspace_id
+       AND t.brand_id=s.brand_id
+       AND t.connection_id=s.connection_id
+       AND t.provider_call_id=s.provider_call_id
+      WHEN MATCHED THEN UPDATE SET
+        lead_id=@lead_id,
+        business_number=COALESCE(@business_number,t.business_number),
+        event_type=@event_type,
+        call_status=@call_status,
+        direction=@direction,
+        agent_id=@agent_id,
+        agent_name=@agent_name,
+        agent_phone=@agent_phone,
+        call_started_at=COALESCE(@started_at,t.call_started_at),
+        call_answered_at=COALESCE(@answered_at,t.call_answered_at),
+        call_ended_at=COALESCE(@ended_at,t.call_ended_at),
+        provider_updated_at=COALESCE(@provider_updated_at,t.provider_updated_at),
+        duration_seconds=GREATEST(COALESCE(t.duration_seconds,0),COALESCE(@duration_seconds,0)),
+        disconnected_by=@disconnected_by,
+        recording_url=COALESCE(@recording_url,t.recording_url),
+        reason=@reason,
+        ivr_inputs=PARSE_JSON(@ivr_inputs),
+        raw_event_type=@raw_event_type,
+        raw_status=@raw_status,
+        updated_at=CURRENT_TIMESTAMP()
+      WHEN NOT MATCHED THEN INSERT (
+        attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,lead_id,phone,
+        business_number,event_type,call_status,direction,agent_id,agent_name,agent_phone,call_started_at,
+        call_answered_at,call_ended_at,provider_updated_at,duration_seconds,disconnected_by,recording_url,
+        reason,ivr_inputs,raw_event_type,raw_status,created_at,updated_at
+      ) VALUES (
+        @attempt_id,@workspace_id,@brand_id,@connection_id,@provider_key,@provider_call_id,@lead_id,@phone,
+        @business_number,@event_type,@call_status,@direction,@agent_id,@agent_name,@agent_phone,@started_at,
+        @answered_at,@ended_at,@provider_updated_at,@duration_seconds,@disconnected_by,@recording_url,
+        @reason,PARSE_JSON(@ivr_inputs),@raw_event_type,@raw_status,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()
+      )`,
+    params: {
+      ...values,
+      ivr_inputs: JSON.stringify(values.ivr_inputs ?? null),
+    },
+    types: {
+      started_at: 'TIMESTAMP',
+      answered_at: 'TIMESTAMP',
+      ended_at: 'TIMESTAMP',
+      provider_updated_at: 'TIMESTAMP',
+    },
+  });
+
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('call_attempts')}
+      WHERE workspace_id=@workspace_id AND brand_id=@brand_id
+        AND connection_id=@connection_id AND provider_call_id=@provider_call_id
+      ORDER BY created_at ASC LIMIT 1`,
+    params: {
+      workspace_id: event.workspaceId,
+      brand_id: event.brandId,
+      connection_id: event.connectionId,
+      provider_call_id: event.providerCallId,
+    },
+  });
+
+  return { created, attempt: (rows as any[])[0] || { ...values } };
+}
+
+async function refreshLeadCallSummary(input: {
+  workspaceId: string;
+  brandId: string;
+  leadId: string;
+  actor: string;
+}) {
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `WITH attempts AS (
+      SELECT *,COALESCE(call_started_at,created_at) AS activity_at
+      FROM ${table('call_attempts')}
+      WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id
+    )
+    SELECT
+      COUNT(*) total,
+      COUNTIF(call_status='ANSWERED') answered,
+      COUNTIF(call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED')) unanswered,
+      MIN(activity_at) first_call_at,
+      ARRAY_AGG(STRUCT(
+        attempt_id,provider_call_id,business_number,call_status,agent_name,duration_seconds,
+        activity_at,call_ended_at,provider_updated_at
+      ) ORDER BY activity_at DESC,COALESCE(provider_updated_at,updated_at) DESC LIMIT 1)[SAFE_OFFSET(0)] latest
+    FROM attempts`,
+    params: {
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      lead_id: input.leadId,
+    },
+  });
+
+  const summary: any = (rows as any[])[0] || {};
+  const latest: any = summary.latest || {};
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `UPDATE ${table('call_leads')} SET
+      first_call_at=COALESCE(@first_call_at,first_call_at),
+      latest_call_at=@latest_call_at,
+      latest_call_status=@latest_call_status,
+      latest_agent_name=@latest_agent_name,
+      latest_attempt_id=@latest_attempt_id,
+      latest_provider_call_id=@latest_provider_call_id,
+      latest_business_number=@latest_business_number,
+      latest_duration_seconds=@latest_duration_seconds,
+      call_attempt_count=@total,
+      answered_attempt_count=@answered,
+      unanswered_attempt_count=@unanswered,
+      updated_at=CURRENT_TIMESTAMP(),
+      updated_by=@actor
+    WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`,
+    params: {
+      first_call_at: asDate(summary.first_call_at)?.toISOString() || null,
+      latest_call_at: asDate(latest.activity_at)?.toISOString() || null,
+      latest_call_status: latest.call_status || null,
+      latest_agent_name: latest.agent_name || null,
+      latest_attempt_id: latest.attempt_id || null,
+      latest_provider_call_id: latest.provider_call_id || null,
+      latest_business_number: latest.business_number || null,
+      latest_duration_seconds: latest.duration_seconds == null ? null : Number(latest.duration_seconds),
+      total: Number(summary.total || 0),
+      answered: Number(summary.answered || 0),
+      unanswered: Number(summary.unanswered || 0),
+      actor: input.actor,
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      lead_id: input.leadId,
+    },
+    types: { first_call_at: 'TIMESTAMP', latest_call_at: 'TIMESTAMP' },
+  });
+
+  return summary;
+}
+
+export async function ingestCanonicalEvent(event: CanonicalCallEvent, actor = 'calling-webhook') {
+  await ensureCallCommerceSchema();
+
+  // Provider IDs identify one provider call attempt only. Growth OS owns the
+  // business identities (CL_* thread and CA_* attempt).
+  const existingAttempt = await getProviderAttempt(event);
+  let lead: any = null;
+
+  // Updates for an already-seen provider call must stay on the exact same
+  // Growth OS attempt/thread even if the lead later becomes terminal.
+  if (existingAttempt?.lead_id) {
+    const [leadRows] = await bigquery.query({
+      location: CALL_COMMERCE_LOCATION,
+      query: `SELECT lead_id,status FROM ${table('call_leads')}
+        WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id LIMIT 1`,
+      params: {
+        workspace_id: event.workspaceId,
+        brand_id: event.brandId,
+        lead_id: existingAttempt.lead_id,
+      },
+    });
+    lead = (leadRows as any[])[0] || null;
+  }
 
   if (!lead) {
-    await bigquery.query({
-      location: CALL_COMMERCE_LOCATION,
-      query: `INSERT INTO ${table('call_leads')} (lead_id,workspace_id,brand_id,phone,status,currency,first_call_at,latest_call_at,latest_call_status,latest_agent_name,call_attempt_count,answered_attempt_count,unanswered_attempt_count,is_archived,created_at,updated_at,created_by,updated_by) VALUES (@lead_id,@workspace_id,@brand_id,@phone,'NEW','INR',COALESCE(@started_at,CURRENT_TIMESTAMP()),COALESCE(@started_at,CURRENT_TIMESTAMP()),@call_status,@agent_name,0,0,0,FALSE,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),@actor,@actor)`,
-      params: { lead_id: leadId, workspace_id: event.workspaceId, brand_id: event.brandId, phone: event.customerPhone, started_at: event.startedAt || null, call_status: event.callStatus, agent_name: event.agentName || null, actor },
-      types: { started_at: 'TIMESTAMP' },
+    lead = await findAttachableLead({
+      workspaceId: event.workspaceId,
+      brandId: event.brandId,
+      phone: event.customerPhone,
+      callAt: event.startedAt || event.updatedAt || null,
     });
   }
 
-  await bigquery.query({
-    location: CALL_COMMERCE_LOCATION,
-    query: `MERGE ${table('call_attempts')} t USING (SELECT @attempt_id attempt_id) s ON t.attempt_id=s.attempt_id WHEN MATCHED THEN UPDATE SET lead_id=@lead_id,event_type=@event_type,call_status=@call_status,direction=@direction,agent_id=@agent_id,agent_name=@agent_name,agent_phone=@agent_phone,call_started_at=COALESCE(@started_at,t.call_started_at),call_answered_at=COALESCE(@answered_at,t.call_answered_at),call_ended_at=COALESCE(@ended_at,t.call_ended_at),duration_seconds=COALESCE(@duration_seconds,t.duration_seconds),disconnected_by=@disconnected_by,recording_url=@recording_url,reason=@reason,ivr_inputs=PARSE_JSON(@ivr_inputs),raw_event_type=@raw_event_type,raw_status=@raw_status,updated_at=CURRENT_TIMESTAMP() WHEN NOT MATCHED THEN INSERT (attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,lead_id,phone,event_type,call_status,direction,agent_id,agent_name,agent_phone,call_started_at,call_answered_at,call_ended_at,duration_seconds,disconnected_by,recording_url,reason,ivr_inputs,raw_event_type,raw_status,created_at,updated_at) VALUES (@attempt_id,@workspace_id,@brand_id,@connection_id,@provider_key,@provider_call_id,@lead_id,@phone,@event_type,@call_status,@direction,@agent_id,@agent_name,@agent_phone,@started_at,@answered_at,@ended_at,@duration_seconds,@disconnected_by,@recording_url,@reason,PARSE_JSON(@ivr_inputs),@raw_event_type,@raw_status,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())`,
-    params: { attempt_id: attemptId, workspace_id: event.workspaceId, brand_id: event.brandId, connection_id: event.connectionId, provider_key: event.callingProvider, provider_call_id: event.providerCallId, lead_id: leadId, phone: event.customerPhone, event_type: event.eventType, call_status: event.callStatus, direction: event.direction, agent_id: event.agentId || null, agent_name: event.agentName || null, agent_phone: event.agentPhone || null, started_at: event.startedAt || null, answered_at: event.answeredAt || null, ended_at: event.endedAt || null, duration_seconds: event.durationSeconds ?? null, disconnected_by: event.disconnectedBy || null, recording_url: event.recordingUrl || null, reason: event.reason || null, ivr_inputs: JSON.stringify(event.ivrInputs ?? null), raw_event_type: event.rawEventType || null, raw_status: event.rawStatus || null },
-    types: { started_at: 'TIMESTAMP', answered_at: 'TIMESTAMP', ended_at: 'TIMESTAMP' },
+  const createdLead = !lead;
+  const leadId = lead?.lead_id || await createCallLead({
+    workspaceId: event.workspaceId,
+    brandId: event.brandId,
+    phone: event.customerPhone,
+    startedAt: event.startedAt || null,
+    actor,
   });
 
-  const [counts] = await bigquery.query({
-    location: CALL_COMMERCE_LOCATION,
-    query: `SELECT COUNT(*) total,COUNTIF(call_status='ANSWERED') answered,COUNTIF(call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED')) unanswered FROM ${table('call_attempts')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`,
-    params: { workspace_id: event.workspaceId, brand_id: event.brandId, lead_id: leadId },
-  });
-  const c = (counts as any[])[0] || {};
-  await bigquery.query({
-    location: CALL_COMMERCE_LOCATION,
-    query: `UPDATE ${table('call_leads')} SET latest_call_at=COALESCE(@started_at,CURRENT_TIMESTAMP()),latest_call_status=@call_status,latest_agent_name=@agent_name,call_attempt_count=@total,answered_attempt_count=@answered,unanswered_attempt_count=@unanswered,updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE lead_id=@lead_id AND workspace_id=@workspace_id AND brand_id=@brand_id`,
-    params: { started_at: event.startedAt || null, call_status: event.callStatus, agent_name: event.agentName || null, total: Number(c.total || 0), answered: Number(c.answered || 0), unanswered: Number(c.unanswered || 0), actor, lead_id: leadId, workspace_id: event.workspaceId, brand_id: event.brandId },
-    types: { started_at: 'TIMESTAMP' },
+  const attemptResult = await upsertCallAttempt(event, leadId, existingAttempt);
+  const attempt = attemptResult.attempt;
+  await refreshLeadCallSummary({
+    workspaceId: event.workspaceId,
+    brandId: event.brandId,
+    leadId,
+    actor,
   });
 
-  if (isAnswered(event.callStatus) && Number(event.durationSeconds || 0) >= CALL_COMMERCE_DEFAULTS.contactMinDurationSeconds) {
-    await queueMetaEvent({ workspaceId: event.workspaceId, brandId: event.brandId, leadId, callId: event.providerCallId, eventKey: 'CALL_LEAD_CONNECTED', eventName: 'ConnectedCallLead', payload: { lead_type:'call', source_module:'call_commerce', lead_id:leadId, call_id:event.providerCallId, phone:event.customerPhone, duration_seconds:event.durationSeconds } });
+  if (isAnswered(String(attempt.call_status || '')) && Number(attempt.duration_seconds || 0) >= CALL_COMMERCE_DEFAULTS.contactMinDurationSeconds) {
+    await queueMetaEvent({
+      workspaceId: event.workspaceId,
+      brandId: event.brandId,
+      leadId,
+      callId: attempt.attempt_id,
+      eventKey: 'CALL_LEAD_CONNECTED',
+      eventName: 'ConnectedCallLead',
+      payload: {
+        lead_type: 'call',
+        source_module: 'call_commerce',
+        lead_id: leadId,
+        call_id: attempt.attempt_id,
+        provider_call_id: event.providerCallId,
+        phone: event.customerPhone,
+        business_number: event.businessNumber || null,
+        duration_seconds: Number(attempt.duration_seconds || 0),
+      },
+    });
   }
 
-  return { leadId, attemptId };
+  return {
+    leadId,
+    attemptId: attempt.attempt_id,
+    providerCallId: event.providerCallId,
+    createdLead,
+    createdAttempt: attemptResult.created,
+    attachedToExistingLead: !createdLead,
+  };
 }
 
 export async function listLeads(input: { workspaceId: string; brandId: string; archived?: boolean; status?: string; search?: string; limit?: number; offset?: number }) {
@@ -234,7 +606,7 @@ export async function updateLeadWorkflow(input: { workspaceId:string; brandId:st
   const target = targetByAction[input.action];
   if (!target || !(transitions[String(lead.status)] || []).includes(target)) throw new Error('INVALID_CALL_LEAD_TRANSITION');
 
-  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET status=@target,unqualified_reason=IF(@target='UNQUALIFIED',@reason,unqualified_reason),closed_lost_reason=IF(@target='CLOSED_LOST',@reason,closed_lost_reason),next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,next_follow_up_at),order_id=IF(@target='PURCHASED',@order_id,order_id),order_amount=IF(@target='PURCHASED',@order_amount,order_amount),purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),purchased_at),updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { target, reason: input.data?.reason || null, next_follow_up_at: input.data?.nextFollowUpAt || null, order_id: input.data?.orderId || null, order_amount: input.data?.orderAmount === undefined ? null : Number(input.data?.orderAmount), actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at:'TIMESTAMP', order_amount:'NUMERIC' } });
+  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET status=@target,status_changed_at=CURRENT_TIMESTAMP(),unqualified_reason=IF(@target='UNQUALIFIED',@reason,unqualified_reason),closed_lost_reason=IF(@target='CLOSED_LOST',@reason,closed_lost_reason),next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,next_follow_up_at),order_id=IF(@target='PURCHASED',@order_id,order_id),order_amount=IF(@target='PURCHASED',@order_amount,order_amount),purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),purchased_at),updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { target, reason: input.data?.reason || null, next_follow_up_at: input.data?.nextFollowUpAt || null, order_id: input.data?.orderId || null, order_amount: input.data?.orderAmount === undefined ? null : Number(input.data?.orderAmount), actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at:'TIMESTAMP', order_amount:'NUMERIC' } });
 
   await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `INSERT INTO ${table('activity_log')} (activity_id,workspace_id,brand_id,lead_id,activity_type,from_status,to_status,details,actor_user_id,created_at) VALUES (@activity_id,@workspace_id,@brand_id,@lead_id,@activity_type,@from_status,@to_status,PARSE_JSON(@details),@actor,CURRENT_TIMESTAMP())`, params: { activity_id:id('act'), workspace_id:input.workspaceId, brand_id:input.brandId, lead_id:input.leadId, activity_type:input.action, from_status:String(lead.status), to_status:target, details:JSON.stringify(input.data || {}), actor:input.actorUserId } });
 
@@ -251,9 +623,61 @@ export async function updateLeadWorkflow(input: { workspaceId:string; brandId:st
 }
 
 export async function createManualLead(input:{ workspaceId:string;brandId:string;actorUserId:string;phone:string;customerName?:string;email?:string;product?:string;notes?:string }) {
-  const leadId=id('CL');
-  await bigquery.query({ location:CALL_COMMERCE_LOCATION, query:`INSERT INTO ${table('call_leads')} (lead_id,workspace_id,brand_id,phone,customer_name,email,product,status,notes,currency,first_call_at,latest_call_at,latest_call_status,call_attempt_count,answered_attempt_count,unanswered_attempt_count,is_archived,created_at,updated_at,created_by,updated_by) VALUES (@lead_id,@workspace_id,@brand_id,@phone,@customer_name,@email,@product,'NEW',@notes,'INR',CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),'MANUAL',1,1,0,FALSE,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),@actor,@actor)`, params:{ lead_id:leadId,workspace_id:input.workspaceId,brand_id:input.brandId,phone:input.phone.replace(/[^0-9+]/g,''),customer_name:input.customerName||null,email:input.email||null,product:input.product||null,notes:input.notes||null,actor:input.actorUserId } });
-  return { leadId };
+  await ensureCallCommerceSchema();
+  const phone = normalizePhone(input.phone);
+  if (!phone) throw new Error('CALL_PHONE_REQUIRED');
+  const now = new Date();
+  let lead = await findAttachableLead({
+    workspaceId: input.workspaceId,
+    brandId: input.brandId,
+    phone,
+    callAt: now,
+  });
+  const createdLead = !lead;
+  const leadId = lead?.lead_id || await createCallLead({
+    workspaceId: input.workspaceId,
+    brandId: input.brandId,
+    phone,
+    actor: input.actorUserId,
+    startedAt: now.toISOString(),
+    customerName: input.customerName || null,
+    email: input.email || null,
+    product: input.product || null,
+    notes: input.notes || null,
+  });
+
+  const attemptId = id('CA');
+  const providerCallId = `MANUAL_${crypto.randomUUID().replace(/-/g, '')}`;
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `INSERT INTO ${table('call_attempts')} (
+      attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,lead_id,phone,
+      event_type,call_status,direction,call_started_at,provider_updated_at,duration_seconds,created_at,updated_at
+    ) VALUES (
+      @attempt_id,@workspace_id,@brand_id,'manual','MANUAL',@provider_call_id,@lead_id,@phone,
+      'manual.incoming_call','MANUAL_CREATED','INBOUND',@started_at,@provider_updated_at,0,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()
+    )`,
+    params: {
+      attempt_id: attemptId,
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      provider_call_id: providerCallId,
+      lead_id: leadId,
+      phone,
+      started_at: now.toISOString(),
+      provider_updated_at: now.toISOString(),
+    },
+    types: { started_at: 'TIMESTAMP', provider_updated_at: 'TIMESTAMP' },
+  });
+
+  await refreshLeadCallSummary({
+    workspaceId: input.workspaceId,
+    brandId: input.brandId,
+    leadId,
+    actor: input.actorUserId,
+  });
+
+  return { leadId, attemptId, providerCallId, createdLead, attachedToExistingLead: !createdLead };
 }
 
 export async function queueMetaEvent(input:{ workspaceId:string;brandId:string;leadId:string;callId:string|null;eventKey:string;eventName:string;payload:unknown }) {
@@ -261,7 +685,8 @@ export async function queueMetaEvent(input:{ workspaceId:string;brandId:string;l
   if (!metaConnection || metaConnection.status !== 'connected') {
     return null;
   }
-  const eventId = deterministic('cc_meta', [input.workspaceId,input.brandId,input.eventKey,input.leadId,input.callId || '', input.eventKey==='CALL_LEAD_CONVERTED' ? String((input.payload as any)?.order_id || '') : '']);
+  const eventCallIdentity = input.eventKey === 'CALL_LEAD_CONNECTED' ? '' : (input.callId || '');
+  const eventId = deterministic('cc_meta', [input.workspaceId,input.brandId,input.eventKey,input.leadId,eventCallIdentity, input.eventKey==='CALL_LEAD_CONVERTED' ? String((input.payload as any)?.order_id || '') : '']);
   const queueId = deterministic('queue',[input.workspaceId,input.brandId,eventId]);
   await bigquery.query({ location:CALL_COMMERCE_LOCATION, query:`MERGE ${table('meta_event_queue')} t USING (SELECT @event_id event_id) s ON t.workspace_id=@workspace_id AND t.brand_id=@brand_id AND t.event_id=s.event_id WHEN NOT MATCHED THEN INSERT (queue_id,workspace_id,brand_id,lead_id,call_id,event_key,event_name,event_id,payload,status,attempts,next_attempt_at,created_at,updated_at) VALUES (@queue_id,@workspace_id,@brand_id,@lead_id,@call_id,@event_key,@event_name,@event_id,PARSE_JSON(@payload),'PENDING',0,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())`, params:{ queue_id:queueId,workspace_id:input.workspaceId,brand_id:input.brandId,lead_id:input.leadId,call_id:input.callId,event_key:input.eventKey,event_name:input.eventName,event_id:eventId,payload:JSON.stringify(input.payload ?? {}) } });
   return eventId;
@@ -284,5 +709,5 @@ export async function getSystemStatus(workspaceId:string,brandId:string) {
 }
 
 export async function archiveEligibleLeads(workspaceId:string,brandId:string) {
-  await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`UPDATE ${table('call_leads')} AS l SET is_archived=TRUE,archived_at=CURRENT_TIMESTAMP(),updated_at=CURRENT_TIMESTAMP() WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE AND NOT EXISTS (SELECT 1 FROM ${table('meta_event_queue')} q WHERE q.workspace_id=l.workspace_id AND q.brand_id=l.brand_id AND q.lead_id=l.lead_id AND q.status NOT IN ('SUCCESS')) AND ((status IN ('UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status='PURCHASED' AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status NOT IN ('PURCHASED','UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.generalArchiveDays} DAY)))`,params:{workspace_id:workspaceId,brand_id:brandId}});
+  await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`UPDATE ${table('call_leads')} AS l SET is_archived=TRUE,archived_at=CURRENT_TIMESTAMP(),updated_at=CURRENT_TIMESTAMP() WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE AND NOT EXISTS (SELECT 1 FROM ${table('meta_event_queue')} q WHERE q.workspace_id=l.workspace_id AND q.brand_id=l.brand_id AND q.lead_id=l.lead_id AND q.status NOT IN ('SUCCESS')) AND ((status IN ('UNQUALIFIED','CLOSED_LOST') AND COALESCE(status_changed_at,updated_at)<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status='PURCHASED' AND COALESCE(status_changed_at,updated_at)<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status NOT IN ('PURCHASED','UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.generalArchiveDays} DAY)))`,params:{workspace_id:workspaceId,brand_id:brandId}});
 }

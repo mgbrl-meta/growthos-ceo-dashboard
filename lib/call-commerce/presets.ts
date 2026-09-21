@@ -17,10 +17,11 @@ export const MSG91_PRESET: CallingProviderPreset = {
   aliases: ['msg 91'],
   fieldMappings: [
     { canonicalField: 'providerCallId', sourcePath: '$.uuid', required: true },
-    { canonicalField: 'providerEventId', sourcePath: '$.requestId' },
     { canonicalField: 'customerPhone', sourcePath: '$.source', transform: 'phone', required: true },
+    { canonicalField: 'businessNumber', sourcePath: '$.callerId', transform: 'phone' },
     { canonicalField: 'agentName', sourcePath: '$.agentName' },
     { canonicalField: 'startedAt', sourcePath: '$.startTime', transform: 'timestamp' },
+    { canonicalField: 'updatedAt', sourcePath: '$.statusUpdatedAt', transform: 'timestamp' },
     { canonicalField: 'endedAt', sourcePath: '$.endTime', transform: 'timestamp' },
     { canonicalField: 'durationSeconds', sourcePath: '$.duration', transform: 'number' },
     { canonicalField: 'rawEventType', sourcePath: '$.eventName' },
