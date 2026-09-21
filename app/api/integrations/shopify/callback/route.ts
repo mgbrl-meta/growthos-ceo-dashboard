@@ -28,6 +28,7 @@ import {
 import {
   ensureShopifyOrdersWebhookSubscriptions,
   ensureShopifyCustomersWebhookSubscriptions,
+  ensureShopifyProductsWebhookSubscriptions,
 } from '@/lib/integrations/providers/shopify-webhooks';
 
 import {
@@ -436,6 +437,13 @@ export async function GET(
         '/api/integrations/shopify/webhooks/customers',
         request.url
       )
+        .toString();   
+        
+    const productsWebhookUrl =
+      new URL(
+        '/api/integrations/shopify/webhooks/products',
+        request.nextUrl.origin
+      )
         .toString();    
 
 
@@ -462,6 +470,19 @@ export async function GET(
 
       webhookUri:
         customersWebhookUrl,
+
+    });
+
+    await ensureShopifyProductsWebhookSubscriptions({
+
+      shopDomain:
+        canonicalShop.shopDomain,
+
+      accessToken:
+        credential.accessToken,
+
+      webhookUri:
+        productsWebhookUrl,
 
     });
 

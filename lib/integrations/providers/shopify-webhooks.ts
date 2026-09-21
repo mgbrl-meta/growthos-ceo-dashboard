@@ -14,7 +14,9 @@ type ShopifyWebhookTopic =
   | 'ORDERS_CREATE'
   | 'ORDERS_UPDATED'
   | 'CUSTOMERS_CREATE'
-  | 'CUSTOMERS_UPDATE';
+  | 'CUSTOMERS_UPDATE'
+  | 'PRODUCTS_CREATE'
+  | 'PRODUCTS_UPDATE';
 
 
 type ShopifyWebhookSubscription = {
@@ -1365,6 +1367,195 @@ export async function ensureShopifyCustomersWebhookSubscriptions(
       customersCreate,
 
       customersUpdate,
+
+    },
+
+  };
+
+}
+
+// ============================================================
+// ENSURE SHOPIFY PRODUCT WEBHOOK SUBSCRIPTIONS
+//
+// products/create
+// products/update
+//
+// Both intentionally use ONE Product receiver.
+//
+// x-shopify-topic tells the receiver which event occurred.
+//
+// Idempotent contract:
+//
+// list existing
+//      ↓
+// reuse / correct / create products/create
+//      ↓
+// refresh subscriptions when mutation occurred
+//      ↓
+// reuse / correct / create products/update
+//
+// Repeated calls must not create duplicate subscriptions.
+// ============================================================
+
+export async function ensureShopifyProductsWebhookSubscriptions(
+  input: {
+
+    shopDomain:
+      string;
+
+    accessToken:
+      string;
+
+    webhookUri:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // SHOP
+  // ==========================================================
+
+  const shopDomain =
+    normalizeShopDomain(
+      input.shopDomain
+    );
+
+
+  if (
+    !shopDomain
+    ||
+    !shopDomain.endsWith(
+      '.myshopify.com'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_WEBHOOK_SHOP_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // ACCESS TOKEN
+  // ==========================================================
+
+  const accessToken =
+    requireValue(
+      input.accessToken,
+      'SHOPIFY_WEBHOOK_ACCESS_TOKEN_MISSING'
+    );
+
+
+  // ==========================================================
+  // RECEIVER
+  // ==========================================================
+
+  const webhookUri =
+    normalizeWebhookUri(
+      input.webhookUri
+    );
+
+
+  // ==========================================================
+  // CURRENT SHOPIFY CONFIGURATION
+  // ==========================================================
+
+  const existing =
+    await listShopifyWebhookSubscriptions({
+
+      shopDomain,
+
+      accessToken,
+
+    });
+
+
+  // ==========================================================
+  // PRODUCTS / CREATE
+  // ==========================================================
+
+  const productsCreate =
+    await ensureTopic({
+
+      shopDomain,
+
+      accessToken,
+
+      topic:
+        'PRODUCTS_CREATE',
+
+      uri:
+        webhookUri,
+
+      existing,
+
+    });
+
+
+  // ==========================================================
+  // REFRESH AFTER MUTATION
+  // ==========================================================
+
+  const refreshed =
+    productsCreate.action ===
+      'reused'
+
+      ?
+        existing
+
+      :
+        await listShopifyWebhookSubscriptions({
+
+          shopDomain,
+
+          accessToken,
+
+        });
+
+
+  // ==========================================================
+  // PRODUCTS / UPDATE
+  // ==========================================================
+
+  const productsUpdate =
+    await ensureTopic({
+
+      shopDomain,
+
+      accessToken,
+
+      topic:
+        'PRODUCTS_UPDATE',
+
+      uri:
+        webhookUri,
+
+      existing:
+        refreshed,
+
+    });
+
+
+  // ==========================================================
+  // SAFE RESULT
+  // ==========================================================
+
+  return {
+
+    ok:
+      true,
+
+    shopDomain,
+
+    webhookUri,
+
+    subscriptions: {
+
+      productsCreate,
+
+      productsUpdate,
 
     },
 

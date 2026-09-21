@@ -431,6 +431,7 @@ function validateShopifyMessage(
       'shopify.sync.requested',
       'shopify.order.webhook',
       'shopify.customer.webhook',
+      'shopify.product.webhook',
     ]);
 
 
@@ -546,6 +547,11 @@ function validateShopifyMessage(
 
     customerId:
       payload.customerId
+      ??
+      null,  
+
+    productId:
+      payload.productId
       ??
       null,  
 
@@ -759,6 +765,87 @@ function validateShopifyMessage(
 
     if (
       !allowedCustomerWebhookTopics.has(
+        job.webhookTopic
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_WEBHOOK_TOPIC_INVALID'
+      );
+
+    }
+
+
+    return job;
+
+  }
+
+    // ==========================================================
+  // REALTIME PRODUCT WEBHOOK
+  //
+  // Product webhook messages contain only identity.
+  //
+  // Supported topics:
+  //
+  // products/create
+  // products/update
+  // ==========================================================
+
+  if (
+    eventType ===
+      'shopify.product.webhook'
+  ) {
+
+    job.entity =
+      'products';
+
+
+    // ========================================================
+    // PRODUCT ID
+    // ========================================================
+
+    job.productId =
+      requireString(
+        job.productId,
+        'SHOPIFY_WEBHOOK_PRODUCT_ID_MISSING'
+      );
+
+
+    if (
+      !job.productId.startsWith(
+        'gid://shopify/Product/'
+      )
+    ) {
+
+      throw new Error(
+        'SHOPIFY_WEBHOOK_PRODUCT_ID_INVALID'
+      );
+
+    }
+
+
+    // ========================================================
+    // WEBHOOK TOPIC
+    // ========================================================
+
+    job.webhookTopic =
+      requireString(
+        job.webhookTopic,
+        'SHOPIFY_WEBHOOK_TOPIC_MISSING'
+      );
+
+
+    const allowedProductWebhookTopics =
+      new Set([
+
+        'products/create',
+        'products/update',
+
+      ]);
+
+
+    if (
+      !allowedProductWebhookTopics.has(
         job.webhookTopic
       )
     ) {
@@ -1178,7 +1265,7 @@ app.post(
 
       }
 
-            // ======================================================
+      // ======================================================
       // REALTIME SHOPIFY CUSTOMER WEBHOOK
       //
       // Webhook message contains only Customer identity.
@@ -1300,6 +1387,159 @@ app.post(
             customerUpdatedAt:
               fetched
                 .customer
+                .updatedAt
+              ??
+              null,
+
+            tokenRefreshed:
+              fetched.tokenRefreshed,
+
+            warehouseReceived:
+              warehouse.received,
+
+            warehouseChanged:
+              warehouse.changed,
+
+            warehouseSkipped:
+              warehouse.skipped,
+
+            warehouseLoaded:
+              warehouse.loaded,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          }
+        );
+
+
+        return res
+          .status(204)
+          .end();
+
+      }
+
+            // ======================================================
+      // REALTIME SHOPIFY PRODUCT WEBHOOK
+      //
+      // Webhook message contains only identity.
+      //
+      // Worker:
+      //
+      // 1. resolves Secret Manager credential
+      // 2. fetches canonical GraphQL Product
+      // 3. writes through canonical Product writer
+      //
+      // Pub/Sub duplicate delivery is safe because the Product
+      // writer hashes/dedupes canonical Product payloads.
+      // ======================================================
+
+      if (
+        job.eventType ===
+          'shopify.product.webhook'
+      ) {
+
+        // ====================================================
+        // RUNTIME / CREDENTIAL
+        // ====================================================
+
+        const runtime =
+          await resolveShopifyRuntimeContext(
+            job
+          );
+
+
+        // ====================================================
+        // CANONICAL PRODUCT REFETCH
+        // ====================================================
+
+        const fetched =
+          await fetchShopifyProductById(
+
+            runtime,
+
+            job.productId
+
+          );
+
+
+        if (
+          !fetched.product
+        ) {
+
+          throw new Error(
+            'SHOPIFY_WEBHOOK_PRODUCT_NOT_FOUND'
+          );
+
+        }
+
+
+        // ====================================================
+        // CANONICAL PRODUCT WAREHOUSE
+        // ====================================================
+
+        const warehouse =
+          await writeShopifyProducts({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            products: [
+
+              fetched.product,
+
+            ],
+
+          });
+
+
+        // ====================================================
+        // RESULT
+        // ====================================================
+
+        console.log(
+          'SHOPIFY_PRODUCT_WEBHOOK_COMPLETED',
+          {
+
+            pubsubMessageId:
+              message.messageId
+              ??
+              null,
+
+            jobId:
+              job.jobId,
+
+            webhookId:
+              job.webhookId
+              ??
+              null,
+
+            webhookTopic:
+              job.webhookTopic,
+
+            productId:
+              job.productId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            productUpdatedAt:
+              fetched
+                .product
                 .updatedAt
               ??
               null,

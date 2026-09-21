@@ -13,6 +13,7 @@ import {
 import {
   ensureShopifyOrdersWebhookSubscriptions,
   ensureShopifyCustomersWebhookSubscriptions,
+  ensureShopifyProductsWebhookSubscriptions,
 } from '@/lib/integrations/providers/shopify-webhooks';
 
 
@@ -311,6 +312,16 @@ export async function bootstrapShopifyOrdersWebhooks(
     )
       .toString();
 
+  const productsWebhookUri =
+    new URL(
+
+      '/api/integrations/shopify/webhooks/products',
+
+      input.origin
+
+    )
+      .toString();    
+
 
   // ==========================================================
   // VALID STORED TOKEN
@@ -345,8 +356,9 @@ export async function bootstrapShopifyOrdersWebhooks(
   // check, refresh once and retry.
   // ==========================================================
 
-    let ordersResult;
+  let ordersResult;
   let customersResult;
+  let productsResult;
 
 
   try {
@@ -386,6 +398,24 @@ export async function bootstrapShopifyOrdersWebhooks(
 
       });
 
+
+
+    // ========================================================
+    // PRODUCTS
+    // ========================================================
+
+    productsResult =
+      await ensureShopifyProductsWebhookSubscriptions({
+
+        shopDomain,
+
+        accessToken:
+          credential.accessToken,
+
+        webhookUri:
+          productsWebhookUri,
+
+      });
 
   } catch (
     error: any
@@ -481,6 +511,19 @@ export async function bootstrapShopifyOrdersWebhooks(
 
       });
 
+    productsResult =
+      await ensureShopifyProductsWebhookSubscriptions({
+
+        shopDomain,
+
+        accessToken:
+          credential.accessToken,
+
+        webhookUri:
+          productsWebhookUri,
+
+      });  
+
   }
 
 
@@ -521,6 +564,8 @@ export async function bootstrapShopifyOrdersWebhooks(
     ordersWebhookUri,
 
     customersWebhookUri,
+
+    productsWebhookUri,
 
 
     tokenRefreshed:
@@ -601,6 +646,42 @@ export async function bootstrapShopifyOrdersWebhooks(
           .id,
 
     },
+
+    // ========================================================
+    // PRODUCTS
+    // ========================================================
+
+    productsCreate: {
+
+  action:
+    productsResult
+      .subscriptions
+      .productsCreate
+      .action,
+
+  id:
+    productsResult
+      .subscriptions
+      .productsCreate
+      .id,
+
+},
+
+productsUpdate: {
+
+  action:
+    productsResult
+      .subscriptions
+      .productsUpdate
+      .action,
+
+  id:
+    productsResult
+      .subscriptions
+      .productsUpdate
+      .id,
+
+},
 
   };
 
