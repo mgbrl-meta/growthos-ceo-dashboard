@@ -36,6 +36,19 @@ export async function getCallingConnectionById(connectionId: string) {
   return (rows as any[])[0] || null;
 }
 
+// Low-latency webhook lookup. The calling connection can only exist after the
+// Call Commerce schema has already been provisioned during setup/activation,
+// so live provider webhooks must not run schema DDL before acknowledgement.
+export async function getCallingConnectionByIdFast(connectionId: string) {
+  requireProject();
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('calling_connections')} WHERE connection_id=@connection_id LIMIT 1`,
+    params: { connection_id: connectionId },
+  });
+  return (rows as any[])[0] || null;
+}
+
 export async function createCallingConnection(input: {
   workspaceId: string; brandId: string; connectionName: string; providerKey: string;
 }) {
@@ -110,6 +123,16 @@ export async function getActiveMapping(connectionId: string) {
   return (rows as any[])[0] || null;
 }
 
+export async function getCallingMappingById(mappingVersionId: string) {
+  requireProject();
+  const [rows] = await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `SELECT * FROM ${table('calling_mapping_versions')} WHERE mapping_version_id=@mapping_version_id LIMIT 1`,
+    params: { mapping_version_id: mappingVersionId },
+  });
+  return (rows as any[])[0] || null;
+}
+
 export async function storeTestEvent(input: { connection: any; payload: unknown; discoveredFields: unknown }) {
   const testEventId = id('tst');
   await bigquery.query({
@@ -134,6 +157,107 @@ export async function insertRawEvent(input: { event: CanonicalCallEvent | null; 
     params: { raw_event_id: rawEventId, workspace_id: input.connection.workspace_id, brand_id: input.connection.brand_id, connection_id: input.connection.connection_id, provider_key: input.connection.provider_key, provider_call_id: input.event?.providerCallId || null, provider_event_id: input.event?.providerEventId || null, raw_event_type: input.event?.rawEventType || null, raw_status: input.event?.rawStatus || null, payload: JSON.stringify(input.payload ?? {}), mapping_version_id: input.mappingVersionId || null, processing_status: input.status, processing_error: input.error || null },
   });
   return rawEventId;
+}
+
+export async function beginRawEventDelivery(input: {
+  deliveryId: string;
+  pubsubMessageId?: string | null;
+  acceptedAt: string;
+  workspaceId: string;
+  brandId: string;
+  connectionId: string;
+  providerKey: string;
+  mappingVersionId: string;
+  payload: unknown;
+}) {
+  requireProject();
+  const rawEventId = deterministic('raw', [input.workspaceId, input.brandId, input.connectionId, input.deliveryId]);
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `MERGE ${table('raw_call_events')} t
+      USING (SELECT @delivery_id delivery_id) s
+      ON t.workspace_id=@workspace_id AND t.brand_id=@brand_id AND t.connection_id=@connection_id AND t.delivery_id=s.delivery_id
+      WHEN MATCHED THEN UPDATE SET
+        pubsub_message_id=COALESCE(@pubsub_message_id,t.pubsub_message_id),
+        processing_status=IF(t.processing_status='processed',t.processing_status,'processing'),
+        processing_error=IF(t.processing_status='processed',t.processing_error,NULL)
+      WHEN NOT MATCHED THEN INSERT (
+        raw_event_id,delivery_id,pubsub_message_id,workspace_id,brand_id,connection_id,provider_key,
+        payload,mapping_version_id,processing_status,processing_error,received_at,processed_at
+      ) VALUES (
+        @raw_event_id,@delivery_id,@pubsub_message_id,@workspace_id,@brand_id,@connection_id,@provider_key,
+        PARSE_JSON(@payload),@mapping_version_id,'processing',NULL,@accepted_at,NULL
+      )`,
+    params: {
+      raw_event_id: rawEventId,
+      delivery_id: input.deliveryId,
+      pubsub_message_id: input.pubsubMessageId || null,
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      connection_id: input.connectionId,
+      provider_key: input.providerKey,
+      payload: JSON.stringify(input.payload ?? {}),
+      mapping_version_id: input.mappingVersionId,
+      accepted_at: input.acceptedAt,
+    },
+    types: { accepted_at: 'TIMESTAMP' },
+  });
+  return rawEventId;
+}
+
+export async function finalizeRawEventDelivery(input: {
+  rawEventId: string;
+  event?: CanonicalCallEvent | null;
+  status: 'processing' | 'raw_only' | 'processed' | 'failed' | 'retry';
+  error?: string | null;
+}) {
+  requireProject();
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `UPDATE ${table('raw_call_events')} SET
+      provider_call_id=COALESCE(@provider_call_id,provider_call_id),
+      provider_event_id=COALESCE(@provider_event_id,provider_event_id),
+      raw_event_type=COALESCE(@raw_event_type,raw_event_type),
+      raw_status=COALESCE(@raw_status,raw_status),
+      processing_status=@processing_status,
+      processing_error=@processing_error,
+      processed_at=IF(@processing_status IN ('processed','raw_only','failed'),CURRENT_TIMESTAMP(),processed_at)
+    WHERE raw_event_id=@raw_event_id`,
+    params: {
+      raw_event_id: input.rawEventId,
+      provider_call_id: input.event?.providerCallId || null,
+      provider_event_id: input.event?.providerEventId || null,
+      raw_event_type: input.event?.rawEventType || null,
+      raw_status: input.event?.rawStatus || null,
+      processing_status: input.status,
+      processing_error: input.error || null,
+    },
+  });
+}
+
+export async function markCallingConnectionProcessingResult(input: {
+  connectionId: string;
+  acceptedAt: string;
+  success: boolean;
+  error?: string | null;
+}) {
+  requireProject();
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `UPDATE ${table('calling_connections')} SET
+      last_event_at=IF(last_event_at IS NULL OR last_event_at<@accepted_at,@accepted_at,last_event_at),
+      last_success_at=IF(@success,CURRENT_TIMESTAMP(),last_success_at),
+      last_error=IF(@success,NULL,@last_error),
+      updated_at=CURRENT_TIMESTAMP()
+    WHERE connection_id=@connection_id`,
+    params: {
+      connection_id: input.connectionId,
+      accepted_at: input.acceptedAt,
+      success: input.success,
+      last_error: input.error || null,
+    },
+    types: { accepted_at: 'TIMESTAMP' },
+  });
 }
 
 const OPEN_LEAD_STATUSES = new Set(['NEW', 'QUALIFIED', 'FOLLOW_UP']);
@@ -483,8 +607,12 @@ async function refreshLeadCallSummary(input: {
   return summary;
 }
 
-export async function ingestCanonicalEvent(event: CanonicalCallEvent, actor = 'calling-webhook') {
-  await ensureCallCommerceSchema();
+export async function ingestCanonicalEvent(
+  event: CanonicalCallEvent,
+  actor = 'calling-webhook',
+  options?: { skipSchemaEnsure?: boolean }
+) {
+  if (!options?.skipSchemaEnsure) await ensureCallCommerceSchema();
 
   // Provider IDs identify one provider call attempt only. Growth OS owns the
   // business identities (CL_* thread and CA_* attempt).

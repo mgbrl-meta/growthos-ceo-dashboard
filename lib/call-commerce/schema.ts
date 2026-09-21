@@ -69,6 +69,8 @@ export async function ensureCallCommerceSchema() {
 
       `CREATE TABLE IF NOT EXISTS \`${project}.${CALL_COMMERCE_DATASET}.raw_call_events\` (
         raw_event_id STRING NOT NULL,
+        delivery_id STRING,
+        pubsub_message_id STRING,
         workspace_id STRING NOT NULL,
         brand_id STRING NOT NULL,
         connection_id STRING NOT NULL,
@@ -219,6 +221,8 @@ export async function ensureCallCommerceSchema() {
 
     // Additive schema upgrades for warehouses where Call Commerce already exists.
     const upgrades = [
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.raw_call_events\` ADD COLUMN IF NOT EXISTS delivery_id STRING`,
+      `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.raw_call_events\` ADD COLUMN IF NOT EXISTS pubsub_message_id STRING`,
       `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_attempts\` ADD COLUMN IF NOT EXISTS business_number STRING`,
       `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_attempts\` ADD COLUMN IF NOT EXISTS provider_updated_at TIMESTAMP`,
       `ALTER TABLE \`${project}.${CALL_COMMERCE_DATASET}.call_leads\` ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMP`,
