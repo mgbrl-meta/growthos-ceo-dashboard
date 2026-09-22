@@ -424,7 +424,12 @@ async function createCallLead(input: {
 
 async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, existingAttempt: any) {
   const created = !existingAttempt;
-  const attemptId = existingAttempt?.attempt_id || id('CA');
+  const attemptId = existingAttempt?.attempt_id || deterministic('CA', [
+    event.workspaceId,
+    event.brandId,
+    event.connectionId,
+    event.providerCallId,
+  ]);
   const oldStatus = String(existingAttempt?.call_status || '');
   const incomingStatus = String(event.callStatus || '');
   const oldUpdatedAt = asDate(existingAttempt?.provider_updated_at);
@@ -459,6 +464,9 @@ async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, exis
     provider_updated_at: laterIso(existingAttempt?.provider_updated_at, incomingUpdatedAt),
     duration_seconds: Math.max(Number(existingAttempt?.duration_seconds || 0), Number(event.durationSeconds || 0)),
     disconnected_by: incomingWins ? (event.disconnectedBy || existingAttempt?.disconnected_by || null) : (existingAttempt?.disconnected_by || null),
+    disconnect_party: incomingWins ? (event.disconnectParty || existingAttempt?.disconnect_party || null) : (existingAttempt?.disconnect_party || null),
+    end_reason: incomingWins ? (event.endReason || existingAttempt?.end_reason || null) : (existingAttempt?.end_reason || null),
+    outcome_source: incomingWins ? (event.outcomeSource || existingAttempt?.outcome_source || null) : (existingAttempt?.outcome_source || null),
     recording_url: event.recordingUrl || existingAttempt?.recording_url || null,
     reason: incomingWins ? (event.reason || existingAttempt?.reason || null) : (existingAttempt?.reason || null),
     ivr_inputs: event.ivrInputs ?? existingAttempt?.ivr_inputs ?? null,
@@ -488,7 +496,10 @@ async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, exis
         call_ended_at=COALESCE(@ended_at,t.call_ended_at),
         provider_updated_at=COALESCE(@provider_updated_at,t.provider_updated_at),
         duration_seconds=GREATEST(COALESCE(t.duration_seconds,0),COALESCE(@duration_seconds,0)),
-        disconnected_by=@disconnected_by,
+        disconnected_by=NULLIF(@disconnected_by,''),
+        disconnect_party=NULLIF(@disconnect_party,''),
+        end_reason=NULLIF(@end_reason,''),
+        outcome_source=NULLIF(@outcome_source,''),
         recording_url=COALESCE(@recording_url,t.recording_url),
         reason=@reason,
         ivr_inputs=PARSE_JSON(@ivr_inputs),
@@ -498,16 +509,20 @@ async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, exis
       WHEN NOT MATCHED THEN INSERT (
         attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,lead_id,phone,
         business_number,event_type,call_status,direction,agent_id,agent_name,agent_phone,call_started_at,
-        call_answered_at,call_ended_at,provider_updated_at,duration_seconds,disconnected_by,recording_url,
+        call_answered_at,call_ended_at,provider_updated_at,duration_seconds,disconnected_by,disconnect_party,end_reason,outcome_source,recording_url,
         reason,ivr_inputs,raw_event_type,raw_status,created_at,updated_at
       ) VALUES (
         @attempt_id,@workspace_id,@brand_id,@connection_id,@provider_key,@provider_call_id,@lead_id,@phone,
         @business_number,@event_type,@call_status,@direction,@agent_id,@agent_name,@agent_phone,@started_at,
-        @answered_at,@ended_at,@provider_updated_at,@duration_seconds,@disconnected_by,@recording_url,
+        @answered_at,@ended_at,@provider_updated_at,@duration_seconds,NULLIF(@disconnected_by,''),NULLIF(@disconnect_party,''),NULLIF(@end_reason,''),NULLIF(@outcome_source,''),@recording_url,
         @reason,PARSE_JSON(@ivr_inputs),@raw_event_type,@raw_status,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()
       )`,
     params: {
       ...values,
+      disconnected_by: values.disconnected_by || '',
+      disconnect_party: values.disconnect_party || '',
+      end_reason: values.end_reason || '',
+      outcome_source: values.outcome_source || '',
       ivr_inputs: JSON.stringify(values.ivr_inputs ?? null),
     },
     types: {
@@ -555,7 +570,7 @@ async function refreshLeadCallSummary(input: {
       MIN(activity_at) first_call_at,
       ARRAY_AGG(STRUCT(
         attempt_id,provider_call_id,business_number,call_status,agent_name,duration_seconds,
-        activity_at,call_ended_at,provider_updated_at
+        disconnect_party,end_reason,activity_at,call_ended_at,provider_updated_at
       ) ORDER BY activity_at DESC,COALESCE(provider_updated_at,updated_at) DESC LIMIT 1)[SAFE_OFFSET(0)] latest
     FROM attempts`,
     params: {
@@ -578,6 +593,8 @@ async function refreshLeadCallSummary(input: {
       latest_provider_call_id=@latest_provider_call_id,
       latest_business_number=@latest_business_number,
       latest_duration_seconds=@latest_duration_seconds,
+      latest_disconnect_party=NULLIF(@latest_disconnect_party,''),
+      latest_end_reason=NULLIF(@latest_end_reason,''),
       call_attempt_count=@total,
       answered_attempt_count=@answered,
       unanswered_attempt_count=@unanswered,
@@ -593,6 +610,8 @@ async function refreshLeadCallSummary(input: {
       latest_provider_call_id: latest.provider_call_id || null,
       latest_business_number: latest.business_number || null,
       latest_duration_seconds: latest.duration_seconds == null ? null : Number(latest.duration_seconds),
+      latest_disconnect_party: String(latest.disconnect_party || ''),
+      latest_end_reason: String(latest.end_reason || ''),
       total: Number(summary.total || 0),
       answered: Number(summary.answered || 0),
       unanswered: Number(summary.unanswered || 0),

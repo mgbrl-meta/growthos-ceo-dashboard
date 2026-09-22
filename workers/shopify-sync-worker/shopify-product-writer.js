@@ -152,6 +152,242 @@ function hashPayload(
 
 }
 
+// ============================================================
+// BIGQUERY MUTATING DML RETRY
+//
+// Realtime Product webhooks can arrive concurrently.
+//
+// BigQuery internally retries conflicting mutating DML, but
+// sustained Product webhook bursts can still surface:
+//
+// - concurrent update / serialization conflicts
+// - mutating-DML queue saturation
+//
+// IMPORTANT:
+//
+// Retry ONLY the STATE MERGE.
+//
+// RAW has already been appended before this point, so the
+// complete writeShopifyProducts() operation must NOT be blindly
+// retried inside this writer.
+// ============================================================
+
+const PRODUCT_STATE_MERGE_MAX_ATTEMPTS =
+  3;
+
+
+// ============================================================
+// RETRYABLE BIGQUERY STATE ERROR
+// ============================================================
+
+function isRetryableProductStateMergeError(
+  error
+) {
+
+  const message =
+    String(
+      error?.message
+      ||
+      ''
+    )
+      .toLowerCase();
+
+
+  return (
+
+    message.includes(
+      'could not serialize access'
+    )
+
+    ||
+
+    message.includes(
+      'concurrent update'
+    )
+
+    ||
+
+    message.includes(
+      'too many dml statements outstanding'
+    )
+
+    ||
+
+    message.includes(
+      'rate limit'
+    )
+
+  );
+
+}
+
+
+// ============================================================
+// RETRY DELAY
+//
+// Attempt 1 failure:
+// ~500-750 ms
+//
+// Attempt 2 failure:
+// ~1500-1750 ms
+// ============================================================
+
+function getProductStateMergeRetryDelayMs(
+  attempt
+) {
+
+  const baseDelay =
+    attempt === 1
+      ?
+        500
+      :
+        1500;
+
+
+  const jitter =
+    Math.floor(
+      Math.random()
+      *
+      250
+    );
+
+
+  return (
+    baseDelay
+    +
+    jitter
+  );
+
+}
+
+
+// ============================================================
+// SLEEP
+// ============================================================
+
+function sleep(
+  milliseconds
+) {
+
+  return new Promise(
+    resolve => {
+
+      setTimeout(
+        resolve,
+        milliseconds
+      );
+
+    }
+  );
+
+}
+
+
+// ============================================================
+// RUN PRODUCT STATE MERGE WITH RETRY
+//
+// Same bounded recovery pattern already proven for Orders.
+//
+// We deliberately retry only transient BigQuery mutating-DML
+// contention. All other failures remain fail-fast.
+// ============================================================
+
+async function runProductStateMergeWithRetry(
+  queryOptions
+) {
+
+  let lastError =
+    null;
+
+
+  for (
+    let attempt = 1;
+    attempt <=
+      PRODUCT_STATE_MERGE_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+
+    try {
+
+      return await bigquery.query(
+        queryOptions
+      );
+
+    } catch (
+      error
+    ) {
+
+      lastError =
+        error;
+
+
+      const retryable =
+        isRetryableProductStateMergeError(
+          error
+        );
+
+
+      if (
+        !retryable
+        ||
+        attempt >=
+          PRODUCT_STATE_MERGE_MAX_ATTEMPTS
+      ) {
+
+        throw error;
+
+      }
+
+
+      const delayMs =
+        getProductStateMergeRetryDelayMs(
+          attempt
+        );
+
+
+      console.warn(
+        'SHOPIFY_PRODUCT_STATE_MERGE_RETRY',
+        {
+
+          attempt,
+
+          nextAttempt:
+            attempt + 1,
+
+          maxAttempts:
+            PRODUCT_STATE_MERGE_MAX_ATTEMPTS,
+
+          delayMs,
+
+          message:
+            String(
+              error?.message
+              ||
+              'Unknown BigQuery Product state MERGE failure'
+            ),
+
+        }
+      );
+
+
+      await sleep(
+        delayMs
+      );
+
+    }
+
+  }
+
+
+  throw (
+    lastError
+    ||
+    new Error(
+      'SHOPIFY_PRODUCT_STATE_MERGE_FAILED'
+    )
+  );
+
+}
 
 // ============================================================
 // WRITE SHOPIFY PRODUCTS
@@ -731,7 +967,7 @@ export async function writeShopifyProducts(
   // incremental ingestion.
   // ==========================================================
 
-  await bigquery.query({
+  await runProductStateMergeWithRetry({
 
     query: `
 

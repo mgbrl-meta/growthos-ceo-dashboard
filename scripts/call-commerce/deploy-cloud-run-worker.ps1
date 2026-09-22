@@ -25,6 +25,24 @@ function Invoke-Gcloud {
   }
 }
 
+
+function Invoke-BqQuery {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$Query
+  )
+
+  & bq query `
+    --project_id=$ProjectId `
+    --location=$Region `
+    --use_legacy_sql=false `
+    $Query
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "bq query failed: $Query"
+  }
+}
+
 function Get-GcloudValue {
   param(
     [Parameter(ValueFromRemainingArguments=$true)]
@@ -138,6 +156,33 @@ try {
 catch {
   Write-Warning "Unable to update topic storage policy. Existing topic remains usable. $($_.Exception.Message)"
 }
+
+
+# ============================================================
+# ADDITIVE CALL OUTCOME SCHEMA
+#
+# Keep deployment backward-compatible with the existing warehouse.
+# These fields make the operational distinction explicit:
+# - high-level call outcome
+# - who ended the call
+# - why the call ended
+# ============================================================
+
+Write-Host "Applying additive Call Commerce outcome schema..."
+
+$SchemaQueries = @(
+  ('ALTER TABLE `{0}.{1}.call_attempts` ADD COLUMN IF NOT EXISTS disconnect_party STRING' -f $ProjectId, $Dataset),
+  ('ALTER TABLE `{0}.{1}.call_attempts` ADD COLUMN IF NOT EXISTS end_reason STRING' -f $ProjectId, $Dataset),
+  ('ALTER TABLE `{0}.{1}.call_attempts` ADD COLUMN IF NOT EXISTS outcome_source STRING' -f $ProjectId, $Dataset),
+  ('ALTER TABLE `{0}.{1}.call_leads` ADD COLUMN IF NOT EXISTS latest_disconnect_party STRING' -f $ProjectId, $Dataset),
+  ('ALTER TABLE `{0}.{1}.call_leads` ADD COLUMN IF NOT EXISTS latest_end_reason STRING' -f $ProjectId, $Dataset)
+)
+
+foreach ($SchemaQuery in $SchemaQueries) {
+  Invoke-BqQuery -Query $SchemaQuery | Out-Null
+}
+
+Write-Host "Call Commerce outcome schema is ready."
 
 # ============================================================
 # DEPLOY PRIVATE CLOUD RUN WORKER

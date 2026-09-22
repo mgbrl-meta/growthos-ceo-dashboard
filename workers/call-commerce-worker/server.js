@@ -340,6 +340,13 @@ async function processCallEvent(job, message) {
         acknowledged: true,
         rawOnly: true,
         rawEventId,
+        event: {
+          providerCallId: event.providerCallId,
+          eventType: event.eventType,
+          callStatus: event.callStatus,
+          disconnectParty: event.disconnectParty || null,
+          endReason: event.endReason || null,
+        },
       };
     }
 
@@ -386,6 +393,13 @@ async function processCallEvent(job, message) {
       acknowledged: true,
       rawEventId,
       data,
+      event: {
+        providerCallId: event.providerCallId,
+        eventType: event.eventType,
+        callStatus: event.callStatus,
+        disconnectParty: event.disconnectParty || null,
+        endReason: event.endReason || null,
+      },
     };
   } catch (error) {
     const messageText =
@@ -515,6 +529,21 @@ app.post(
             ?? null,
           rawOnly:
             Boolean(result.rawOnly),
+          providerCallId:
+            result.event?.providerCallId
+            ?? null,
+          eventType:
+            result.event?.eventType
+            ?? null,
+          callStatus:
+            result.event?.callStatus
+            ?? null,
+          disconnectParty:
+            result.event?.disconnectParty
+            ?? null,
+          endReason:
+            result.event?.endReason
+            ?? null,
           durationMs:
             Date.now()
             - startedAt,

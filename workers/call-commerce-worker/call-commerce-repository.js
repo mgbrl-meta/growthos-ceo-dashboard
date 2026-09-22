@@ -581,7 +581,14 @@ async function createCallLead(input) {
 
 async function upsertCallAttempt(event, leadId, existingAttempt) {
   const created = !existingAttempt;
-  const attemptId = existingAttempt?.attempt_id || id('CA');
+  const attemptId =
+    existingAttempt?.attempt_id
+    || deterministic('CA', [
+      event.workspaceId,
+      event.brandId,
+      event.connectionId,
+      event.providerCallId,
+    ]);
   const oldStatus = String(existingAttempt?.call_status || '');
   const incomingStatus = String(event.callStatus || '');
   const oldUpdatedAt = asDate(existingAttempt?.provider_updated_at);
@@ -627,6 +634,15 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
     disconnected_by: incomingWins
       ? (event.disconnectedBy || existingAttempt?.disconnected_by || null)
       : (existingAttempt?.disconnected_by || null),
+    disconnect_party: incomingWins
+      ? (event.disconnectParty || existingAttempt?.disconnect_party || null)
+      : (existingAttempt?.disconnect_party || null),
+    end_reason: incomingWins
+      ? (event.endReason || existingAttempt?.end_reason || null)
+      : (existingAttempt?.end_reason || null),
+    outcome_source: incomingWins
+      ? (event.outcomeSource || existingAttempt?.outcome_source || null)
+      : (existingAttempt?.outcome_source || null),
     recording_url: event.recordingUrl || existingAttempt?.recording_url || null,
     reason: incomingWins
       ? (event.reason || existingAttempt?.reason || null)
@@ -672,6 +688,9 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
           provider_updated_at=COALESCE(SAFE_CAST(@provider_updated_at AS TIMESTAMP),t.provider_updated_at),
           duration_seconds=GREATEST(COALESCE(t.duration_seconds,0),COALESCE(@duration_seconds,0)),
           disconnected_by=NULLIF(@disconnected_by,''),
+          disconnect_party=NULLIF(@disconnect_party,''),
+          end_reason=NULLIF(@end_reason,''),
+          outcome_source=NULLIF(@outcome_source,''),
           recording_url=COALESCE(NULLIF(@recording_url,''),t.recording_url),
           reason=NULLIF(@reason,''),
           ivr_inputs=PARSE_JSON(@ivr_inputs),
@@ -702,6 +721,9 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
           provider_updated_at,
           duration_seconds,
           disconnected_by,
+          disconnect_party,
+          end_reason,
+          outcome_source,
           recording_url,
           reason,
           ivr_inputs,
@@ -732,6 +754,9 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
           SAFE_CAST(@provider_updated_at AS TIMESTAMP),
           @duration_seconds,
           NULLIF(@disconnected_by,''),
+          NULLIF(@disconnect_party,''),
+          NULLIF(@end_reason,''),
+          NULLIF(@outcome_source,''),
           NULLIF(@recording_url,''),
           NULLIF(@reason,''),
           PARSE_JSON(@ivr_inputs),
@@ -748,6 +773,9 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
       agent_name: nullableString(values.agent_name),
       agent_phone: nullableString(values.agent_phone),
       disconnected_by: nullableString(values.disconnected_by),
+      disconnect_party: nullableString(values.disconnect_party),
+      end_reason: nullableString(values.end_reason),
+      outcome_source: nullableString(values.outcome_source),
       recording_url: nullableString(values.recording_url),
       reason: nullableString(values.reason),
       raw_event_type: nullableString(values.raw_event_type),
@@ -815,6 +843,8 @@ async function refreshLeadCallSummary(input) {
               call_status,
               agent_name,
               duration_seconds,
+              disconnect_party,
+              end_reason,
               activity_at,
               call_ended_at,
               provider_updated_at
@@ -850,6 +880,8 @@ async function refreshLeadCallSummary(input) {
         latest_provider_call_id=NULLIF(@latest_provider_call_id,''),
         latest_business_number=NULLIF(@latest_business_number,''),
         latest_duration_seconds=SAFE_CAST(NULLIF(@latest_duration_seconds,'') AS INT64),
+        latest_disconnect_party=NULLIF(@latest_disconnect_party,''),
+        latest_end_reason=NULLIF(@latest_end_reason,''),
         call_attempt_count=@total,
         answered_attempt_count=@answered,
         unanswered_attempt_count=@unanswered,
@@ -869,6 +901,8 @@ async function refreshLeadCallSummary(input) {
       latest_business_number: nullableString(latest.business_number),
       latest_duration_seconds:
         nullableIntegerString(latest.duration_seconds),
+      latest_disconnect_party: nullableString(latest.disconnect_party),
+      latest_end_reason: nullableString(latest.end_reason),
       total: Number(summary.total || 0),
       answered: Number(summary.answered || 0),
       unanswered: Number(summary.unanswered || 0),

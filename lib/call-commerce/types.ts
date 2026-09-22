@@ -11,7 +11,9 @@ export type CanonicalCallEventType =
   | 'STARTED'
   | 'ANSWERED'
   | 'UPDATED'
-  | 'COMPLETED';
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELED';
 
 export type CanonicalCallStatus =
   | 'RINGING'
@@ -26,6 +28,24 @@ export type CanonicalCallStatus =
 export type CanonicalDirection =
   | 'INBOUND'
   | 'OUTBOUND'
+  | 'UNKNOWN';
+
+
+export type CanonicalDisconnectParty =
+  | 'CUSTOMER'
+  | 'AGENT'
+  | 'BUSINESS_ROUTING'
+  | 'SYSTEM'
+  | 'UNKNOWN';
+
+export type CanonicalCallEndReason =
+  | 'CALLER_DROPPED_BEFORE_ANSWER'
+  | 'CUSTOMER_DISCONNECTED'
+  | 'AGENT_DISCONNECTED'
+  | 'UNANSWERED'
+  | 'USER_UNREACHABLE'
+  | 'NETWORK_FAILURE'
+  | 'PROVIDER_FAILURE'
   | 'UNKNOWN';
 
 export type CanonicalCallEvent = {
@@ -49,6 +69,9 @@ export type CanonicalCallEvent = {
   updatedAt?: string | null;
   durationSeconds?: number | null;
   disconnectedBy?: string | null;
+  disconnectParty?: CanonicalDisconnectParty | null;
+  endReason?: CanonicalCallEndReason | null;
+  outcomeSource?: string | null;
   recordingUrl?: string | null;
   reason?: string | null;
   ivrInputs?: unknown;
