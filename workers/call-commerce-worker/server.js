@@ -463,23 +463,67 @@ app.post(
   async (req, res) => {
     const startedAt = Date.now();
 
+    const message = req.body?.message;
+
+    // Malformed Pub/Sub envelopes / payloads are permanent poison
+    // messages. ACK them after logging so Pub/Sub does not retry
+    // the same invalid delivery forever.
+    if (!message) {
+      console.error(
+        'CALL_COMMERCE_POISON_MESSAGE_ACKED',
+        {
+          pubsubMessageId: null,
+          error: 'PUBSUB_MESSAGE_MISSING',
+          durationMs:
+            Date.now()
+            - startedAt,
+        }
+      );
+
+      return res
+        .status(204)
+        .end();
+    }
+
+    let job;
+
     try {
-      const message = req.body?.message;
-
-      if (!message) {
-        throw new Error('PUBSUB_MESSAGE_MISSING');
-      }
-
       const payload =
         decodePubSubData(
           message.data
         );
 
-      const job =
+      job =
         validateCallCommerceMessage(
           payload
         );
+    } catch (error) {
+      const messageText =
+        String(
+          error?.message
+          || 'CALL_COMMERCE_JOB_INVALID'
+        );
 
+      console.error(
+        'CALL_COMMERCE_POISON_MESSAGE_ACKED',
+        {
+          pubsubMessageId:
+            message.messageId
+            ?? message.message_id
+            ?? null,
+          error: messageText,
+          durationMs:
+            Date.now()
+            - startedAt,
+        }
+      );
+
+      return res
+        .status(204)
+        .end();
+    }
+
+    try {
       if (job.jobType === 'meta_flush') {
         const result =
           await processMetaQueue(
