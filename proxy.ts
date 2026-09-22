@@ -60,8 +60,6 @@ const PUBLIC_API_PATHS = new Set([
 // its own provider/connection authentication before processing payloads.
 const PUBLIC_API_PREFIXES = [
   '/api/webhooks/calling/',
-  // Google Pub/Sub push delivery. This route performs Google OIDC verification itself.
-  '/api/internal/call-commerce/pubsub',
 ] as const;
 
 

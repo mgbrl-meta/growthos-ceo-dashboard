@@ -333,7 +333,6 @@ const CALL_COMMERCE_PREFIX_POLICIES:
   { prefix: '/api/call-commerce/summary', submoduleId: 'summary' },
   { prefix: '/api/call-commerce/calls', submoduleId: 'calls' },
   { prefix: '/api/call-commerce/meta-events', submoduleId: 'meta-events' },
-  { prefix: '/api/call-commerce/meta-worker', submoduleId: 'meta-events' },
   { prefix: '/api/call-commerce/archive', submoduleId: 'archive' },
   { prefix: '/api/call-commerce/reports', submoduleId: 'reports' },
   { prefix: '/api/call-commerce/system-status', submoduleId: 'system-status' },
