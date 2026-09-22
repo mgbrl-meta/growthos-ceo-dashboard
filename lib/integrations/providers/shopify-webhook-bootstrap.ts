@@ -14,7 +14,12 @@ import {
   ensureShopifyOrdersWebhookSubscriptions,
   ensureShopifyCustomersWebhookSubscriptions,
   ensureShopifyProductsWebhookSubscriptions,
+  removeShopifyProductsWebhookSubscriptions,
 } from '@/lib/integrations/providers/shopify-webhooks';
+
+import {
+  isShopifyProductsRealtimeEnabled,
+} from '@/lib/integrations/providers/shopify-features';
 
 
 // ============================================================
@@ -93,13 +98,30 @@ function readMetadataValue(
 
 
 // ============================================================
-// BOOTSTRAP ORDERS WEBHOOKS FOR ONE TENANT
+// BOOTSTRAP SHOPIFY WEBHOOKS FOR ONE TENANT
 //
 // Security:
 //
 // workspace + brand come from authenticated Growth OS context.
 //
 // No arbitrary cross-tenant identity is accepted.
+//
+// Orders:
+// realtime enabled
+//
+// Customers:
+// realtime enabled
+//
+// Products:
+// realtime controlled by
+// SHOPIFY_PRODUCTS_REALTIME_ENABLED
+//
+// If Product realtime is disabled:
+//
+// - Product subscriptions are NOT created
+// - existing Growth OS Product subscriptions are removed
+// - Product webhook implementation remains available for
+//   future activation
 // ============================================================
 
 export async function bootstrapShopifyOrdersWebhooks(
@@ -284,10 +306,6 @@ export async function bootstrapShopifyOrdersWebhooks(
 
 
   // ==========================================================
-  // WEBHOOK URI
-  // ==========================================================
-
-    // ==========================================================
   // WEBHOOK URIS
   // ==========================================================
 
@@ -312,6 +330,7 @@ export async function bootstrapShopifyOrdersWebhooks(
     )
       .toString();
 
+
   const productsWebhookUri =
     new URL(
 
@@ -320,7 +339,17 @@ export async function bootstrapShopifyOrdersWebhooks(
       input.origin
 
     )
-      .toString();    
+      .toString();
+
+
+  // ==========================================================
+  // PRODUCT REALTIME FEATURE STATE
+  //
+  // Resolve once for the entire bootstrap execution.
+  // ==========================================================
+
+  const productsRealtimeEnabled =
+    isShopifyProductsRealtimeEnabled();
 
 
   // ==========================================================
@@ -350,16 +379,29 @@ export async function bootstrapShopifyOrdersWebhooks(
 
 
   // ==========================================================
-  // ENSURE SUBSCRIPTIONS
-  //
-  // If Shopify unexpectedly returns 401 despite our expiry
-  // check, refresh once and retry.
+  // RESULTS
   // ==========================================================
 
   let ordersResult;
-  let customersResult;
-  let productsResult;
 
+  let customersResult;
+
+  let productsResult =
+    null;
+
+  let productsCleanupResult =
+    null;
+
+
+  // ==========================================================
+  // ENSURE / REMOVE SUBSCRIPTIONS
+  //
+  // If Shopify unexpectedly returns 401 despite our expiry
+  // check, refresh once and retry the complete desired-state
+  // reconciliation.
+  //
+  // All operations are idempotent.
+  // ==========================================================
 
   try {
 
@@ -399,23 +441,49 @@ export async function bootstrapShopifyOrdersWebhooks(
       });
 
 
-
     // ========================================================
     // PRODUCTS
+    //
+    // Desired state:
+    //
+    // enabled:
+    //   ensure Product subscriptions
+    //
+    // disabled:
+    //   remove Growth OS Product subscriptions
     // ========================================================
 
-    productsResult =
-      await ensureShopifyProductsWebhookSubscriptions({
+    if (
+      productsRealtimeEnabled
+    ) {
 
-        shopDomain,
+      productsResult =
+        await ensureShopifyProductsWebhookSubscriptions({
 
-        accessToken:
-          credential.accessToken,
+          shopDomain,
 
-        webhookUri:
-          productsWebhookUri,
+          accessToken:
+            credential.accessToken,
 
-      });
+          webhookUri:
+            productsWebhookUri,
+
+        });
+
+    } else {
+
+      productsCleanupResult =
+        await removeShopifyProductsWebhookSubscriptions({
+
+          shopDomain,
+
+          accessToken:
+            credential.accessToken,
+
+        });
+
+    }
+
 
   } catch (
     error: any
@@ -442,13 +510,13 @@ export async function bootstrapShopifyOrdersWebhooks(
     // ========================================================
     // TOKEN RECOVERY
     //
-    // If either Orders or Customers receives an unexpected
-    // 401, refresh the credential once and rerun both ensure
-    // operations.
+    // Any Orders / Customers / Products operation may receive
+    // an unexpected Shopify 401.
     //
-    // Both ensure functions are idempotent, so an Orders
-    // subscription successfully repaired before the 401 will
-    // simply be reused on the retry.
+    // Refresh the stored credential once and reconcile the
+    // complete desired webhook state again.
+    //
+    // The ensure/remove operations are idempotent.
     // ========================================================
 
     await refreshStoredShopifyCredential({
@@ -484,6 +552,10 @@ export async function bootstrapShopifyOrdersWebhooks(
       });
 
 
+    // ========================================================
+    // ORDERS — RETRY
+    // ========================================================
+
     ordersResult =
       await ensureShopifyOrdersWebhookSubscriptions({
 
@@ -498,6 +570,10 @@ export async function bootstrapShopifyOrdersWebhooks(
       });
 
 
+    // ========================================================
+    // CUSTOMERS — RETRY
+    // ========================================================
+
     customersResult =
       await ensureShopifyCustomersWebhookSubscriptions({
 
@@ -511,27 +587,53 @@ export async function bootstrapShopifyOrdersWebhooks(
 
       });
 
-    productsResult =
-      await ensureShopifyProductsWebhookSubscriptions({
 
-        shopDomain,
+    // ========================================================
+    // PRODUCTS — RETRY
+    // ========================================================
 
-        accessToken:
-          credential.accessToken,
+    if (
+      productsRealtimeEnabled
+    ) {
 
-        webhookUri:
-          productsWebhookUri,
+      productsResult =
+        await ensureShopifyProductsWebhookSubscriptions({
 
-      });  
+          shopDomain,
+
+          accessToken:
+            credential.accessToken,
+
+          webhookUri:
+            productsWebhookUri,
+
+        });
+
+    } else {
+
+      productsCleanupResult =
+        await removeShopifyProductsWebhookSubscriptions({
+
+          shopDomain,
+
+          accessToken:
+            credential.accessToken,
+
+        });
+
+    }
 
   }
 
 
-    // ==========================================================
+  // ==========================================================
   // SAFE RESPONSE ONLY
   //
   // Preserve webhookUri as the Orders URI for backward
   // compatibility with the previous response contract.
+  //
+  // No access token / refresh token / secret payload is
+  // returned.
   // ==========================================================
 
   return {
@@ -568,6 +670,10 @@ export async function bootstrapShopifyOrdersWebhooks(
     productsWebhookUri,
 
 
+    // ========================================================
+    // TOKEN
+    // ========================================================
+
     tokenRefreshed:
       credential.tokenRefreshed
       ||
@@ -593,6 +699,7 @@ export async function bootstrapShopifyOrdersWebhooks(
           .id,
 
     },
+
 
     ordersUpdated: {
 
@@ -631,6 +738,7 @@ export async function bootstrapShopifyOrdersWebhooks(
 
     },
 
+
     customersUpdate: {
 
       action:
@@ -647,41 +755,91 @@ export async function bootstrapShopifyOrdersWebhooks(
 
     },
 
+
     // ========================================================
     // PRODUCTS
+    //
+    // enabled:
+    //   productsCreate/productsUpdate describe active
+    //   subscriptions.
+    //
+    // disabled:
+    //   cleanup describes Growth OS Product subscriptions
+    //   removed from Shopify.
     // ========================================================
 
-    productsCreate: {
+    productsRealtime: {
 
-  action:
-    productsResult
-      .subscriptions
-      .productsCreate
-      .action,
+      enabled:
+        productsRealtimeEnabled,
 
-  id:
-    productsResult
-      .subscriptions
-      .productsCreate
-      .id,
 
-},
+      productsCreate:
+        productsResult
+          ?
+            {
 
-productsUpdate: {
+              action:
+                productsResult
+                  .subscriptions
+                  .productsCreate
+                  .action,
 
-  action:
-    productsResult
-      .subscriptions
-      .productsUpdate
-      .action,
+              id:
+                productsResult
+                  .subscriptions
+                  .productsCreate
+                  .id,
 
-  id:
-    productsResult
-      .subscriptions
-      .productsUpdate
-      .id,
+            }
+          :
+            null,
 
-},
+
+      productsUpdate:
+        productsResult
+          ?
+            {
+
+              action:
+                productsResult
+                  .subscriptions
+                  .productsUpdate
+                  .action,
+
+              id:
+                productsResult
+                  .subscriptions
+                  .productsUpdate
+                  .id,
+
+            }
+          :
+            null,
+
+
+      cleanup:
+        productsCleanupResult
+          ?
+            {
+
+              matchedCount:
+                productsCleanupResult
+                  .matchedCount,
+
+              deletedCount:
+                productsCleanupResult
+                  .deletedCount,
+
+              deleted:
+                productsCleanupResult
+                  .deleted,
+
+            }
+          :
+            null,
+
+    },
 
   };
 

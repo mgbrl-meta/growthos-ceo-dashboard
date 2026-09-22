@@ -39,8 +39,17 @@ COPY shopify-backfill-supervisor.js ./
 # SHOPIFY INCREMENTAL ORCHESTRATION
 # ============================================================
 
+# Orders
 COPY shopify-incremental-state.js ./
 COPY shopify-incremental-supervisor.js ./
+
+# Customers
+COPY shopify-customer-incremental-state.js ./
+COPY shopify-customer-incremental-supervisor.js ./
+
+# Products
+COPY shopify-product-incremental-state.js ./
+COPY shopify-product-incremental-supervisor.js ./
 
 
 # ============================================================

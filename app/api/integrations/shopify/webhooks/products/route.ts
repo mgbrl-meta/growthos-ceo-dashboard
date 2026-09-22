@@ -19,6 +19,10 @@ import {
   publishJsonMessage,
 } from '@/lib/queue/pubsub';
 
+import {
+  isShopifyProductsRealtimeEnabled,
+} from '@/lib/integrations/providers/shopify-features';
+
 
 export const dynamic =
   'force-dynamic';
@@ -180,6 +184,8 @@ function resolveProductGid(
 //    ↓
 // HMAC verification
 //    ↓
+// Product realtime feature gate
+//    ↓
 // resolve exact tenant/account from shop domain
 //    ↓
 // tiny Pub/Sub Product identity message
@@ -193,6 +199,15 @@ function resolveProductGid(
 // RAW → STATE → CURRENT
 //
 // IMPORTANT:
+//
+// Product realtime capability is retained for future use.
+//
+// When:
+//
+// SHOPIFY_PRODUCTS_REALTIME_ENABLED != true
+//
+// authentic Shopify Product webhooks are acknowledged with
+// HTTP 200 but no Pub/Sub work is created.
 //
 // The Shopify webhook JSON itself is NOT written into the
 // canonical Product warehouse.
@@ -359,7 +374,67 @@ export async function POST(
 
 
     // ========================================================
-    // 5. PARSE VERIFIED BODY
+    // 5. PRODUCT REALTIME FEATURE GATE
+    //
+    // IMPORTANT:
+    //
+    // HMAC, shop domain and Product topic have already been
+    // validated.
+    //
+    // When Product realtime is disabled:
+    //
+    // - acknowledge authentic Shopify Product webhook
+    // - do NOT parse/use Product payload
+    // - do NOT resolve tenant/account
+    // - do NOT publish Pub/Sub
+    // - do NOT invoke Product worker
+    //
+    // Product realtime implementation remains available for
+    // future activation.
+    // ========================================================
+
+    if (
+      !isShopifyProductsRealtimeEnabled()
+    ) {
+
+      console.log(
+        'SHOPIFY_PRODUCT_WEBHOOK_REALTIME_DISABLED',
+        {
+
+          shopDomain,
+
+          webhookTopic,
+
+          handled:
+            false,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return NextResponse.json({
+
+        ok:
+          true,
+
+        handled:
+          false,
+
+        realtimeEnabled:
+          false,
+
+      });
+
+    }
+
+
+    // ========================================================
+    // 6. PARSE VERIFIED BODY
     // ========================================================
 
     let payload:
@@ -397,7 +472,7 @@ export async function POST(
 
 
     // ========================================================
-    // 6. CANONICAL PRODUCT ID
+    // 7. CANONICAL PRODUCT ID
     // ========================================================
 
     const productId =
@@ -407,7 +482,7 @@ export async function POST(
 
 
     // ========================================================
-    // 7. TENANT / ACCOUNT
+    // 8. TENANT / ACCOUNT
     //
     // Shop domain is authoritative.
     //
@@ -440,6 +515,7 @@ export async function POST(
       // Removed/disconnected installation.
       //
       // Return success so Shopify does not retry forever.
+
       return NextResponse.json({
 
         ok:
@@ -454,7 +530,7 @@ export async function POST(
 
 
     // ========================================================
-    // 8. WEBHOOK ID
+    // 9. WEBHOOK ID
     //
     // Shopify provides a stable delivery ID.
     //
@@ -478,7 +554,7 @@ export async function POST(
 
 
     // ========================================================
-    // 9. SMALL CANONICAL PRODUCT JOB
+    // 10. SMALL CANONICAL PRODUCT JOB
     //
     // NO:
     //
@@ -587,7 +663,7 @@ export async function POST(
 
 
     // ========================================================
-    // 10. PUB/SUB
+    // 11. PUB/SUB
     // ========================================================
 
     const published =
@@ -629,7 +705,7 @@ export async function POST(
 
 
     // ========================================================
-    // 11. RESULT
+    // 12. RESULT
     // ========================================================
 
     console.log(
@@ -709,6 +785,7 @@ export async function POST(
 
 
     // Real transient failures return 500 so Shopify can retry.
+
     return NextResponse.json(
       {
 

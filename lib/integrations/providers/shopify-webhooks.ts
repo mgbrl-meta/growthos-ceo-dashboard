@@ -162,6 +162,35 @@ const UPDATE_WEBHOOK_MUTATION = `
 
 `;
 
+// ============================================================
+// DELETE WEBHOOK SUBSCRIPTION
+// ============================================================
+
+const DELETE_WEBHOOK_MUTATION = `
+
+  mutation GrowthOsWebhookSubscriptionDelete(
+    $id: ID!
+  ) {
+
+    webhookSubscriptionDelete(
+      id: $id
+    ) {
+
+      deletedWebhookSubscriptionId
+
+      userErrors {
+
+        field
+        message
+
+      }
+
+    }
+
+  }
+
+`;
+
 
 // ============================================================
 // REQUIRED VALUE
@@ -277,6 +306,41 @@ function isGrowthOsOrdersWebhookUri(
     return (
       parsed.pathname ===
         '/api/integrations/shopify/webhooks/orders'
+    );
+
+  } catch {
+
+    return false;
+
+  }
+
+}
+
+// ============================================================
+// SAME GROWTH OS PRODUCTS WEBHOOK PATH
+//
+// Hostname is intentionally ignored.
+//
+// This allows cleanup of Product subscriptions created against
+// an older Growth OS deployment hostname while protecting
+// unrelated Shopify webhook subscriptions.
+// ============================================================
+
+function isGrowthOsProductsWebhookUri(
+  value: string
+) {
+
+  try {
+
+    const parsed =
+      new URL(
+        value
+      );
+
+
+    return (
+      parsed.pathname ===
+        '/api/integrations/shopify/webhooks/products'
     );
 
   } catch {
@@ -677,6 +741,95 @@ async function listShopifyWebhookSubscriptions(
           node.topic
         )
     );
+
+}
+
+// ============================================================
+// DELETE ONE SHOPIFY WEBHOOK SUBSCRIPTION
+// ============================================================
+
+async function deleteShopifyWebhookSubscription(
+  input: {
+
+    shopDomain:
+      string;
+
+    accessToken:
+      string;
+
+    subscriptionId:
+      string;
+
+  }
+) {
+
+  const subscriptionId =
+    requireValue(
+      input.subscriptionId,
+      'SHOPIFY_WEBHOOK_DELETE_ID_MISSING'
+    );
+
+
+  const data =
+    await executeShopifyGraphQL({
+
+      shopDomain:
+        input.shopDomain,
+
+      accessToken:
+        input.accessToken,
+
+      query:
+        DELETE_WEBHOOK_MUTATION,
+
+      variables: {
+
+        id:
+          subscriptionId,
+
+      },
+
+    });
+
+
+  const result =
+    data
+      ?.webhookSubscriptionDelete;
+
+
+  assertNoUserErrors(
+    result?.userErrors,
+    'SHOPIFY_WEBHOOK_DELETE_FAILED'
+  );
+
+
+  const deletedId =
+    String(
+      result
+        ?.deletedWebhookSubscriptionId
+      ??
+      ''
+    ).trim();
+
+
+  if (!deletedId) {
+
+    throw new Error(
+      'SHOPIFY_WEBHOOK_DELETE_RESPONSE_MISSING'
+    );
+
+  }
+
+
+  return {
+
+    action:
+      'deleted' as const,
+
+    id:
+      deletedId,
+
+  };
 
 }
 
@@ -1558,6 +1711,181 @@ export async function ensureShopifyProductsWebhookSubscriptions(
       productsUpdate,
 
     },
+
+  };
+
+}
+
+// ============================================================
+// REMOVE SHOPIFY PRODUCT WEBHOOK SUBSCRIPTIONS
+//
+// Product realtime is currently optional.
+//
+// When Product realtime is disabled, this function removes only
+// Growth OS Product subscriptions:
+//
+// PRODUCTS_CREATE
+// PRODUCTS_UPDATE
+//
+// It does NOT touch:
+//
+// ORDERS_CREATE
+// ORDERS_UPDATED
+// CUSTOMERS_CREATE
+// CUSTOMERS_UPDATE
+//
+// It also does not delete unrelated Product webhooks owned by
+// another receiver path.
+// ============================================================
+
+export async function removeShopifyProductsWebhookSubscriptions(
+  input: {
+
+    shopDomain:
+      string;
+
+    accessToken:
+      string;
+
+  }
+) {
+
+  // ==========================================================
+  // SHOP
+  // ==========================================================
+
+  const shopDomain =
+    normalizeShopDomain(
+      input.shopDomain
+    );
+
+
+  if (
+    !shopDomain
+    ||
+    !shopDomain.endsWith(
+      '.myshopify.com'
+    )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_WEBHOOK_SHOP_INVALID'
+    );
+
+  }
+
+
+  // ==========================================================
+  // TOKEN
+  // ==========================================================
+
+  const accessToken =
+    requireValue(
+      input.accessToken,
+      'SHOPIFY_WEBHOOK_ACCESS_TOKEN_MISSING'
+    );
+
+
+  // ==========================================================
+  // CURRENT SHOPIFY CONFIGURATION
+  // ==========================================================
+
+  const existing =
+    await listShopifyWebhookSubscriptions({
+
+      shopDomain,
+
+      accessToken,
+
+    });
+
+
+  // ==========================================================
+  // TARGET ONLY GROWTH OS PRODUCT SUBSCRIPTIONS
+  // ==========================================================
+
+  const targets =
+    existing.filter(
+      subscription => {
+
+        const isProductTopic =
+          subscription.topic ===
+            'PRODUCTS_CREATE'
+          ||
+          subscription.topic ===
+            'PRODUCTS_UPDATE';
+
+
+        return (
+          isProductTopic
+          &&
+          isGrowthOsProductsWebhookUri(
+            subscription.uri
+          )
+        );
+
+      }
+    );
+
+
+  // ==========================================================
+  // DELETE
+  //
+  // Delete every matching Product subscription so historical
+  // duplicates / old deployment hostnames are also cleaned.
+  // ==========================================================
+
+  const deleted = [];
+
+
+  for (
+    const subscription
+    of targets
+  ) {
+
+    const result =
+      await deleteShopifyWebhookSubscription({
+
+        shopDomain,
+
+        accessToken,
+
+        subscriptionId:
+          subscription.id,
+
+      });
+
+
+    deleted.push({
+
+      id:
+        result.id,
+
+      topic:
+        subscription.topic,
+
+      uri:
+        subscription.uri,
+
+    });
+
+  }
+
+
+  return {
+
+    ok:
+      true,
+
+    shopDomain,
+
+    matchedCount:
+      targets.length,
+
+    deletedCount:
+      deleted.length,
+
+    deleted,
 
   };
 

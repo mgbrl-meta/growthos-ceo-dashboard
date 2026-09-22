@@ -35,6 +35,10 @@ import {
   setGrowthOsSessionCookie,
 } from '@/lib/auth/session';
 
+import {
+  isShopifyProductsRealtimeEnabled,
+} from '@/lib/integrations/providers/shopify-features';
+
 
 export const dynamic =
   'force-dynamic';
@@ -473,18 +477,24 @@ export async function GET(
 
     });
 
-    await ensureShopifyProductsWebhookSubscriptions({
+    if (
+      isShopifyProductsRealtimeEnabled()
+    ) {
 
-      shopDomain:
-        canonicalShop.shopDomain,
+      await ensureShopifyProductsWebhookSubscriptions({
 
-      accessToken:
-        credential.accessToken,
+        shopDomain:
+          canonicalShop.shopDomain,
 
-      webhookUri:
-        productsWebhookUrl,
+        accessToken:
+          credential.accessToken,
 
-    });
+        webhookUri:
+          productsWebhookUrl,
+
+      });
+
+    }
 
     // ========================================================
     // 14. CREATE GROWTH OS SHOPIFY SESSION
