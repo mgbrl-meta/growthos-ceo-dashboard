@@ -17,7 +17,7 @@ function requireProject() {
 }
 
 export async function listCallingConnections(workspaceId: string, brandId: string) {
-  requireProject(); await ensureCallCommerceSchema();
+  requireProject();
   const [rows] = await bigquery.query({
     location: CALL_COMMERCE_LOCATION,
     query: `SELECT * FROM ${table('calling_connections')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND status != 'deleted' ORDER BY created_at DESC`,
@@ -27,7 +27,7 @@ export async function listCallingConnections(workspaceId: string, brandId: strin
 }
 
 export async function getCallingConnectionById(connectionId: string) {
-  requireProject(); await ensureCallCommerceSchema();
+  requireProject();
   const [rows] = await bigquery.query({
     location: CALL_COMMERCE_LOCATION,
     query: `SELECT * FROM ${table('calling_connections')} WHERE connection_id=@connection_id LIMIT 1`,
@@ -713,7 +713,7 @@ export async function ingestCanonicalEvent(
 }
 
 export async function listLeads(input: { workspaceId: string; brandId: string; archived?: boolean; status?: string; search?: string; limit?: number; offset?: number }) {
-  await ensureCallCommerceSchema();
+  requireProject();
   const limit = Math.min(Math.max(Number(input.limit || 50), 1), 500);
   const offset = Math.max(Number(input.offset || 0), 0);
   const [rows] = await bigquery.query({
