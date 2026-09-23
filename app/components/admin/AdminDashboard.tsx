@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import {
   useState,
@@ -42,6 +42,12 @@ import AdminOverview
 import AdminSystem
   from './AdminSystem';
 
+
+import AdminCloudCosts
+  from './AdminCloudCosts';
+
+import AdminWarehouseFreshness
+  from './AdminWarehouseFreshness';
 import WarehouseAudit
   from './warehouse/WarehouseAudit';
 
@@ -63,7 +69,9 @@ type AdminTab =
   | 'Data Health'
   | 'Warehouse'
   | 'Sync History'
-  | 'System';
+    | 'Cloud Costs'
+    | 'Warehouse Freshness'
+| 'System';
 
 
 // ============================================================
@@ -285,6 +293,20 @@ export default function AdminDashboard() {
               active={activeTab === 'Sync History'}
               onClick={() => setActiveTab('Sync History')}
             />
+            <AdminNavItem
+              label="Cloud Costs"
+              icon={CreditCard}
+              active={activeTab === 'Cloud Costs'}
+              onClick={() => setActiveTab('Cloud Costs')}
+            />
+            <AdminNavItem
+              label="Warehouse Freshness"
+              icon={Database}
+              active={activeTab === 'Warehouse Freshness'}
+              onClick={() => setActiveTab('Warehouse Freshness')}
+            />
+
+
 
 
             <AdminNavItem
@@ -432,6 +454,28 @@ export default function AdminDashboard() {
               <AdminSyncHistory />
 
             )}
+            {/* ================================================
+                CLOUD COSTS
+            ================================================ */}
+
+            {activeTab ===
+              'Cloud Costs' && (
+
+              <AdminCloudCosts />
+
+            )}
+            {/* ================================================
+                WAREHOUSE FRESHNESS
+            ================================================ */}
+
+            {activeTab ===
+              'Warehouse Freshness' && (
+
+              <AdminWarehouseFreshness />
+
+            )}
+
+
 
 
             {/* ================================================
@@ -599,7 +643,13 @@ function getAdminTitle(
     'Sync History':
       'Sync History',
 
-    System:
+    
+    'Cloud Costs':
+      'Cloud Costs',
+    'Warehouse Freshness':
+      'Warehouse Freshness',
+
+System:
       'System',
 
   };
@@ -654,7 +704,13 @@ function getAdminSubtitle(
     'Sync History':
       'Review ingestion runs, failures, processing volume and retry history.',
 
-    System:
+    
+    'Cloud Costs':
+      'Monitor Google Cloud spend, resources, locations, BigQuery jobs and cost anomalies.',
+    'Warehouse Freshness':
+      'Control brand-level Shopify warehouse refresh cadence without slowing realtime webhook ingestion.',
+
+System:
       'Manage platform-level configuration and infrastructure controls.',
 
   };

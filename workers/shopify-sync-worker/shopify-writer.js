@@ -4,6 +4,10 @@ import {
   BigQuery,
 } from '@google-cloud/bigquery';
 
+import {
+  enqueueShopifyWarehouseRecords,
+} from './shopify-warehouse-pending.js';
+
 
 const PROJECT_ID =
   String(
@@ -453,6 +457,64 @@ export async function writeShopifyOrders(
 
       loaded:
         0,
+
+    };
+
+  }
+
+  // GROWTHOS_BRAND_WAREHOUSE_FRESHNESS_V2
+  // ==========================================================
+  // BRAND-CONTROLLED WAREHOUSE DEFERRAL
+  //
+  // Normal webhook/manual/incremental writes land immediately
+  // in shopify_warehouse_pending without executing STATE MERGE.
+  //
+  // The warehouse refresh supervisor later calls this same
+  // canonical writer with bypassWarehouseDeferral=true.
+  // ==========================================================
+
+  if (
+    input?.bypassWarehouseDeferral !==
+      true
+  ) {
+
+    const queued =
+      await enqueueShopifyWarehouseRecords({
+
+        workspaceId,
+        brandId,
+        integrationAccountId,
+
+        entity:
+          'orders',
+
+        records:
+          orders,
+
+      });
+
+
+    return {
+
+      batchId,
+
+      received:
+        orders.length,
+
+      changed:
+        orders.length,
+
+      skipped:
+        0,
+
+      loaded:
+        orders.length,
+
+      queued:
+        queued.queued,
+
+      deferred:
+        true,
 
     };
 

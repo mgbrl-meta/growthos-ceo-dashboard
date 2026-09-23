@@ -62,9 +62,10 @@ async function writeBatch(
       input.brandId,
 
     integrationAccountId:
-      input.integrationAccountId,
+      input.integrationAccountId,    orders,
 
-    orders,
+    bypassWarehouseDeferral:
+      true,
 
   });
 

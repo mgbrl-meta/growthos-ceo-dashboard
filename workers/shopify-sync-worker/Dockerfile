@@ -1,4 +1,4 @@
-FROM node:22-slim
+﻿FROM node:22-slim
 
 WORKDIR /app
 
@@ -23,6 +23,8 @@ COPY shopify-api.js ./
 COPY shopify-writer.js ./
 COPY shopify-customer-writer.js ./
 COPY shopify-product-writer.js ./
+COPY shopify-warehouse-pending.js ./
+COPY shopify-warehouse-refresh.js ./
 
 COPY shopify-bulk.js ./
 COPY shopify-backfill-state.js ./

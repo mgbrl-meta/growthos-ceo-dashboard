@@ -103,6 +103,10 @@ import {
 } from './shopify-product-incremental-state.js';
 
 
+import {
+  superviseShopifyWarehouseRefresh,
+} from './shopify-warehouse-refresh.js';
+
 // ============================================================
 // APP
 // ============================================================
@@ -6258,6 +6262,99 @@ app.post(
 // ============================================================
 // START
 // ============================================================
+
+
+// GROWTHOS_BRAND_WAREHOUSE_FRESHNESS_V2
+// ============================================================
+// BRAND-CONTROLLED SHOPIFY WAREHOUSE REFRESH
+//
+// Cloud Scheduler can call this every 5 minutes.
+// The supervisor only processes brands whose Admin policy is
+// due and which actually have pending records.
+// ============================================================
+
+app.post(
+  '/internal/shopify/warehouse-refresh-supervise',
+
+  async (
+    _req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const result =
+        await superviseShopifyWarehouseRefresh();
+
+
+      console.log(
+        'SHOPIFY_WAREHOUSE_REFRESH_SUPERVISOR_RESULT',
+        {
+          dueBrands:
+            result.dueBrands,
+          succeeded:
+            result.succeeded,
+          failed:
+            result.failed,
+          durationMs:
+            result.durationMs,
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+          ok:
+            true,
+          result,
+        });
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ||
+          error
+          ||
+          'Shopify warehouse refresh supervisor failed'
+        );
+
+
+      console.error(
+        'SHOPIFY_WAREHOUSE_REFRESH_SUPERVISOR_FAILED',
+        {
+          message,
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+          ok:
+            false,
+          error:
+            'SHOPIFY_WAREHOUSE_REFRESH_SUPERVISOR_FAILED',
+          message,
+        });
+
+    }
+
+  }
+);
+
 
 app.listen(
   PORT,
