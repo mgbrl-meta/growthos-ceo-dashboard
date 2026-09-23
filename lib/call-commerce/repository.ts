@@ -721,35 +721,465 @@ export async function listLeads(input: {
   callStatus?: string;
   agent?: string;
   businessNumber?: string;
+  start?: string;
+  end?: string;
   limit?: number;
   offset?: number;
 }) {
   requireProject();
 
-  const limit = Math.min(Math.max(Number(input.limit || 50), 1), 500);
-  const offset = Math.max(Number(input.offset || 0), 0);
-  const callStatus = String(input.callStatus || '').toUpperCase();
+  const limit = Math.min(
+    Math.max(
+      Number(
+        input.limit || 50
+      ),
+      1
+    ),
+    500
+  );
+
+  const offset = Math.max(
+    Number(
+      input.offset || 0
+    ),
+    0
+  );
+
+  const callStatus =
+    String(
+      input.callStatus || ''
+    ).toUpperCase();
 
   const params = {
-    workspace_id: input.workspaceId,
-    brand_id: input.brandId,
-    archived: Boolean(input.archived),
-    status: input.status || '',
-    search: input.search || '',
-    call_status: callStatus,
-    agent: input.agent || '',
-    business_number: input.businessNumber || '',
+    workspace_id:
+      input.workspaceId,
+
+    brand_id:
+      input.brandId,
+
+    archived:
+      Boolean(
+        input.archived
+      ),
+
+    status:
+      input.status || '',
+
+    search:
+      input.search || '',
+
+    call_status:
+      callStatus,
+
+    agent:
+      input.agent || '',
+
+    business_number:
+      input.businessNumber || '',
+
+    start:
+      input.start || '',
+
+    end:
+      input.end || '',
+
     limit,
+
     offset,
   };
 
+
+  const commonCtes = `
+    WITH period_attempts AS (
+
+      SELECT
+
+        attempt_id,
+        lead_id,
+        provider_call_id,
+        phone,
+        business_number,
+
+        event_type,
+        call_status,
+
+        agent_name,
+
+        call_started_at,
+        call_ended_at,
+
+        duration_seconds,
+
+        disconnected_by,
+        disconnect_party,
+        end_reason,
+        outcome_source,
+
+        created_at,
+        updated_at,
+
+        ROW_NUMBER() OVER (
+          PARTITION BY lead_id
+
+          ORDER BY
+            COALESCE(
+              call_started_at,
+              created_at
+            ) DESC,
+
+            updated_at DESC,
+
+            attempt_id DESC
+        ) AS rn
+
+      FROM ${table('call_attempts')}
+
+      WHERE workspace_id=@workspace_id
+        AND brand_id=@brand_id
+
+        AND (
+          @start=''
+
+          OR COALESCE(
+            call_started_at,
+            created_at
+          ) >= TIMESTAMP(
+            SAFE_CAST(
+              @start AS DATE
+            ),
+            'Asia/Kolkata'
+          )
+        )
+
+        AND (
+          @end=''
+
+          OR COALESCE(
+            call_started_at,
+            created_at
+          ) < TIMESTAMP(
+            DATE_ADD(
+              SAFE_CAST(
+                @end AS DATE
+              ),
+              INTERVAL 1 DAY
+            ),
+            'Asia/Kolkata'
+          )
+        )
+    ),
+
+
+    period_rollup AS (
+
+      SELECT
+
+        lead_id,
+
+        COUNT(*)
+          AS period_call_attempt_count,
+
+        COUNTIF(
+          call_status='ANSWERED'
+        )
+          AS period_answered_attempt_count,
+
+        COUNTIF(
+          call_status IN (
+            'NO_ANSWER',
+            'MISSED',
+            'BUSY',
+            'REJECTED',
+            'FAILED'
+          )
+        )
+          AS period_unanswered_attempt_count,
+
+        MIN(
+          COALESCE(
+            call_started_at,
+            created_at
+          )
+        )
+          AS period_first_call_at,
+
+        MAX(
+          COALESCE(
+            call_started_at,
+            created_at
+          )
+        )
+          AS period_latest_call_at
+
+      FROM period_attempts
+
+      GROUP BY lead_id
+    ),
+
+
+    latest_period_attempt AS (
+
+      SELECT
+        *
+        EXCEPT(rn)
+
+      FROM period_attempts
+
+      WHERE rn=1
+    ),
+
+
+    lead_view AS (
+
+      SELECT
+
+        l.lead_id,
+        l.phone,
+        l.customer_name,
+        l.email,
+        l.product,
+        l.status,
+        l.notes,
+        l.currency,
+        l.status_changed_at,
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN pr.period_first_call_at
+
+          ELSE l.first_call_at
+
+        END
+          AS first_call_at,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN pr.period_latest_call_at
+
+          ELSE l.latest_call_at
+
+        END
+          AS latest_call_at,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.call_status
+
+          ELSE l.latest_call_status
+
+        END
+          AS latest_call_status,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.agent_name
+
+          ELSE l.latest_agent_name
+
+        END
+          AS latest_agent_name,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.attempt_id
+
+          ELSE l.latest_attempt_id
+
+        END
+          AS latest_attempt_id,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.provider_call_id
+
+          ELSE l.latest_provider_call_id
+
+        END
+          AS latest_provider_call_id,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.business_number
+
+          ELSE l.latest_business_number
+
+        END
+          AS latest_business_number,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.duration_seconds
+
+          ELSE l.latest_duration_seconds
+
+        END
+          AS latest_duration_seconds,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.disconnect_party
+
+          ELSE l.latest_disconnect_party
+
+        END
+          AS latest_disconnect_party,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN lp.end_reason
+
+          ELSE l.latest_end_reason
+
+        END
+          AS latest_end_reason,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN COALESCE(
+              pr.period_call_attempt_count,
+              0
+            )
+
+          ELSE l.call_attempt_count
+
+        END
+          AS call_attempt_count,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN COALESCE(
+              pr.period_answered_attempt_count,
+              0
+            )
+
+          ELSE l.answered_attempt_count
+
+        END
+          AS answered_attempt_count,
+
+
+        CASE
+
+          WHEN (
+            @start!=''
+            OR @end!=''
+          )
+            THEN COALESCE(
+              pr.period_unanswered_attempt_count,
+              0
+            )
+
+          ELSE l.unanswered_attempt_count
+
+        END
+          AS unanswered_attempt_count,
+
+
+        l.next_follow_up_at,
+
+        l.order_id,
+        l.order_amount,
+        l.purchased_at,
+
+        l.unqualified_reason,
+        l.closed_lost_reason,
+
+        l.is_archived,
+        l.archived_at,
+
+        l.created_at,
+        l.updated_at
+
+      FROM ${table('call_leads')} l
+
+      LEFT JOIN period_rollup pr
+        ON pr.lead_id=l.lead_id
+
+      LEFT JOIN latest_period_attempt lp
+        ON lp.lead_id=l.lead_id
+
+      WHERE l.workspace_id=@workspace_id
+        AND l.brand_id=@brand_id
+        AND l.is_archived=@archived
+
+        AND (
+          (
+            @start=''
+            AND @end=''
+          )
+
+          OR pr.lead_id IS NOT NULL
+        )
+    )
+  `;
+
+
   const where = `
-    workspace_id=@workspace_id
-    AND brand_id=@brand_id
-    AND is_archived=@archived
-    AND (@status='' OR status=@status)
+
+    (@status='' OR status=@status)
+
     AND (
       @search=''
+
       OR LOWER(
         CONCAT(
           COALESCE(phone,''),
@@ -762,100 +1192,204 @@ export async function listLeads(input: {
           ' ',
           COALESCE(order_id,'')
         )
-      ) LIKE CONCAT('%',LOWER(@search),'%')
+      )
+      LIKE CONCAT(
+        '%',
+        LOWER(@search),
+        '%'
+      )
     )
+
     AND (
       @agent=''
-      OR LOWER(COALESCE(latest_agent_name,''))=LOWER(@agent)
+
+      OR LOWER(
+        COALESCE(
+          latest_agent_name,
+          ''
+        )
+      )
+      =
+      LOWER(@agent)
     )
+
     AND (
       @business_number=''
-      OR COALESCE(latest_business_number,'')=@business_number
+
+      OR COALESCE(
+        latest_business_number,
+        ''
+      )
+      =
+      @business_number
     )
+
     AND (
+
       @call_status=''
+
       OR (
         @call_status='CALLER_DROPPED'
-        AND latest_end_reason='CALLER_DROPPED_BEFORE_ANSWER'
+
+        AND latest_end_reason=
+          'CALLER_DROPPED_BEFORE_ANSWER'
       )
+
       OR (
-        @call_status!='CALLER_DROPPED'
-        AND latest_call_status=@call_status
+        @call_status='NO_ANSWER'
+
+        AND latest_call_status='NO_ANSWER'
+
+        AND COALESCE(
+          latest_end_reason,
+          ''
+        )
+        !=
+        'CALLER_DROPPED_BEFORE_ANSWER'
+      )
+
+      OR (
+        @call_status NOT IN (
+          'CALLER_DROPPED',
+          'NO_ANSWER'
+        )
+
+        AND latest_call_status=
+          @call_status
       )
     )
   `;
 
-  const [rowsResult, countResult] = await Promise.all([
-    bigquery.query({
-      location: CALL_COMMERCE_LOCATION,
-      query: `
-        SELECT
-          lead_id,
-          phone,
-          customer_name,
-          email,
-          product,
-          status,
-          notes,
-          currency,
-          status_changed_at,
-          first_call_at,
-          latest_call_at,
-          latest_call_status,
-          latest_agent_name,
-          latest_attempt_id,
-          latest_provider_call_id,
-          latest_business_number,
-          latest_duration_seconds,
-          latest_disconnect_party,
-          latest_end_reason,
-          call_attempt_count,
-          answered_attempt_count,
-          unanswered_attempt_count,
-          next_follow_up_at,
-          order_id,
-          order_amount,
-          purchased_at,
-          unqualified_reason,
-          closed_lost_reason,
-          created_at,
-          updated_at
-        FROM ${table('call_leads')}
-        WHERE ${where}
-        ORDER BY
-          latest_call_at DESC,
-          updated_at DESC,
-          lead_id DESC
-        LIMIT @limit
-        OFFSET @offset
-      `,
-      params,
-      types: {
-        limit: 'INT64',
-        offset: 'INT64',
-      },
-    }),
-    bigquery.query({
-      location: CALL_COMMERCE_LOCATION,
-      query: `
-        SELECT COUNT(*) total
-        FROM ${table('call_leads')}
-        WHERE ${where}
-      `,
-      params,
-      types: {
-        limit: 'INT64',
-        offset: 'INT64',
-      },
-    }),
-  ]);
 
-  const [rows] = rowsResult;
-  const [counts] = countResult;
+  const [
+    rowsResult,
+    countResult,
+  ] =
+    await Promise.all([
+
+      bigquery.query({
+        location:
+          CALL_COMMERCE_LOCATION,
+
+        query: `
+          ${commonCtes}
+
+          SELECT
+
+            lead_id,
+            phone,
+            customer_name,
+            email,
+            product,
+            status,
+            notes,
+            currency,
+            status_changed_at,
+
+            first_call_at,
+            latest_call_at,
+
+            latest_call_status,
+            latest_agent_name,
+            latest_attempt_id,
+            latest_provider_call_id,
+            latest_business_number,
+
+            latest_duration_seconds,
+            latest_disconnect_party,
+            latest_end_reason,
+
+            call_attempt_count,
+            answered_attempt_count,
+            unanswered_attempt_count,
+
+            next_follow_up_at,
+
+            order_id,
+            order_amount,
+            purchased_at,
+
+            unqualified_reason,
+            closed_lost_reason,
+
+            created_at,
+            updated_at
+
+          FROM lead_view
+
+          WHERE ${where}
+
+          ORDER BY
+            latest_call_at DESC,
+            updated_at DESC,
+            lead_id DESC
+
+          LIMIT @limit
+          OFFSET @offset
+        `,
+
+        params,
+
+        types: {
+          limit:
+            'INT64',
+
+          offset:
+            'INT64',
+        },
+      }),
+
+
+      bigquery.query({
+        location:
+          CALL_COMMERCE_LOCATION,
+
+        query: `
+          ${commonCtes}
+
+          SELECT
+            COUNT(*) total
+
+          FROM lead_view
+
+          WHERE ${where}
+        `,
+
+        params,
+
+        types: {
+          limit:
+            'INT64',
+
+          offset:
+            'INT64',
+        },
+      }),
+
+    ]);
+
+
+  const [
+    rows,
+  ] =
+    rowsResult;
+
+
+  const [
+    counts,
+  ] =
+    countResult;
+
 
   return {
     rows,
-    total: Number((counts as any[])?.[0]?.total || 0),
+
+    total:
+      Number(
+        (
+          counts as any[]
+        )?.[0]?.total || 0
+      ),
   };
 }
 
@@ -1554,5 +2088,6 @@ export async function getSystemStatus(workspaceId:string,brandId:string) {
 export async function archiveEligibleLeads(workspaceId:string,brandId:string) {
   await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`UPDATE ${table('call_leads')} AS l SET is_archived=TRUE,archived_at=CURRENT_TIMESTAMP(),updated_at=CURRENT_TIMESTAMP() WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE AND NOT EXISTS (SELECT 1 FROM ${table('meta_event_queue')} q WHERE q.workspace_id=l.workspace_id AND q.brand_id=l.brand_id AND q.lead_id=l.lead_id AND q.status NOT IN ('SUCCESS')) AND ((status IN ('UNQUALIFIED','CLOSED_LOST') AND COALESCE(status_changed_at,updated_at)<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status='PURCHASED' AND COALESCE(status_changed_at,updated_at)<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status NOT IN ('PURCHASED','UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.generalArchiveDays} DAY)))`,params:{workspace_id:workspaceId,brand_id:brandId}});
 }
+
 
 
