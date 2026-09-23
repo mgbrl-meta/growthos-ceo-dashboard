@@ -726,10 +726,98 @@ export async function listLeads(input: { workspaceId: string; brandId: string; a
   return { rows, total: Number((counts as any[])?.[0]?.total || 0) };
 }
 
-export async function getLeadHistory(workspaceId: string, brandId: string, leadId: string) {
-  const [attempts] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('call_attempts')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id ORDER BY COALESCE(call_started_at,created_at) DESC LIMIT 50`, params: { workspace_id: workspaceId, brand_id: brandId, lead_id: leadId } });
-  const [activity] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('activity_log')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id ORDER BY created_at DESC LIMIT 100`, params: { workspace_id: workspaceId, brand_id: brandId, lead_id: leadId } });
-  return { attempts, activity };
+export async function getLeadHistory(
+  workspaceId: string,
+  brandId: string,
+  leadId: string
+) {
+
+  requireProject();
+
+
+  const attemptsPromise =
+    bigquery.query({
+      location:
+        CALL_COMMERCE_LOCATION,
+
+      query: `
+        SELECT *
+        FROM ${table('call_attempts')}
+
+        WHERE workspace_id=@workspace_id
+          AND brand_id=@brand_id
+          AND lead_id=@lead_id
+
+        ORDER BY
+          COALESCE(
+            call_started_at,
+            created_at
+          ) DESC
+
+        LIMIT 50
+      `,
+
+      params: {
+        workspace_id:
+          workspaceId,
+
+        brand_id:
+          brandId,
+
+        lead_id:
+          leadId,
+      },
+    });
+
+
+  const activityPromise =
+    bigquery.query({
+      location:
+        CALL_COMMERCE_LOCATION,
+
+      query: `
+        SELECT *
+        FROM ${table('activity_log')}
+
+        WHERE workspace_id=@workspace_id
+          AND brand_id=@brand_id
+          AND lead_id=@lead_id
+
+        ORDER BY created_at DESC
+
+        LIMIT 100
+      `,
+
+      params: {
+        workspace_id:
+          workspaceId,
+
+        brand_id:
+          brandId,
+
+        lead_id:
+          leadId,
+      },
+    });
+
+
+  const [
+    attemptsResult,
+    activityResult,
+  ] =
+    await Promise.all([
+      attemptsPromise,
+      activityPromise,
+    ]);
+
+
+  return {
+    attempts:
+      attemptsResult[0],
+
+    activity:
+      activityResult[0],
+  };
 }
 
 const transitions: Record<string, string[]> = {
