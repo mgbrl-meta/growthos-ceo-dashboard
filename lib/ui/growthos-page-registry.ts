@@ -264,7 +264,7 @@ const PAGE_REGISTRY: Record<string, ModulePageDefinitions> = {
     pages: {
       Summary: {},
       Calls: { title: 'Calls', description: 'Manage active call leads, repeated call attempts and agent workflow.' },
-      'Meta Events': { title: 'Meta Events', description: 'Review call-specific Meta signal queue and delivery state.', dateMode: 'none' },
+      'Events': { title: 'Events', description: 'Review call-specific Meta signal queue and delivery state.', dateMode: 'none' },
       Archive: { title: 'Archive', description: 'Review finalized and aged call leads retained by Call Commerce.', dateMode: 'none' },
       Reports: { title: 'Reports', description: 'Search and review call lead outcomes for operational reporting.' },
       'System Status': { title: 'System Status', description: 'Monitor calling connection, lead and Meta queue health.', dateMode: 'none' },

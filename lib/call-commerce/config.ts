@@ -13,6 +13,7 @@ export const CALL_COMMERCE_SUBMODULES = {
   archive: 'archive',
   reports: 'reports',
   systemStatus: 'system-status',
+  settings: 'settings',
 } as const;
 
 export const CALL_COMMERCE_DEFAULTS = {

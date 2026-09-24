@@ -316,10 +316,11 @@ export const GROWTHOS_SUBMODULES:
 
   { moduleId: 'call-commerce', submoduleId: 'summary', label: 'Summary', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
   { moduleId: 'call-commerce', submoduleId: 'calls', label: 'Calls', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
-  { moduleId: 'call-commerce', submoduleId: 'meta-events', label: 'Meta Events', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
+  { moduleId: 'call-commerce', submoduleId: 'meta-events', label: 'Events', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
   { moduleId: 'call-commerce', submoduleId: 'archive', label: 'Archive', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
   { moduleId: 'call-commerce', submoduleId: 'reports', label: 'Reports', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
   { moduleId: 'call-commerce', submoduleId: 'system-status', label: 'System Status', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
+  { moduleId: 'call-commerce', submoduleId: 'settings', label: 'Settings', defaultAccessMode: 'plan', defaultReleaseStage: 'live' },
 
 
   // ==========================================================

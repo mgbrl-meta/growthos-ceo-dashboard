@@ -27,6 +27,7 @@ export default function LeadListWorkspace({
   const [rows, setRows] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<any>({});
+  const [archiveFacets, setArchiveFacets] = useState<any>({});
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
@@ -79,6 +80,10 @@ export default function LeadListWorkspace({
 
         setRows(Array.isArray(body.data?.rows) ? body.data.rows : []);
         setTotal(Number(body.data?.total || 0));
+
+        if (archived) {
+          setArchiveFacets(body.data?.facets || {});
+        }
       } catch (error: any) {
         setError(error?.message || 'Unable to load Call Commerce');
       } finally {
@@ -93,6 +98,7 @@ export default function LeadListWorkspace({
       callStatus,
       agent,
       businessNumber,
+      archived,
     ]
   );
 
@@ -129,17 +135,37 @@ export default function LeadListWorkspace({
     return () => window.clearInterval(timer);
   }, [load]);
 
-  const agents = Array.isArray(summary?.agent_performance)
-    ? summary.agent_performance
-        .map((item: any) => String(item.agent_name || ''))
-        .filter(Boolean)
-    : [];
+  const agents = archived
+    ? (
+        Array.isArray(archiveFacets?.agents)
+          ? archiveFacets.agents
+              .map((item: any) => String(item.agent || ''))
+              .filter(Boolean)
+          : []
+      )
+    : (
+        Array.isArray(summary?.agent_performance)
+          ? summary.agent_performance
+              .map((item: any) => String(item.agent_name || ''))
+              .filter(Boolean)
+          : []
+      );
 
-  const businessNumbers = Array.isArray(summary?.business_numbers)
-    ? summary.business_numbers
-        .map((item: any) => String(item.business_number || ''))
-        .filter(Boolean)
-    : [];
+  const businessNumbers = archived
+    ? (
+        Array.isArray(archiveFacets?.business_numbers)
+          ? archiveFacets.business_numbers
+              .map((item: any) => String(item.business_number || ''))
+              .filter(Boolean)
+          : []
+      )
+    : (
+        Array.isArray(summary?.business_numbers)
+          ? summary.business_numbers
+              .map((item: any) => String(item.business_number || ''))
+              .filter(Boolean)
+          : []
+      );
 
   async function openLead(lead: any) {
     setSelected(lead);

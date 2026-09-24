@@ -40,10 +40,11 @@ export const runtime =
 //
 // This endpoint:
 //
-// - ensures schema
+// - ensures the core Growth OS control-plane schema
 // - seeds canonical plans
 // - seeds canonical modules
 // - seeds plan-module mappings
+// - registers module-specific capabilities/submodules
 //
 // It DOES NOT:
 //
@@ -51,6 +52,25 @@ export const runtime =
 // - change subscriptions
 // - change users
 // - alter Shopify ingestion
+//
+// IMPORTANT:
+//
+// Module-specific registration happens AFTER the core control
+// plane has been migrated.
+//
+// This makes the bootstrap portable:
+//
+// new BigQuery project
+//        ↓
+// configure environment
+//        ↓
+// run this bootstrap
+//        ↓
+// core control plane created
+//        ↓
+// module-specific capabilities registered from code
+//
+// No manual BigQuery inserts should be required.
 // ============================================================
 
 export async function POST(
@@ -74,6 +94,10 @@ export async function POST(
     // 2. PRODUCTION BOOTSTRAP SECRET
     //
     // Existing additional protection is preserved.
+    //
+    // Platform authentication already uses the normal Growth OS
+    // session mechanism, so the bootstrap secret deliberately
+    // uses its own header.
     // ========================================================
 
     if (
@@ -109,17 +133,6 @@ export async function POST(
 
       }
 
-
-      // ------------------------------------------------------
-      // IMPORTANT
-      //
-      // Platform auth already uses the normal Growth OS
-      // session cookie.
-      //
-      // Therefore the bootstrap secret uses a separate header
-      // instead of Authorization, avoiding conflict with
-      // Shopify / bearer authentication semantics.
-      // ------------------------------------------------------
 
       const providedSecret =
         String(
@@ -158,21 +171,67 @@ export async function POST(
 
 
     // ========================================================
-    // 3. ENSURE CONTROL PLANE
+    // 3. MIGRATE CORE GROWTH OS CONTROL PLANE
+    //
+    // This must happen first because module-specific
+    // registrations depend on core tables such as:
+    //
+    // - modules
+    // - plans
+    // - plan_modules
+    //
+    // The migration is expected to be idempotent and safe to
+    // rerun against an existing Growth OS installation.
     // ========================================================
 
     await migrateGrowthOSAdminControlPlane();
 
-    // Call Commerce registration is isolated from the global Growth OS
-    // capability migration path. Existing module/submodule behavior remains
-    // unchanged; only missing Call Commerce rows are inserted/reconciled.
+
+    // ========================================================
+    // 4. REGISTER CALL COMMERCE CAPABILITIES
+    //
+    // Call Commerce remains isolated from the global capability
+    // migration implementation.
+    //
+    // Its registration reads the Call Commerce submodules from:
+    //
+    // GROWTHOS_SUBMODULES
+    //
+    // and reconciles them into:
+    //
+    // growthos_control.modules
+    // growthos_control.submodules
+    // growthos_control.plan_submodules
+    //
+    // Therefore adding a future Call Commerce capability to the
+    // code registry does NOT require a manual BigQuery insert.
+    //
+    // Example:
+    //
+    // call-commerce/settings
+    //
+    // will automatically be registered when this bootstrap runs.
+    //
+    // Existing Admin-owned configuration is preserved by the
+    // registration MERGE logic.
+    // ========================================================
+
     await registerCallCommerceCapabilities();
+
+
+    // ========================================================
+    // 5. INVALIDATE ADMIN SNAPSHOTS
+    //
+    // Registration may have changed modules/submodules or plan
+    // capability mappings, so cached Admin state must not be
+    // reused after bootstrap.
+    // ========================================================
 
     invalidateAdminSnapshots();
 
 
     // ========================================================
-    // 4. VERIFY SEEDED CATALOG
+    // 6. VERIFY SEEDED CATALOG
     // ========================================================
 
     const [
@@ -189,89 +248,104 @@ export async function POST(
 
 
     // ========================================================
-    // 5. RESPONSE
+    // 7. RESPONSE
     // ========================================================
 
-    return NextResponse.json({
+    return NextResponse.json(
+      {
 
-      ok:
-        true,
-
-      controlPlane: {
-
-        ready:
+        ok:
           true,
 
-        plans:
-          plans.length,
+        controlPlane: {
 
-        modules:
-          modules.length,
+          ready:
+            true,
 
-      },
+          plans:
+            plans.length,
 
+          modules:
+            modules.length,
 
-      seeded: {
-
-        plans:
-          plans.map(
-            plan => ({
-
-              planId:
-                plan.plan_id,
-
-              name:
-                plan.plan_name,
-
-              monthlyOrderLimit:
-                plan.monthly_order_limit,
-
-              maxUsers:
-                plan.max_users,
-
-              status:
-                plan.status,
-
-            })
-          ),
+        },
 
 
-        modules:
-          modules.map(
-            module => ({
+        seeded: {
 
-              moduleId:
-                module.module_id,
+          plans:
+            plans.map(
+              plan => ({
 
-              name:
-                module.module_name,
+                planId:
+                  plan.plan_id,
 
-              routeKey:
-                module.route_key,
+                name:
+                  plan.plan_name,
 
-              category:
-                module.category,
+                monthlyOrderLimit:
+                  plan.monthly_order_limit,
 
-              status:
-                module.status,
+                maxUsers:
+                  plan.max_users,
 
-            })
-          ),
+                status:
+                  plan.status,
 
-      },
+              })
+            ),
 
 
-      meta: {
+          modules:
+            modules.map(
+              module => ({
 
-        authorization:
-          'platform_super_admin',
+                moduleId:
+                  module.module_id,
 
-        platformRole:
-          admin.platformRole,
+                name:
+                  module.module_name,
 
-      },
+                routeKey:
+                  module.route_key,
 
-    });
+                category:
+                  module.category,
+
+                status:
+                  module.status,
+
+              })
+            ),
+
+        },
+
+
+        meta: {
+
+          authorization:
+            'platform_super_admin',
+
+          platformRole:
+            admin.platformRole,
+
+          bootstrap:
+            'complete',
+
+          safeToRerun:
+            true,
+
+          moduleRegistration: {
+
+            callCommerce:
+              true,
+
+          },
+
+        },
+
+      }
+    );
 
 
   } catch (
@@ -370,6 +444,10 @@ export async function POST(
 
     }
 
+
+    // ========================================================
+    // BOOTSTRAP FAILURE
+    // ========================================================
 
     console.error(
       'GROWTHOS_ADMIN_CONTROL_PLANE_BOOTSTRAP_ERROR',

@@ -3,6 +3,7 @@
 import crypto from 'crypto';
 import { bigquery } from '@/lib/bigquery';
 import { CALL_COMMERCE_DATASET, CALL_COMMERCE_DEFAULTS, CALL_COMMERCE_LOCATION } from './config';
+import { getCallCommerceSettingsCached } from './settings-store';
 import { ensureCallCommerceSchema } from './schema';
 import { getIntegrationConnection } from '@/lib/integrations/store';
 import type { CallingFieldMapping, CallingValueMapping, CanonicalCallEvent } from './types';
@@ -360,8 +361,9 @@ async function findAttachableLead(input: {
   const open = candidates.find(row => OPEN_LEAD_STATUSES.has(String(row.status || '').toUpperCase()));
   if (open) return open;
 
+  const runtimeSettings = await getCallCommerceSettingsCached(input.workspaceId, input.brandId);
   const callAt = asDate(input.callAt) || new Date();
-  const graceMs = CALL_COMMERCE_DEFAULTS.reopenGraceMinutes * 60_000;
+  const graceMs = runtimeSettings.reopenGraceMinutes * 60_000;
   let bestTerminal: any = null;
   let bestTerminalAt = -1;
 
@@ -681,7 +683,9 @@ export async function ingestCanonicalEvent(
     actor,
   });
 
-  if (isAnswered(String(attempt.call_status || '')) && Number(attempt.duration_seconds || 0) >= CALL_COMMERCE_DEFAULTS.contactMinDurationSeconds) {
+  const runtimeSettings = await getCallCommerceSettingsCached(event.workspaceId, event.brandId);
+
+  if (isAnswered(String(attempt.call_status || '')) && Number(attempt.duration_seconds || 0) >= runtimeSettings.contactMinDurationSeconds) {
     await queueMetaEvent({
       workspaceId: event.workspaceId,
       brandId: event.brandId,
@@ -973,6 +977,70 @@ export async function updateLeadWorkflow(input: { workspaceId:string; brandId:st
   const targetByAction: Record<string,string> = { qualify:'QUALIFIED', unqualify:'UNQUALIFIED', follow_up:'FOLLOW_UP', purchase:'PURCHASED', close_lost:'CLOSED_LOST' };
   const target = targetByAction[input.action];
   if (!target || !(transitions[String(lead.status)] || []).includes(target)) throw new Error('INVALID_CALL_LEAD_TRANSITION');
+
+  const workflowSettings =
+    await getCallCommerceSettingsCached(
+      input.workspaceId,
+      input.brandId
+    );
+
+  const reason =
+    String(
+      input.data?.reason ||
+      ''
+    ).trim();
+
+  const orderId =
+    String(
+      input.data?.orderId ||
+      ''
+    ).trim();
+
+  const orderAmountValue =
+    input.data?.orderAmount;
+
+  const orderAmount =
+    orderAmountValue === undefined ||
+    orderAmountValue === null ||
+    orderAmountValue === ''
+      ? null
+      : Number(orderAmountValue);
+
+  if (
+    target === 'UNQUALIFIED' &&
+    workflowSettings.requireUnqualifiedReason &&
+    !reason
+  ) {
+    throw new Error('CALL_UNQUALIFIED_REASON_REQUIRED');
+  }
+
+  if (
+    target === 'CLOSED_LOST' &&
+    workflowSettings.requireClosedLostReason &&
+    !reason
+  ) {
+    throw new Error('CALL_CLOSED_LOST_REASON_REQUIRED');
+  }
+
+  if (
+    target === 'PURCHASED' &&
+    workflowSettings.requirePurchaseOrderId &&
+    !orderId
+  ) {
+    throw new Error('CALL_PURCHASE_ORDER_ID_REQUIRED');
+  }
+
+  if (
+    target === 'PURCHASED' &&
+    workflowSettings.requirePurchaseAmount &&
+    (
+      orderAmount === null ||
+      !Number.isFinite(orderAmount) ||
+      orderAmount <= 0
+    )
+  ) {
+    throw new Error('CALL_PURCHASE_AMOUNT_REQUIRED');
+  }
 
   await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET status=@target,status_changed_at=CURRENT_TIMESTAMP(),unqualified_reason=IF(@target='UNQUALIFIED',@reason,unqualified_reason),closed_lost_reason=IF(@target='CLOSED_LOST',@reason,closed_lost_reason),next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,next_follow_up_at),order_id=IF(@target='PURCHASED',@order_id,order_id),order_amount=IF(@target='PURCHASED',@order_amount,order_amount),purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),purchased_at),updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { target, reason: input.data?.reason || null, next_follow_up_at: input.data?.nextFollowUpAt || null, order_id: input.data?.orderId || null, order_amount: input.data?.orderAmount === undefined ? null : Number(input.data?.orderAmount), actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at:'TIMESTAMP', order_amount:'NUMERIC' } });
 
@@ -1551,10 +1619,138 @@ export async function getSystemStatus(workspaceId:string,brandId:string) {
   };
 }
 
-export async function archiveEligibleLeads(workspaceId:string,brandId:string) {
-  await bigquery.query({location:CALL_COMMERCE_LOCATION,query:`UPDATE ${table('call_leads')} AS l SET is_archived=TRUE,archived_at=CURRENT_TIMESTAMP(),updated_at=CURRENT_TIMESTAMP() WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND is_archived=FALSE AND NOT EXISTS (SELECT 1 FROM ${table('meta_event_queue')} q WHERE q.workspace_id=l.workspace_id AND q.brand_id=l.brand_id AND q.lead_id=l.lead_id AND q.status NOT IN ('SUCCESS')) AND ((status IN ('UNQUALIFIED','CLOSED_LOST') AND COALESCE(status_changed_at,updated_at)<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status='PURCHASED' AND COALESCE(status_changed_at,updated_at)<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.terminalArchiveDays} DAY)) OR (status NOT IN ('PURCHASED','UNQUALIFIED','CLOSED_LOST') AND updated_at<TIMESTAMP_SUB(CURRENT_TIMESTAMP(),INTERVAL ${CALL_COMMERCE_DEFAULTS.generalArchiveDays} DAY)))`,params:{workspace_id:workspaceId,brand_id:brandId}});
+export async function archiveEligibleLeads(
+  workspaceId: string,
+  brandId: string
+) {
+
+  const settings =
+    await getCallCommerceSettingsCached(
+      workspaceId,
+      brandId
+    );
+
+
+  if (
+    !settings
+      .autoArchiveTerminalLeads
+  ) {
+
+    return {
+      enabled:
+        false,
+
+      archiveDays:
+        settings
+          .terminalArchiveDays,
+    };
+  }
+
+
+  const cutoff =
+    new Date(
+      Date.now()
+      -
+      settings
+        .terminalArchiveDays
+      *
+      86_400_000
+    )
+      .toISOString();
+
+
+  await bigquery.query({
+
+    location:
+      CALL_COMMERCE_LOCATION,
+
+    query: `
+      UPDATE
+        ${table(
+          'call_leads'
+        )} AS l
+
+      SET
+        is_archived=TRUE,
+        archived_at=CURRENT_TIMESTAMP(),
+        updated_at=CURRENT_TIMESTAMP()
+
+      WHERE
+        l.workspace_id=@workspace_id
+        AND
+        l.brand_id=@brand_id
+        AND
+        l.is_archived=FALSE
+
+        AND
+        l.status IN (
+          'UNQUALIFIED',
+          'CLOSED_LOST'
+        )
+
+        AND
+        COALESCE(
+          l.status_changed_at,
+          l.updated_at
+        ) < @archive_cutoff
+
+        AND NOT EXISTS (
+
+          SELECT
+            1
+
+          FROM
+            ${table(
+              'meta_event_queue'
+            )} q
+
+          WHERE
+            q.workspace_id=
+              l.workspace_id
+
+            AND
+            q.brand_id=
+              l.brand_id
+
+            AND
+            q.lead_id=
+              l.lead_id
+
+            AND
+            q.status!='SUCCESS'
+        )
+    `,
+
+    params: {
+
+      workspace_id:
+        workspaceId,
+
+      brand_id:
+        brandId,
+
+      archive_cutoff:
+        cutoff,
+    },
+
+    types: {
+      archive_cutoff:
+        'TIMESTAMP',
+    },
+  });
+
+
+  return {
+
+    enabled:
+      true,
+
+    archiveDays:
+      settings
+        .terminalArchiveDays,
+
+    cutoff,
+
+  };
 }
-
-
-
 

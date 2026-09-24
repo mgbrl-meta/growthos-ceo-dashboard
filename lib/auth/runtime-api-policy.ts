@@ -215,7 +215,7 @@ const RETENTION_PREFIX_POLICIES:
 
 
 // ============================================================
-// META TAB → SUBMODULE
+// META TAB â†’ SUBMODULE
 // ============================================================
 
 function resolveMetaPolicy(
@@ -336,6 +336,7 @@ const CALL_COMMERCE_PREFIX_POLICIES:
   { prefix: '/api/call-commerce/archive', submoduleId: 'archive' },
   { prefix: '/api/call-commerce/reports', submoduleId: 'reports' },
   { prefix: '/api/call-commerce/system-status', submoduleId: 'system-status' },
+  { prefix: '/api/call-commerce/settings', submoduleId: 'settings' },
 ];
 
 // ============================================================
