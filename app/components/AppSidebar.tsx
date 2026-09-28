@@ -8,6 +8,7 @@ import {
 
 import {
   ChevronDown,
+  Activity,
   CircleGauge,
   GitBranch,
   LogOut,
@@ -212,6 +213,31 @@ const groups:
           ),
 
       },
+
+      {
+
+        name:
+          'Meta Events',
+
+        label:
+          'Meta Events',
+
+        icon:
+          Activity,
+
+        moduleId:
+          'meta-events',
+
+        children:
+          getGrowthOSSubmodules(
+            'meta-events'
+          ).map(
+            item =>
+              item.label
+          ),
+
+      },
+
 
 
       {

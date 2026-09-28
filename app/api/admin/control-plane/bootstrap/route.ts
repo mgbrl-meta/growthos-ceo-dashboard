@@ -21,6 +21,10 @@ import {
   registerCallCommerceCapabilities,
 } from '@/lib/call-commerce/admin-registration';
 
+import {
+  registerMetaEventsCapabilities,
+} from '@/lib/meta-events/admin-registration';
+
 
 export const dynamic =
   'force-dynamic';
@@ -217,6 +221,17 @@ export async function POST(
     // ========================================================
 
     await registerCallCommerceCapabilities();
+
+
+    // ========================================================
+    // 5. REGISTER META EVENTS CAPABILITIES + DATA PLANE
+    //
+    // Meta Events is an independent Admin-controlled module.
+    // Registration preserves Admin-owned access/release values
+    // while also bootstrapping the shared Meta Events dataset.
+    // ========================================================
+
+    await registerMetaEventsCapabilities();
 
 
     // ========================================================

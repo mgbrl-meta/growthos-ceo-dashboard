@@ -322,6 +322,26 @@ function resolveMetaPolicy(
 
 
 // ============================================================
+// META EVENTS ROUTE FAMILY
+// ============================================================
+
+const META_EVENTS_PREFIX_POLICIES:
+  Array<{
+    prefix: string;
+    submoduleId: string;
+  }> = [
+  { prefix: '/api/meta-events/overview', submoduleId: 'overview' },
+  { prefix: '/api/meta-events/event-rules', submoduleId: 'event-rules' },
+  { prefix: '/api/meta-events/event-log', submoduleId: 'event-log' },
+  { prefix: '/api/meta-events/destinations', submoduleId: 'destinations' },
+  { prefix: '/api/meta-events/sources', submoduleId: 'sources' },
+  { prefix: '/api/meta-events/diagnostics', submoduleId: 'diagnostics' },
+  { prefix: '/api/meta-events/settings', submoduleId: 'settings' },
+  { prefix: '/api/meta-events/test', submoduleId: 'diagnostics' },
+];
+
+
+// ============================================================
 // CALL COMMERCE ROUTE FAMILY
 // ============================================================
 
@@ -358,6 +378,23 @@ export function resolveGrowthOSApiPolicy(
 
   const pathname =
     url.pathname;
+
+
+  if (pathname.startsWith('/api/meta-events/')) {
+    for (const policy of META_EVENTS_PREFIX_POLICIES) {
+      if (pathname.startsWith(policy.prefix)) {
+        return {
+          moduleId: 'meta-events',
+          submoduleId: policy.submoduleId,
+        };
+      }
+    }
+
+    return {
+      moduleId: 'meta-events',
+      submoduleId: 'overview',
+    };
+  }
 
 
   if (pathname.startsWith('/api/call-commerce/')) {

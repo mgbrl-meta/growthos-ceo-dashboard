@@ -324,6 +324,20 @@ export const GROWTHOS_SUBMODULES:
 
 
   // ==========================================================
+  // META EVENTS
+  // ==========================================================
+
+  { moduleId: 'meta-events', submoduleId: 'overview', label: 'Overview', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+  { moduleId: 'meta-events', submoduleId: 'event-rules', label: 'Event Rules', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+  { moduleId: 'meta-events', submoduleId: 'event-log', label: 'Event Log', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+  { moduleId: 'meta-events', submoduleId: 'destinations', label: 'Destinations', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+  { moduleId: 'meta-events', submoduleId: 'sources', label: 'Sources', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+  { moduleId: 'meta-events', submoduleId: 'diagnostics', label: 'Diagnostics', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+  { moduleId: 'meta-events', submoduleId: 'settings', label: 'Settings', defaultAccessMode: 'plan', defaultReleaseStage: 'draft' },
+
+
+
+  // ==========================================================
   // SETTINGS
   //
   // Settings itself is a protected parent module. Individual

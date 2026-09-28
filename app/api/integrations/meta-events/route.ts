@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveRequestTenantContext } from '@/lib/tenancy/request-context';
 import { getIntegrationConnection, upsertIntegrationConnection } from '@/lib/integrations/store';
 import { readIntegrationSecret, storeIntegrationSecret } from '@/lib/integrations/secrets';
+import { ensureMetaEventsTenant } from '@/lib/meta-events/repository';
 
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
@@ -24,6 +25,7 @@ export async function POST(request:NextRequest){
     if(!datasetId||!accessToken)return NextResponse.json({ok:false,error:'datasetId and accessToken are required'},{status:400});
     const secretName=await storeIntegrationSecret({workspaceId:tenant.workspaceId,brandId:tenant.brandId,provider:'meta_events',value:{access_token:accessToken}});
     await upsertIntegrationConnection({workspaceId:tenant.workspaceId,brandId:tenant.brandId,provider:'meta_events',connectionMode:'api',ingestionAdapter:'meta_capi',status:'connected',providerAccountId:datasetId,providerAccountName:`Meta Dataset ${datasetId}`,secretName});
+    await ensureMetaEventsTenant(tenant.workspaceId,tenant.brandId);
     return NextResponse.json({ok:true});
   }catch(error:any){return NextResponse.json({ok:false,error:error?.message||'META_EVENTS_ERROR'},{status:500});}
 }

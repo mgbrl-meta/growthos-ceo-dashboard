@@ -271,6 +271,52 @@ const PAGE_REGISTRY: Record<string, ModulePageDefinitions> = {
     },
   },
 
+  'Meta Events': {
+    default: {
+      eyebrow: 'Meta Events',
+      title: 'Meta Event Delivery',
+      description:
+        'Control first-party event routing from Growth OS sources into Meta Conversions API.',
+      dateMode: 'none',
+    },
+    pages: {
+      Overview: {
+        description:
+          'Monitor event volume, delivery health, source activity and destination readiness.',
+      },
+      'Event Rules': {
+        title: 'Event Rules',
+        description:
+          'Map Growth OS source events to Meta event names, destinations and action sources.',
+      },
+      'Event Log': {
+        title: 'Event Log',
+        description:
+          'Inspect every deduplicated outbound event and its delivery state.',
+      },
+      Destinations: {
+        title: 'Destinations',
+        description:
+          'Manage Meta Dataset / Pixel destinations and the credentials used for server-side delivery.',
+      },
+      Sources: {
+        title: 'Sources',
+        description:
+          'See which Growth OS systems are producing event signals and when they last emitted.',
+      },
+      Diagnostics: {
+        title: 'Diagnostics',
+        description:
+          'Investigate retrying or failed deliveries, connection health and recent Meta errors.',
+      },
+      Settings: {
+        title: 'Meta Events Settings',
+        description:
+          'Configure worker retry, batching and default delivery behaviour.',
+      },
+    },
+  },
+
   'Product OS': {
     default: {
       eyebrow: 'Product OS',

@@ -409,6 +409,39 @@ export async function migrateGrowthOSCapabilityControl() {
       `,
     });
 
+    // Meta Events is an independently entitleable Growth OS module.
+    // Insert-only: Admin remains the source of truth after registration.
+    await bigquery.query({
+      location: LOCATION,
+      query: `
+        MERGE \`${projectId}.${DATASET_ID}.modules\` AS target
+        USING (
+          SELECT
+            'meta-events' AS module_id,
+            'Meta Events' AS module_name,
+            'Shared first-party event routing and Meta Conversions API delivery across Growth OS sources.' AS description,
+            'commercial' AS module_type,
+            'plan' AS access_mode,
+            'draft' AS release_stage,
+            'growth' AS category,
+            'Meta Events' AS route_key,
+            'active' AS status,
+            TRUE AS setup_required
+        ) AS source
+        ON target.module_id = source.module_id
+        WHEN NOT MATCHED THEN
+          INSERT (
+            module_id,module_name,description,module_type,access_mode,release_stage,
+            category,route_key,status,setup_required,created_at,updated_at
+          )
+          VALUES (
+            source.module_id,source.module_name,source.description,source.module_type,
+            source.access_mode,source.release_stage,source.category,source.route_key,
+            source.status,source.setup_required,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()
+          )
+      `,
+    });
+
     // First migration preserves everything that is already live today.
     // After that, any newly-seeded module starts in Draft so a code deploy
     // can never publish a new client capability by accident.

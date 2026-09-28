@@ -25,6 +25,9 @@ import ProductOS
 import CallCommerce
   from './CallCommerce';
 
+import MetaEvents
+  from './MetaEvents';
+
 import RetentionOS
   from './RetentionOS';
 
@@ -125,6 +128,14 @@ const MODULE_NAVIGATION = [
 
     tab:
       'Call Commerce',
+  },
+
+  {
+    moduleId:
+      'meta-events',
+
+    tab:
+      'Meta Events',
   },
 
   {
@@ -384,6 +395,10 @@ export default function GrowthOSDashboard() {
 
     'Call Commerce':
       'Summary',
+
+    'Meta Events':
+      'Overview',
+
 
     'Product OS':
       'Overview',
@@ -2453,6 +2468,28 @@ export default function GrowthOSDashboard() {
                   }
                   start={start}
                   end={end}
+                />
+
+              )}
+
+
+              {/* ==============================================
+                  META EVENTS
+              ============================================== */}
+
+              {activeTab ===
+                'Meta Events'
+                &&
+                moduleVisible(
+                  'meta-events'
+                ) && (
+
+                <MetaEvents
+                  activeTab={
+                    activeSubTabs[
+                      'Meta Events'
+                    ]
+                  }
                 />
 
               )}
