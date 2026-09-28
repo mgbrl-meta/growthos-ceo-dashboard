@@ -220,7 +220,7 @@ type AuthMeResponse = {
       null;
 
     humanIdentity?:
-      boolean;  
+      boolean;
 
   };
 
