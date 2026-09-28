@@ -639,3 +639,97 @@ export async function readIntegrationSecret<T>(
   }
 
 }
+
+export async function deleteIntegrationSecret(
+  secretName: string
+) {
+
+  const normalizedSecretName =
+    String(
+      secretName
+      ||
+      ''
+    ).trim();
+
+
+  if (!normalizedSecretName) {
+
+    return {
+
+      deleted:
+        false,
+
+      notFound:
+        true,
+
+    };
+
+  }
+
+
+  try {
+
+    await secretManager.deleteSecret({
+
+      name:
+        normalizedSecretName,
+
+    });
+
+
+    return {
+
+      deleted:
+        true,
+
+      notFound:
+        false,
+
+    };
+
+
+  } catch (
+    error: any
+  ) {
+
+    const message =
+      String(
+        error?.message
+        ||
+        ''
+      )
+        .toLowerCase();
+
+
+    const notFound =
+      error?.code ===
+        5
+      ||
+      error?.code ===
+        404
+      ||
+      message.includes(
+        'not found'
+      );
+
+
+    if (notFound) {
+
+      return {
+
+        deleted:
+          false,
+
+        notFound:
+          true,
+
+      };
+
+    }
+
+
+    throw error;
+
+  }
+
+}
