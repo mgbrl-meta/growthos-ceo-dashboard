@@ -212,6 +212,16 @@ type AuthMeResponse = {
     method:
       string | null;
 
+    principalType?:
+      'human'
+      |
+      'provider'
+      |
+      null;
+
+    humanIdentity?:
+      boolean;  
+
   };
 
   providerContext?: {
@@ -971,6 +981,11 @@ export default function GrowthSettings({
     );
 
 
+  const isProviderPrincipal =
+    authContext?.auth?.principalType ===
+      'provider';
+
+
   // ==========================================================
   // LOAD PERSONAL PREFERENCES
   //
@@ -1329,6 +1344,10 @@ export default function GrowthSettings({
 
   // ==========================================================
   // LAZY USERS LOAD
+  //
+  // Provider/store principals can enter Growth OS through
+  // Shopify, but they are not human workspace members and must
+  // never enumerate the workspace user directory.
   // ==========================================================
 
   useEffect(
@@ -1337,6 +1356,10 @@ export default function GrowthSettings({
       if (
         activeTab ===
           'Users & Access'
+        &&
+        authContext
+        &&
+        !isProviderPrincipal
         &&
         !usersLoaded
         &&
@@ -1350,6 +1373,8 @@ export default function GrowthSettings({
     },
     [
       activeTab,
+      authContext,
+      isProviderPrincipal,
       usersLoaded,
       usersLoading,
     ]
@@ -1716,10 +1741,18 @@ export default function GrowthSettings({
     authContext?.activeContext?.role
     ?? null
   }
+  principalType={
+    authContext?.auth?.principalType
+    ?? null
+  }
   loading={
-    usersLoading
-    ||
-    !usersLoaded
+    isProviderPrincipal
+      ? false
+      : (
+          usersLoading
+          ||
+          !usersLoaded
+        )
   }
   error={usersError}
   reload={loadUsersContext}
@@ -2322,6 +2355,8 @@ function UserAccessSettings({
 
   currentRole,
 
+  principalType,
+
   loading,
 
   error,
@@ -2344,6 +2379,13 @@ function UserAccessSettings({
 
   currentRole:
     string |
+    null;
+
+  principalType:
+    'human'
+    |
+    'provider'
+    |
     null;
 
   loading:
@@ -4761,6 +4803,84 @@ function UserAccessSettings({
       );
 
     }
+
+  }
+
+
+  // ==========================================================
+  // PROVIDER PRINCIPAL
+  //
+  // Shopify provider/store sessions may open Growth OS, but
+  // they are not human workspace identities. Keep this screen
+  // visible so the capability is discoverable, while the user
+  // directory and management actions remain protected.
+  // ==========================================================
+
+  if (
+    principalType ===
+      'provider'
+  ) {
+
+    return (
+
+      <div className="space-y-3">
+
+        <SectionHeader
+          icon={Users}
+          title="Users & Access"
+          description="Manage the people, roles and module access for this workspace."
+        />
+
+
+        <section className="gos-panel !p-4">
+
+          <div className="flex items-start gap-3">
+
+            <div
+              className="
+                flex
+                h-9
+                w-9
+                shrink-0
+                items-center
+                justify-center
+
+                rounded-[9px]
+
+                bg-violet-50
+
+                text-violet-600
+              "
+            >
+              <ShieldCheck size={16} />
+            </div>
+
+
+            <div className="max-w-2xl">
+
+              <h3 className="text-[12px] font-semibold text-slate-950">
+                Growth OS sign-in required
+              </h3>
+
+
+              <p className="mt-1 text-[9px] leading-5 text-slate-500">
+                You opened Growth OS through Shopify. This session is connected to the current workspace, but it is a provider session rather than a human Growth OS user identity.
+              </p>
+
+
+              <p className="mt-2 text-[9px] leading-5 text-slate-500">
+                Sign in to Growth OS with an active Owner or Admin account to view workspace users, invite people, or change access.
+              </p>
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+    );
 
   }
 
