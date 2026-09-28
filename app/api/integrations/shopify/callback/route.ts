@@ -32,12 +32,13 @@ import {
 } from '@/lib/integrations/providers/shopify-webhooks';
 
 import {
-  setGrowthOsSessionCookie,
-} from '@/lib/auth/session';
-
-import {
   isShopifyProductsRealtimeEnabled,
 } from '@/lib/integrations/providers/shopify-features';
+
+import {
+  buildShopifyUserAuthorizationUrl,
+  generateShopifyUserOAuthState,
+} from '@/lib/auth/shopify-user-access';
 
 
 export const dynamic =
@@ -390,8 +391,7 @@ export async function GET(
     // The connection stores only the Secret Manager pointer.
     // ========================================================
 
-    const registration =
-      await registerShopifyIntegration({
+    await registerShopifyIntegration({
 
         tenant: {
 
@@ -496,87 +496,90 @@ export async function GET(
 
     }
 
-    // ========================================================
-    // 14. CREATE GROWTH OS SHOPIFY SESSION
-    //
-    // Shopify installation is now complete.
-    //
-    // The verified Shopify store determines:
-    //
-    // workspace
-    // brand
-    //
-    // No Growth OS email/password is required.
-    // ========================================================
-
-    await setGrowthOsSessionCookie({
-
-      userId:
-        `shopify:${canonicalShop.shopId}`,
-
-      workspaceId:
-        tenant.workspaceId,
-
-      brandId:
-        tenant.brandId,
-
-      role:
-        'admin',
-
-      authMethod:
-        'shopify',
-
-      authSource:
-        'public',
-
-    });
-
 
     // ========================================================
-    // 15. GENERIC CONNECTOR SETUP ROUTER
+    // 16. CONTINUE INTO SHOPIFY HUMAN AUTHORIZATION
     //
-    // IMPORTANT:
+    // Installation is complete.
     //
-    // The Shopify callback does NOT render Shopify-specific UI.
+    // BUT:
     //
-    // It sends only the connection identity.
+    // Shopify store identity != Growth OS human identity.
     //
-    // /integrations/setup
-    //        ↓
-    // integration_connections
-    //        ↓
-    // provider
-    //        ↓
-    // ShopifySetup
-    // CustomWebSetup
-    // MetaSetup
-    // GoogleSetup
-    // future connectors
+    // We therefore continue through Shopify per-user OAuth.
+    //
+    // No synthetic:
+    //
+    // shopify:gid://shopify/Shop/...
+    //
+    // browser session is created here.
     // ========================================================
 
-    const setupUrl =
-      new URL(
-        '/integrations/setup',
-        request.nextUrl.origin
+    const userOAuthState =
+      generateShopifyUserOAuthState();
+
+
+    const userAuthorizationUrl =
+      buildShopifyUserAuthorizationUrl(
+        canonicalShop.shopDomain,
+        userOAuthState
       );
-
-
-    setupUrl.searchParams.set(
-      'connectionId',
-      registration.connectionId
-    );
 
 
     const response =
       NextResponse.redirect(
-        setupUrl
+        userAuthorizationUrl
       );
 
 
+    const oauthCookieOptions = {
+
+      httpOnly:
+        true,
+
+      secure:
+        process.env.NODE_ENV ===
+          'production',
+
+      sameSite:
+        'lax' as const,
+
+      path:
+        '/',
+
+      maxAge:
+        10 * 60,
+
+    };
+
+
+    response.cookies.set(
+
+      'growthos_shopify_user_oauth_state',
+
+      userOAuthState,
+
+      oauthCookieOptions
+
+    );
+
+
+    response.cookies.set(
+
+      'growthos_shopify_user_oauth_shop',
+
+      canonicalShop.shopDomain,
+
+      oauthCookieOptions
+
+    );
+
+
     // ========================================================
-    // 16. CLEAR ONE-TIME AUTH COOKIES
+    // 17. CLEAR INSTALLATION OAUTH COOKIES
     //
-    // These must not remain reusable after successful OAuth.
+    // The installation authorization code/state has already
+    // been consumed and must not remain reusable.
     // ========================================================
 
     response.cookies.delete(

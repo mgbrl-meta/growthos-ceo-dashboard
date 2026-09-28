@@ -45,6 +45,7 @@ const PUBLIC_API_PATHS = new Set([
   '/api/auth/logout',
   '/api/auth/me',
   '/api/auth/shopify/launch',
+  '/api/auth/shopify/user-callback',
   '/api/auth/shopify/resolve-shop',
   '/api/auth/shopify/bootstrap',
   '/api/integrations/shopify/install',

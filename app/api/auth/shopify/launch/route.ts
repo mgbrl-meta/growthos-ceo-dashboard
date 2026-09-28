@@ -18,8 +18,9 @@ import {
 } from '@/lib/tenancy/context';
 
 import {
-  setGrowthOsSessionCookie,
-} from '@/lib/auth/session';
+  buildShopifyUserAuthorizationUrl,
+  generateShopifyUserOAuthState,
+} from '@/lib/auth/shopify-user-access';
 
 
 export const dynamic =
@@ -33,6 +34,7 @@ export const runtime =
 // METADATA NORMALIZER
 //
 // BigQuery JSON may arrive as:
+//
 // - object
 // - serialized JSON string
 //
@@ -137,42 +139,35 @@ function getGrowthOSAppUrl() {
 //       ↓
 // integration account lookup
 //
-//
 // UNKNOWN SHOP
 //       ↓
-// Shopify OAuth installation
-//
+// Shopify installation OAuth
 //
 // EXISTING + UNINSTALLED
 //       ↓
-// Shopify OAuth reinstallation
+// Shopify reinstallation OAuth
 //
-//
-// EXISTING + SETUP NOT READY
+// EXISTING ACTIVE INSTALLATION
 //       ↓
-// connector setup page
-//
-//
-// EXISTING + READY
+// Shopify PER-USER OAuth
 //       ↓
-// Growth OS dashboard
-//
+// Shopify associated_user
+//       ↓
+// Growth OS usr_*
+//       ↓
+// active workspace/brand membership
+//       ↓
+// actual Growth OS role
 //
 // IMPORTANT:
 //
-// Permanent fail-closed rules:
+// A signed Shopify launch proves the STORE.
 //
-// installation_status = uninstalled
-//     → OAuth
+// It does NOT prove that the current actor is an authorized
+// Growth OS human.
 //
-// setup_status = ready
-//     → Dashboard
-//
-// setup_status = required
-//     → Setup
-//
-// setup_status missing / unknown
-//     → Setup
+// Therefore this route never creates a synthetic Shopify
+// browser session.
 // ============================================================
 
 export async function GET(
@@ -244,15 +239,6 @@ export async function GET(
 
     // ========================================================
     // 3. RESOLVE SHOPIFY STORE IN GROWTH OS
-    //
-    // Shopify domain
-    //      ↓
-    // integration_accounts
-    //      ↓
-    // workspace
-    // brand
-    // connection
-    // metadata
     // ========================================================
 
     const account =
@@ -262,11 +248,7 @@ export async function GET(
 
 
     // ========================================================
-    // 4. UNKNOWN STORE → INSTALL
-    //
-    // No Growth OS account mapping exists yet.
-    //
-    // Send through canonical Shopify OAuth installation.
+    // 4. UNKNOWN STORE -> INSTALL
     // ========================================================
 
     if (!account) {
@@ -289,12 +271,6 @@ export async function GET(
           installUrl
         );
 
-
-      // ------------------------------------------------------
-      // Temporary launch-flow marker.
-      //
-      // Useful for installation lineage / compatibility.
-      // ------------------------------------------------------
 
       response.cookies.set(
 
@@ -331,7 +307,7 @@ export async function GET(
 
 
     // ========================================================
-    // 5. VALIDATE EXISTING ACCOUNT IDENTITY
+    // 5. VALIDATE EXISTING ACCOUNT MAPPING
     // ========================================================
 
     const connectionId =
@@ -361,15 +337,6 @@ export async function GET(
         .trim();
 
 
-    const providerAccountId =
-      String(
-        account.provider_account_id
-        ||
-        ''
-      )
-        .trim();
-
-
     if (!connectionId) {
 
       throw new Error(
@@ -392,27 +359,16 @@ export async function GET(
     }
 
 
-    if (!providerAccountId) {
-
-      throw new Error(
-        'SHOPIFY_LAUNCH_PROVIDER_ACCOUNT_ID_MISSING'
-      );
-
-    }
-
-
     // ========================================================
-    // 6. CANONICAL GROWTH OS TENANT
+    // 6. VERIFY CANONICAL GROWTH OS TENANT EXISTS
+    //
+    // We intentionally do NOT create a user session here.
     // ========================================================
 
-    const tenant =
-      await resolveTenantContextById(
-
-        workspaceId,
-
-        brandId
-
-      );
+    await resolveTenantContextById(
+      workspaceId,
+      brandId
+    );
 
 
     // ========================================================
@@ -423,16 +379,6 @@ export async function GET(
       normalizeMetadata(
         account.metadata
       );
-
-
-    const setupStatus =
-      String(
-        metadata.setup_status
-        ||
-        ''
-      )
-        .trim()
-        .toLowerCase();
 
 
     const installationStatus =
@@ -446,14 +392,7 @@ export async function GET(
 
 
     // ========================================================
-    // 8. UNINSTALLED → REAUTHORIZE
-    //
-    // Historical Growth OS tenant/account mapping remains.
-    //
-    // But the Shopify installation is no longer active.
-    //
-    // Do NOT create a Growth OS session before Shopify
-    // reauthorization succeeds.
+    // 8. UNINSTALLED -> REAUTHORIZE STORE
     // ========================================================
 
     if (
@@ -515,90 +454,83 @@ export async function GET(
 
 
     // ========================================================
-    // 9. CREATE TENANT-AWARE GROWTH OS SESSION
+    // 9. REQUIRE SHOPIFY HUMAN IDENTITY
     //
-    // At this point:
+    // Store identity is now proven.
     //
-    // Shopify launch is verified
-    // store exists in Growth OS
-    // installation is not explicitly uninstalled
+    // Next prove WHICH Shopify staff member is opening
+    // Growth OS.
     //
-    // setup may still be required.
+    // grant_options[]=per-user
+    //        ↓
+    // associated_user
+    //        ↓
+    // verified email
+    //        ↓
+    // Growth OS user + membership
     // ========================================================
 
-    await setGrowthOsSessionCookie({
-
-      userId:
-        `shopify:${providerAccountId}`,
-
-      workspaceId:
-        tenant.workspaceId,
-
-      brandId:
-        tenant.brandId,
-
-      role:
-        'viewer',
-
-      authMethod:
-        'shopify',
-
-      authSource:
-        'public',
-
-    });
+    const userOAuthState =
+      generateShopifyUserOAuthState();
 
 
-    // ========================================================
-    // 10. SETUP REQUIRED
-    //
-    // FAIL CLOSED.
-    //
-    // ONLY explicit:
-    //
-    // setup_status = ready
-    //
-    // may enter the dashboard.
-    //
-    // Therefore:
-    //
-    // required → setup
-    // NULL     → setup
-    // unknown  → setup
-    // ========================================================
-
-    if (
-      setupStatus !==
-        'ready'
-    ) {
-
-      const setupUrl =
-        new URL(
-          '/integrations/setup',
-          getGrowthOSAppUrl()
-        );
-
-
-      setupUrl.searchParams.set(
-        'connectionId',
-        connectionId
+    const userAuthorizationUrl =
+      buildShopifyUserAuthorizationUrl(
+        verifiedShop,
+        userOAuthState
       );
 
 
-      return NextResponse.redirect(
-        setupUrl
+    const response =
+      NextResponse.redirect(
+        userAuthorizationUrl
       );
 
-    }
+
+    const oauthCookieOptions = {
+
+      httpOnly:
+        true,
+
+      secure:
+        process.env.NODE_ENV ===
+          'production',
+
+      sameSite:
+        'lax' as const,
+
+      path:
+        '/',
+
+      maxAge:
+        10 * 60,
+
+    };
 
 
-    // ========================================================
-    // 11. READY → DASHBOARD
-    // ========================================================
+    response.cookies.set(
 
-    return NextResponse.redirect(
-      `${getGrowthOSAppUrl()}/`
+      'growthos_shopify_user_oauth_state',
+
+      userOAuthState,
+
+      oauthCookieOptions
+
     );
+
+
+    response.cookies.set(
+
+      'growthos_shopify_user_oauth_shop',
+
+      verifiedShop,
+
+      oauthCookieOptions
+
+    );
+
+
+    return response;
 
 
   } catch (
@@ -644,10 +576,6 @@ export async function GET(
       ||
       message.includes(
         'TENANT_IDENTITY_MISSING'
-      )
-      ||
-      message.includes(
-        'PROVIDER_ACCOUNT_ID_MISSING'
       )
     ) {
 
