@@ -301,6 +301,14 @@ export async function GET(
           ??
           null,
 
+        principalType:
+          identity.principalType,
+
+        humanIdentity:
+          identity.principalType ===
+            'human',
+
+
       },
 
 
@@ -382,6 +390,9 @@ export async function GET(
           identity.shopDomain
           ??
           null,
+
+        principalType:
+          identity.principalType,
 
       },
 

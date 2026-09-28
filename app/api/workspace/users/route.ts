@@ -19,6 +19,7 @@ import {
   listGrowthOSWorkspaceUsersFast,
   upsertBrandMembership,
   upsertGrowthOSUser,
+  getActiveBrandMembershipFast,
   type GrowthOSBrandRole,
 } from '@/lib/auth/user-store';
 
@@ -202,6 +203,63 @@ export async function GET(
       );
 
     }
+
+    // ========================================================
+// HUMAN OWNER / ADMIN READ AUTHORIZATION
+//
+// User-directory data is administrative information.
+// A Shopify provider/store principal cannot enumerate users.
+// ========================================================
+
+const actorMembership =
+  await getActiveBrandMembershipFast(
+
+    identity.userId,
+
+    workspaceId,
+
+    brandId
+
+  );
+
+
+const canReadUsers =
+  Boolean(
+
+    actorMembership
+
+    &&
+
+    (
+      actorMembership.role ===
+        'owner'
+      ||
+      actorMembership.role ===
+        'admin'
+    )
+
+  );
+
+
+if (!canReadUsers) {
+
+  return NextResponse.json(
+    {
+
+      ok:
+        false,
+
+      error:
+        'USER_MANAGEMENT_ACCESS_REQUIRED',
+
+    },
+    {
+      status:
+        403,
+    }
+  );
+
+}
 
 
     // ========================================================

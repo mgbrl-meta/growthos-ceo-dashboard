@@ -52,6 +52,12 @@ export type AuthIdentity = {
     |
     'public';
 
+  principalType:
+    'human'
+    |
+    'provider';
+
+
   userId:
     string;
 
@@ -184,16 +190,35 @@ async function authenticateAdminPasswordSessionFast(
       }
 
       const identity: AuthIdentity = {
-        authSource: 'public',
-        userId: session.userId,
-        authSessionId: session.sessionId,
-        email: session.email,
-        workspaceId: membership.workspace_id,
-        brandId: membership.brand_id,
-        role: membership.role,
-        authMethod: session.authMethod,
-        tenantId: session.tenantId,
-      };
+  authSource: 'public',
+
+  principalType:
+    'human',
+
+  userId:
+    session.userId,
+
+  authSessionId:
+    session.sessionId,
+
+  email:
+    session.email,
+
+  workspaceId:
+    membership.workspace_id,
+
+  brandId:
+    membership.brand_id,
+
+  role:
+    membership.role,
+
+  authMethod:
+    session.authMethod,
+
+  tenantId:
+    session.tenantId,
+};
 
       adminLiveAuthCache.set(cacheKey, {
         identity,
@@ -296,8 +321,14 @@ export async function authenticateRequest(
         authSource:
           'shopify',
 
+         principalType:
+    'provider',
+
         userId:
           identity.userId,
+
+         role:
+    'viewer',
 
         tenantId:
           identity.tenantId,
@@ -373,10 +404,78 @@ if (
     'shopify'
 ) {
 
+  // ==========================================================
+  // SHOPIFY PROVIDER PRINCIPAL
+  //
+  // Shopify proves:
+  //
+  // shop → workspace → brand
+  //
+  // It does NOT automatically prove that the current actor is
+  // a Growth OS human Owner/Admin.
+  //
+  // Future Shopify staff → Growth OS user mappings can use a
+  // real usr_* userId. If that exists, live membership wins.
+  // ==========================================================
+
+  const membership =
+    await getActiveBrandMembershipFast(
+
+      session.userId,
+
+      session.workspaceId,
+
+      session.brandId
+
+    );
+
+
+  if (membership) {
+
+    return {
+
+      authSource:
+        'public',
+
+      principalType:
+        'human',
+
+      userId:
+        session.userId,
+
+      authSessionId:
+        session.sessionId,
+
+      email:
+        session.email,
+
+      workspaceId:
+        membership.workspace_id,
+
+      brandId:
+        membership.brand_id,
+
+      role:
+        membership.role,
+
+      authMethod:
+        session.authMethod,
+
+      tenantId:
+        session.tenantId,
+
+    };
+
+  }
+
+
   return {
 
     authSource:
       'public',
+
+    principalType:
+      'provider',
 
     userId:
       session.userId,
@@ -393,8 +492,10 @@ if (
     brandId:
       session.brandId,
 
+    // Provider/store authentication is deliberately capped at
+    // viewer-equivalent access. Never trust session.role here.
     role:
-      session.role,
+      'viewer',
 
     authMethod:
       session.authMethod,
@@ -405,7 +506,6 @@ if (
   };
 
 }
-
 
 // ==========================================================
 // PASSWORD SESSION → LIVE SESSION CHECK
@@ -498,6 +598,9 @@ return {
 
   authSource:
     'public',
+
+  principalType:
+    'human',
 
   userId:
     session.userId,

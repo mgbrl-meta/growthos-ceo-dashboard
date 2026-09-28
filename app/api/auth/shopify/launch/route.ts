@@ -538,7 +538,7 @@ export async function GET(
         tenant.brandId,
 
       role:
-        'admin',
+        'viewer',
 
       authMethod:
         'shopify',

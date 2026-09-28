@@ -181,10 +181,14 @@ export default async function proxy(
         request.headers
       );
 
-
     requestHeaders.set(
       'x-growthos-auth-source',
       identity.authSource
+    );
+
+    requestHeaders.set(
+       'x-growthos-principal-type',
+        identity.principalType
     );
 
 

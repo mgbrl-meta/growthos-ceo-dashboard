@@ -78,16 +78,72 @@ function readProxyAuthIdentity(request: NextRequest): AuthIdentity | null {
     return null;
   }
 
+  const authMethodHeader =
+  String(
+    request.headers.get(
+      'x-growthos-auth-method'
+    )
+    ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+
+const authMethod:
+  AuthIdentity['authMethod'] =
+    authMethodHeader === 'password'
+      ? 'password'
+      : authMethodHeader === 'shopify'
+        ? 'shopify'
+        : undefined;
+
+
+const principalTypeHeader =
+  String(
+    request.headers.get(
+      'x-growthos-principal-type'
+    )
+    ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+
+
+const principalType:
+  AuthIdentity['principalType'] =
+    principalTypeHeader === 'human'
+      ? 'human'
+      : principalTypeHeader === 'provider'
+        ? 'provider'
+        : authMethod === 'password'
+          ? 'human'
+          : 'provider';
+
   return {
     authSource,
+    principalType,
     userId,
     tenantId,
-    workspaceId: request.headers.get('x-growthos-workspace-id') || undefined,
-    brandId: request.headers.get('x-growthos-brand-id') || undefined,
-    role: (request.headers.get('x-growthos-role') || undefined) as AuthIdentity['role'],
-    authMethod: (request.headers.get('x-growthos-auth-method') || undefined) as AuthIdentity['authMethod'],
-    shopId: request.headers.get('x-growthos-shop-id') || undefined,
-    shopDomain: request.headers.get('x-growthos-shop-domain') || undefined,
+    workspaceId:
+      request.headers.get('x-growthos-workspace-id')
+      || undefined,
+    brandId:
+      request.headers.get('x-growthos-brand-id')
+      || undefined,
+    role:
+      (
+        request.headers.get('x-growthos-role')
+        || undefined
+      ) as AuthIdentity['role'],
+    authMethod,
+    shopId:
+      request.headers.get('x-growthos-shop-id')
+      || undefined,
+    shopDomain:
+      request.headers.get('x-growthos-shop-domain')
+      || undefined,
   };
 }
 
