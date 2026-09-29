@@ -1,11 +1,11 @@
-﻿import 'server-only';
+import 'server-only';
 
 import crypto from 'crypto';
 import { bigquery } from '@/lib/bigquery';
 import { CALL_COMMERCE_DATASET, CALL_COMMERCE_DEFAULTS, CALL_COMMERCE_LOCATION } from './config';
 import { getCallCommerceSettingsCached } from './settings-store';
 import { ensureCallCommerceSchema } from './schema';
-import { getIntegrationConnection } from '@/lib/integrations/store';
+import { emitMetaSourceEvent } from '@/lib/meta-events/publisher';
 import type { CallingFieldMapping, CallingValueMapping, CanonicalCallEvent } from './types';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || process.env.BQ_PROJECT_ID || '';
@@ -871,89 +871,165 @@ export async function getLeadHistory(
 
   requireProject();
 
-
-  const attemptsPromise =
-    bigquery.query({
-      location:
-        CALL_COMMERCE_LOCATION,
-
-      query: `
-        SELECT *
-        FROM ${table('call_attempts')}
-
-        WHERE workspace_id=@workspace_id
-          AND brand_id=@brand_id
-          AND lead_id=@lead_id
-
-        ORDER BY
-          COALESCE(
-            call_started_at,
-            created_at
-          ) DESC
-
-        LIMIT 50
-      `,
-
-      params: {
-        workspace_id:
-          workspaceId,
-
-        brand_id:
-          brandId,
-
-        lead_id:
-          leadId,
-      },
-    });
-
-
-  const activityPromise =
-    bigquery.query({
-      location:
-        CALL_COMMERCE_LOCATION,
-
-      query: `
-        SELECT *
-        FROM ${table('activity_log')}
-
-        WHERE workspace_id=@workspace_id
-          AND brand_id=@brand_id
-          AND lead_id=@lead_id
-
-        ORDER BY created_at DESC
-
-        LIMIT 100
-      `,
-
-      params: {
-        workspace_id:
-          workspaceId,
-
-        brand_id:
-          brandId,
-
-        lead_id:
-          leadId,
-      },
-    });
-
+  const historyParams = {
+    workspace_id:
+      workspaceId,
+    brand_id:
+      brandId,
+    lead_id:
+      leadId,
+  };
 
   const [
     attemptsResult,
     activityResult,
   ] =
-    await Promise.all([
-      attemptsPromise,
-      activityPromise,
+    await Promise.allSettled([
+      bigquery.query({
+        location:
+          CALL_COMMERCE_LOCATION,
+        query: `
+          SELECT *
+          FROM ${table('call_attempts')}
+          WHERE workspace_id=@workspace_id
+            AND brand_id=@brand_id
+            AND lead_id=@lead_id
+          ORDER BY
+            COALESCE(
+              call_started_at,
+              created_at
+            ) DESC
+          LIMIT 50
+        `,
+        params:
+          historyParams,
+      }),
+      bigquery.query({
+        location:
+          CALL_COMMERCE_LOCATION,
+        query: `
+          SELECT *
+          FROM ${table('activity_log')}
+          WHERE workspace_id=@workspace_id
+            AND brand_id=@brand_id
+            AND lead_id=@lead_id
+          ORDER BY created_at DESC
+          LIMIT 100
+        `,
+        params:
+          historyParams,
+      }),
     ]);
 
+  const errors:
+    string[] = [];
+
+  let attempts:
+    any[] = [];
+
+  let activity:
+    any[] = [];
+
+  if (
+    attemptsResult.status ===
+      'fulfilled'
+  ) {
+    attempts =
+      Array.isArray(
+        attemptsResult.value?.[0]
+      )
+        ?
+          attemptsResult.value[0] as any[]
+        :
+          [];
+  } else {
+    const message =
+      attemptsResult.reason instanceof Error
+        ?
+          attemptsResult.reason.message
+        :
+          String(
+            attemptsResult.reason
+            ||
+            'Unable to load call attempts'
+          );
+
+    console.error(
+      'CALL_COMMERCE_LEAD_ATTEMPTS_ERROR',
+      {
+        workspaceId,
+        brandId,
+        leadId,
+        error:
+          message,
+      }
+    );
+
+    errors.push(
+      `Call attempts: ${message}`
+    );
+  }
+
+  if (
+    activityResult.status ===
+      'fulfilled'
+  ) {
+    activity =
+      Array.isArray(
+        activityResult.value?.[0]
+      )
+        ?
+          activityResult.value[0] as any[]
+        :
+          [];
+  } else {
+    const message =
+      activityResult.reason instanceof Error
+        ?
+          activityResult.reason.message
+        :
+          String(
+            activityResult.reason
+            ||
+            'Unable to load lead activity'
+          );
+
+    console.error(
+      'CALL_COMMERCE_LEAD_ACTIVITY_ERROR',
+      {
+        workspaceId,
+        brandId,
+        leadId,
+        error:
+          message,
+      }
+    );
+
+    errors.push(
+      `Lead activity: ${message}`
+    );
+  }
+
+  if (
+    attemptsResult.status ===
+      'rejected'
+    &&
+    activityResult.status ===
+      'rejected'
+  ) {
+    throw new Error(
+      errors.join(
+        ' | '
+      )
+      ||
+      'CALL_COMMERCE_LEAD_HISTORY_ERROR'
+    );
+  }
 
   return {
-    attempts:
-      attemptsResult[0],
-
-    activity:
-      activityResult[0],
+    attempts,
+    activity,
+    errors,
   };
 }
 
@@ -970,7 +1046,7 @@ export async function updateLeadWorkflow(input: { workspaceId:string; brandId:st
   if (['PURCHASED','UNQUALIFIED','CLOSED_LOST'].includes(String(lead.status)) && input.action !== 'update_details') throw new Error('CALL_LEAD_FINALIZED');
 
   if (input.action === 'update_details') {
-    await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET customer_name=@customer_name,email=@email,product=@product,notes=@notes,next_follow_up_at=@next_follow_up_at,updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { customer_name: input.data?.customerName || null, email: input.data?.email || null, product: input.data?.product || null, notes: input.data?.notes || null, next_follow_up_at: input.data?.nextFollowUpAt || null, actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at: 'TIMESTAMP' } });
+    await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET customer_name=@customer_name,email=@email,product=@product,notes=@notes,next_follow_up_at=@next_follow_up_at,updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { customer_name: input.data?.customerName || null, email: input.data?.email || null, product: input.data?.product || null, notes: input.data?.notes || null, next_follow_up_at: input.data?.nextFollowUpAt || null, actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { customer_name:'STRING', email:'STRING', product:'STRING', notes:'STRING', next_follow_up_at:'TIMESTAMP' } });
     return { status: lead.status };
   }
 
@@ -1042,7 +1118,7 @@ export async function updateLeadWorkflow(input: { workspaceId:string; brandId:st
     throw new Error('CALL_PURCHASE_AMOUNT_REQUIRED');
   }
 
-  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET status=@target,status_changed_at=CURRENT_TIMESTAMP(),unqualified_reason=IF(@target='UNQUALIFIED',@reason,unqualified_reason),closed_lost_reason=IF(@target='CLOSED_LOST',@reason,closed_lost_reason),next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,next_follow_up_at),order_id=IF(@target='PURCHASED',@order_id,order_id),order_amount=IF(@target='PURCHASED',@order_amount,order_amount),purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),purchased_at),updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { target, reason: input.data?.reason || null, next_follow_up_at: input.data?.nextFollowUpAt || null, order_id: input.data?.orderId || null, order_amount: input.data?.orderAmount === undefined ? null : Number(input.data?.orderAmount), actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { next_follow_up_at:'TIMESTAMP', order_amount:'NUMERIC' } });
+  await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `UPDATE ${table('call_leads')} SET status=@target,status_changed_at=CURRENT_TIMESTAMP(),unqualified_reason=IF(@target='UNQUALIFIED',@reason,unqualified_reason),closed_lost_reason=IF(@target='CLOSED_LOST',@reason,closed_lost_reason),next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,next_follow_up_at),order_id=IF(@target='PURCHASED',@order_id,order_id),order_amount=IF(@target='PURCHASED',@order_amount,order_amount),purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),purchased_at),updated_at=CURRENT_TIMESTAMP(),updated_by=@actor WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`, params: { target, reason: input.data?.reason || null, next_follow_up_at: input.data?.nextFollowUpAt || null, order_id: input.data?.orderId || null, order_amount: input.data?.orderAmount === undefined || input.data?.orderAmount === null || input.data?.orderAmount === '' ? null : Number(input.data?.orderAmount), actor: input.actorUserId, workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId }, types: { reason:'STRING', next_follow_up_at:'TIMESTAMP', order_id:'STRING', order_amount:'NUMERIC' } });
 
   await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `INSERT INTO ${table('activity_log')} (activity_id,workspace_id,brand_id,lead_id,activity_type,from_status,to_status,details,actor_user_id,created_at) VALUES (@activity_id,@workspace_id,@brand_id,@lead_id,@activity_type,@from_status,@to_status,PARSE_JSON(@details),@actor,CURRENT_TIMESTAMP())`, params: { activity_id:id('act'), workspace_id:input.workspaceId, brand_id:input.brandId, lead_id:input.leadId, activity_type:input.action, from_status:String(lead.status), to_status:target, details:JSON.stringify(input.data || {}), actor:input.actorUserId } });
 
@@ -1116,15 +1192,172 @@ export async function createManualLead(input:{ workspaceId:string;brandId:string
   return { leadId, attemptId, providerCallId, createdLead, attachedToExistingLead: !createdLead };
 }
 
-export async function queueMetaEvent(input:{ workspaceId:string;brandId:string;leadId:string;callId:string|null;eventKey:string;eventName:string;payload:unknown }) {
-  const metaConnection = await getIntegrationConnection(input.workspaceId, input.brandId, 'meta_events');
-  if (!metaConnection || metaConnection.status !== 'connected') {
-    return null;
-  }
-  const eventCallIdentity = input.eventKey === 'CALL_LEAD_CONNECTED' ? '' : (input.callId || '');
-  const eventId = deterministic('cc_meta', [input.workspaceId,input.brandId,input.eventKey,input.leadId,eventCallIdentity, input.eventKey==='CALL_LEAD_CONVERTED' ? String((input.payload as any)?.order_id || '') : '']);
-  const queueId = deterministic('queue',[input.workspaceId,input.brandId,eventId]);
-  await bigquery.query({ location:CALL_COMMERCE_LOCATION, query:`MERGE ${table('meta_event_queue')} t USING (SELECT @event_id event_id) s ON t.workspace_id=@workspace_id AND t.brand_id=@brand_id AND t.event_id=s.event_id WHEN NOT MATCHED THEN INSERT (queue_id,workspace_id,brand_id,lead_id,call_id,event_key,event_name,event_id,payload,status,attempts,next_attempt_at,created_at,updated_at) VALUES (@queue_id,@workspace_id,@brand_id,@lead_id,@call_id,@event_key,@event_name,@event_id,PARSE_JSON(@payload),'PENDING',0,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())`, params:{ queue_id:queueId,workspace_id:input.workspaceId,brand_id:input.brandId,lead_id:input.leadId,call_id:input.callId,event_key:input.eventKey,event_name:input.eventName,event_id:eventId,payload:JSON.stringify(input.payload ?? {}) } });
+export async function queueMetaEvent(input:{
+  workspaceId:string;
+  brandId:string;
+  leadId:string;
+  callId:string|null;
+  eventKey:string;
+  eventName:string;
+  payload:unknown;
+}) {
+  const eventCallIdentity =
+    input.eventKey ===
+      'CALL_LEAD_CONNECTED'
+      ?
+        ''
+      :
+        (
+          input.callId
+          ||
+          ''
+        );
+
+  const payload =
+    input.payload
+    &&
+    typeof input.payload ===
+      'object'
+      ?
+        input.payload as Record<string, any>
+      :
+        {};
+
+  const eventId =
+    deterministic(
+      'cc_meta',
+      [
+        input.workspaceId,
+        input.brandId,
+        input.eventKey,
+        input.leadId,
+        eventCallIdentity,
+        input.eventKey ===
+          'CALL_LEAD_CONVERTED'
+          ?
+            String(
+              payload?.order_id
+              ||
+              ''
+            )
+          :
+            '',
+      ]
+    );
+
+  const sourceEventMap:
+    Record<string,string> = {
+      CALL_LEAD_CONNECTED:
+        'call_commerce.connected',
+      CALL_LEAD_QUALIFIED:
+        'call_commerce.qualified',
+      CALL_LEAD_UNQUALIFIED:
+        'call_commerce.unqualified',
+      CALL_LEAD_CONVERTED:
+        'call_commerce.purchased',
+    };
+
+  const {
+    phone,
+    email,
+    ...customData
+  } =
+    payload;
+
+  // Preserve the existing Call Commerce export/report contract
+  // without allowing the legacy Call Commerce Meta worker to
+  // send the event a second time. ROUTED is intentionally not
+  // consumed by the old worker, which only reads PENDING/RETRY.
+  const queueId =
+    deterministic(
+      'queue',
+      [input.workspaceId,input.brandId,eventId]
+    );
+
+  await bigquery.query({
+    location: CALL_COMMERCE_LOCATION,
+    query: `
+      MERGE ${table('meta_event_queue')} AS target
+      USING (SELECT @event_id AS event_id) AS source
+      ON target.workspace_id=@workspace_id
+        AND target.brand_id=@brand_id
+        AND target.event_id=source.event_id
+      WHEN NOT MATCHED THEN
+        INSERT (queue_id,workspace_id,brand_id,lead_id,call_id,event_key,event_name,event_id,payload,status,attempts,next_attempt_at,created_at,updated_at)
+        VALUES (@queue_id,@workspace_id,@brand_id,@lead_id,@call_id,@event_key,@event_name,@event_id,PARSE_JSON(@payload),'ROUTED',0,NULL,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP())
+    `,
+    params: {
+      queue_id: queueId,
+      workspace_id: input.workspaceId,
+      brand_id: input.brandId,
+      lead_id: input.leadId,
+      call_id: input.callId,
+      event_key: input.eventKey,
+      event_name: input.eventName,
+      event_id: eventId,
+      payload: JSON.stringify(input.payload ?? {}),
+    },
+    types: {
+      call_id:
+        'STRING',
+    },
+  });
+
+  await emitMetaSourceEvent({
+    sourceEventId:
+      eventId,
+    workspaceId:
+      input.workspaceId,
+    brandId:
+      input.brandId,
+    source:
+      'call_commerce',
+    sourceEvent:
+      sourceEventMap[
+        input.eventKey
+      ]
+      ||
+      `call_commerce.${String(input.eventKey || '').toLowerCase()}`,
+    sourceEntityId:
+      input.leadId,
+    occurredAt:
+      new Date()
+        .toISOString(),
+    identity: {
+      phone:
+        phone
+        ?
+          String(
+            phone
+          )
+        :
+          null,
+      email:
+        email
+        ?
+          String(
+            email
+          )
+        :
+          null,
+      externalId:
+        input.leadId,
+    },
+    data: {
+      ...customData,
+      source_module:
+        'call_commerce',
+      event_key:
+        input.eventKey,
+      configured_meta_event_name:
+        input.eventName,
+      lead_id:
+        input.leadId,
+      call_id:
+        input.callId,
+    },
+  });
+
   return eventId;
 }
 
