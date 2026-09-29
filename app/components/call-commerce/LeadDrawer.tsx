@@ -98,6 +98,8 @@ export default function LeadDrawer({
 
   const [workflowReason, setWorkflowReason] = useState('');
 
+  const [workflowComment, setWorkflowComment] = useState('');
+
   const [orderId, setOrderId] = useState('');
 
   const [orderAmount, setOrderAmount] = useState('');
@@ -133,6 +135,8 @@ export default function LeadDrawer({
     setWorkflow('');
 
     setWorkflowReason('');
+
+    setWorkflowComment('');
 
     setOrderId('');
 
@@ -422,7 +426,12 @@ export default function LeadDrawer({
 
 
 
-    const payload: Record<string, unknown> = {};
+    const payload: Record<string, unknown> = {
+      agentComment:
+        workflowComment.trim()
+        ||
+        null,
+    };
 
 
 
@@ -958,6 +967,44 @@ export default function LeadDrawer({
 
 
 
+                  <label className="mt-3 block">
+
+                    <span className="text-[8px] font-semibold text-slate-500">
+
+                      Agent comment
+
+                      <span className="ml-1 font-normal text-slate-400">
+
+                        (optional)
+
+                      </span>
+
+                    </span>
+
+                    <textarea
+
+                      rows={3}
+
+                      value={workflowComment}
+
+                      onChange={(event) =>
+                        setWorkflowComment(
+                          event.target.value
+                        )
+                      }
+
+                      disabled={actionBusy}
+
+                      placeholder="Add context for this status change..."
+
+                      className="mt-1 w-full resize-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[9px] text-slate-700 outline-none transition placeholder:text-slate-300 focus:border-slate-400 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-70"
+
+                    />
+
+                  </label>
+
+
+
                   <button
 
                     onClick={runWorkflow}
@@ -1313,53 +1360,181 @@ export default function LeadDrawer({
 
               <div className="divide-y divide-slate-100">
 
-                {activity.slice(0, 20).map((item: any) => (
+                {activity.slice(0, 20).map((item: any) => {
 
-                  <div
+                  const details =
+                    parseActivityDetails(
+                      item.details
+                    );
 
-                    key={item.activity_id}
+                  const agentComment =
+                    cleanActivityText(
+                      details.agentComment
+                    );
 
-                    className="flex items-start justify-between gap-4 px-4 py-3"
+                  const reason =
+                    cleanActivityText(
+                      details.reason
+                    );
 
-                  >
+                  const followUpAt =
+                    cleanActivityText(
+                      details.nextFollowUpAt
+                    );
 
-                    <div>
+                  const activityOrderId =
+                    cleanActivityText(
+                      details.orderId
+                    );
 
-                      <div className="text-[9px] font-semibold text-slate-700">
+                  const activityOrderAmount =
+                    cleanActivityText(
+                      details.orderAmount
+                    );
 
-                        {String(
+                  return (
 
-                          item.activity_type || 'activity'
+                    <div
 
-                        ).replaceAll('_', ' ')}
+                      key={item.activity_id}
+
+                      className="px-4 py-3"
+
+                    >
+
+                      <div className="flex items-start justify-between gap-4">
+
+                        <div className="min-w-0">
+
+                          <div className="text-[9px] font-semibold text-slate-700">
+
+                            {String(
+
+                              item.activity_type || 'activity'
+
+                            ).replaceAll('_', ' ')}
+
+                          </div>
+
+                          <div className="mt-1 text-[8px] text-slate-400">
+
+                            {item.from_status
+
+                              ? `${item.from_status} → ${
+
+                                  item.to_status || '—'
+
+                                }`
+
+                              : item.to_status || ''}
+
+                          </div>
+
+                        </div>
+
+                        <div className="shrink-0 text-right text-[8px] text-slate-400">
+
+                          {formatDateTime(item.created_at)}
+
+                        </div>
 
                       </div>
 
-                      <div className="mt-1 text-[8px] text-slate-400">
 
-                        {item.from_status
 
-                          ? `${item.from_status} → ${
+                      {agentComment && (
 
-                              item.to_status || '—'
+                        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
 
-                            }`
+                          <div className="text-[7px] font-semibold uppercase tracking-wide text-slate-400">
 
-                          : item.to_status || ''}
+                            Agent comment
 
-                      </div>
+                          </div>
+
+                          <div className="mt-1 whitespace-pre-wrap break-words text-[9px] leading-4 text-slate-700">
+
+                            {agentComment}
+
+                          </div>
+
+                        </div>
+
+                      )}
+
+
+
+                      {(reason ||
+
+                        followUpAt ||
+
+                        activityOrderId ||
+
+                        activityOrderAmount) && (
+
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[8px] text-slate-400">
+
+                          {reason && (
+
+                            <span>
+
+                              Reason: {reason}
+
+                            </span>
+
+                          )}
+
+                          {followUpAt && (
+
+                            <span>
+
+                              Follow-up: {formatDateTime(followUpAt)}
+
+                            </span>
+
+                          )}
+
+                          {activityOrderId && (
+
+                            <span>
+
+                              Order: {activityOrderId}
+
+                            </span>
+
+                          )}
+
+                          {activityOrderAmount && (
+
+                            <span>
+
+                              Amount: {activityOrderAmount}
+
+                            </span>
+
+                          )}
+
+                        </div>
+
+                      )}
+
+
+
+                      {item.actor_user_id && (
+
+                        <div className="mt-2 text-[7px] text-slate-300">
+
+                          Updated by {String(item.actor_user_id)}
+
+                        </div>
+
+                      )}
 
                     </div>
 
-                    <div className="text-right text-[8px] text-slate-400">
+                  );
 
-                      {formatDateTime(item.created_at)}
-
-                    </div>
-
-                  </div>
-
-                ))}
+                })}
 
               </div>
 
@@ -1373,6 +1548,141 @@ export default function LeadDrawer({
 
     </div>
 
+  );
+
+}
+
+
+
+function parseActivityDetails(
+  value: unknown
+):
+  Record<string, unknown> {
+
+  if (
+    !value
+  ) {
+
+    return {};
+
+  }
+
+  if (
+    typeof value ===
+      'object'
+    &&
+    !Array.isArray(
+      value
+    )
+  ) {
+
+    const maybeWrapped =
+      value as
+        Record<string, unknown>;
+
+    if (
+      typeof maybeWrapped.value ===
+        'string'
+    ) {
+
+      try {
+
+        const parsed =
+          JSON.parse(
+            maybeWrapped.value
+          );
+
+        if (
+          parsed
+          &&
+          typeof parsed ===
+            'object'
+          &&
+          !Array.isArray(
+            parsed
+          )
+        ) {
+
+          return parsed as
+            Record<string, unknown>;
+
+        }
+
+      } catch {
+
+        return maybeWrapped;
+
+      }
+
+    }
+
+    return maybeWrapped;
+
+  }
+
+  if (
+    typeof value ===
+      'string'
+  ) {
+
+    try {
+
+      const parsed =
+        JSON.parse(
+          value
+        );
+
+      if (
+        parsed
+        &&
+        typeof parsed ===
+          'object'
+        &&
+        !Array.isArray(
+          parsed
+        )
+      ) {
+
+        return parsed as
+          Record<string, unknown>;
+
+      }
+
+    } catch {
+
+      return {};
+
+    }
+
+  }
+
+  return {};
+
+}
+
+
+
+function cleanActivityText(
+  value: unknown
+) {
+
+  if (
+    value ===
+      null
+    ||
+    value ===
+      undefined
+    ||
+    value ===
+      ''
+  ) {
+
+    return '';
+
+  }
+
+  return String(
+    value
   );
 
 }
