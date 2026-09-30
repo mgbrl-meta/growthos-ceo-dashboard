@@ -19,12 +19,22 @@ import {
 } from './shopify-writer.js';
 
 import {
+  writeShopifyOrderLineItemSnapshots,
+} from './shopify-order-line-item-writer.js';
+
+import {
   writeShopifyCustomers,
 } from './shopify-customer-writer.js';
 
 import {
   writeShopifyProducts,
 } from './shopify-product-writer.js';
+
+import {
+  probeShopifyOrderCoreContract,
+  probeShopifyOrderLineItemContract,
+  probeShopifyOrdersWithLineItemsContract,
+} from './shopify-commerce-probe.js';
 
 import {
   startOrdersBulkOperation,
@@ -106,6 +116,11 @@ import {
 import {
   superviseShopifyWarehouseRefresh,
 } from './shopify-warehouse-refresh.js';
+
+import {
+  emitShopifyOrderCanonicalMetaEvents,
+  shopifyOrderNeedsCustomerEnrichment,
+} from './shopify-meta-events-adapter.js';
 
 // ============================================================
 // APP
@@ -573,12 +588,12 @@ function validateShopifyMessage(
     customerId:
       payload.customerId
       ??
-      null,  
+      null,
 
     productId:
       payload.productId
       ??
-      null,  
+      null,
 
     webhookTopic:
       payload.webhookTopic
@@ -593,7 +608,7 @@ function validateShopifyMessage(
     shopDomain:
       payload.shopDomain
       ??
-      null,  
+      null,
 
   };
 
@@ -1197,6 +1212,16 @@ app.post(
             'SHOPIFY_WEBHOOK_ORDER_NOT_FOUND'
           );
 
+        if (
+          !fetched.lineItemSnapshot
+        ) {
+
+          throw new Error(
+            'SHOPIFY_WEBHOOK_LINE_ITEM_SNAPSHOT_MISSING'
+          );
+
+        }
+
         }
 
 
@@ -1220,6 +1245,148 @@ app.post(
 
           });
 
+        const lineItemWarehouse =
+          await writeShopifyOrderLineItemSnapshots({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            snapshots: [
+
+              fetched.lineItemSnapshot,
+
+            ],
+
+          });
+
+
+        // ====================================================
+        // SHOPIFY_CANONICAL_META_EVENTS_ADAPTER
+        //
+        // Realtime only.
+        //
+        // The Shopify webhook is only the change signal.
+        // We publish from the canonical Admin GraphQL object
+        // after the warehouse write.
+        //
+        // Publication is intentionally NOT gated on
+        // warehouse.changed. If Meta Events publication fails,
+        // Pub/Sub retries the Shopify job and deterministic
+        // sourceEventIds make the repeat safe.
+        // ====================================================
+
+        let metaCustomer =
+          fetched
+            .order
+            ?.customer
+          ??
+          null;
+
+
+        if (
+          shopifyOrderNeedsCustomerEnrichment(
+            fetched.order
+          )
+        ) {
+          const metaCustomerId =
+            String(
+              fetched
+                .order
+                ?.customer
+                ?.id
+              ??
+              ''
+            ).trim();
+
+
+          const customerFetched =
+            await fetchShopifyCustomerById(
+              runtime,
+              metaCustomerId
+            );
+
+
+          if (
+            customerFetched.customer
+          ) {
+            metaCustomer =
+              customerFetched.customer;
+
+
+            await writeShopifyCustomers({
+              workspaceId:
+                job.workspaceId,
+
+              brandId:
+                job.brandId,
+
+              integrationAccountId:
+                job.integrationAccountId,
+
+              customers: [
+                customerFetched.customer,
+              ],
+            });
+          }
+        }
+
+
+        const canonicalMetaEvents =
+          await emitShopifyOrderCanonicalMetaEvents({
+            job,
+
+            order:
+              fetched.order,
+
+            customer:
+              metaCustomer,
+
+            lineItems:
+              fetched.lineItems
+              ??
+              fetched.lineItemSnapshot
+              ??
+              fetched.lineItemsSnapshot
+              ??
+              fetched.order?.lineItems
+              ??
+              null,
+
+            warehouse,
+          });
+
+
+        console.log(
+          'SHOPIFY_CANONICAL_META_EVENTS_READY',
+          {
+            orderId:
+              job.orderId,
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            planned:
+              canonicalMetaEvents.planned,
+
+            published:
+              canonicalMetaEvents.published,
+
+            events:
+              canonicalMetaEvents.events,
+
+            purchaseNumber:
+              canonicalMetaEvents.purchaseNumber,
+          }
+        );
 
         console.log(
           'SHOPIFY_ORDER_WEBHOOK_COMPLETED',
@@ -1274,6 +1441,39 @@ app.post(
 
             warehouseLoaded:
               warehouse.loaded,
+
+                        lineItemCount:
+              fetched
+                .lineItemStats
+                ?.lineItems
+              ??
+              0,
+
+            lineItemOverflowPages:
+              fetched
+                .lineItemStats
+                ?.overflowPages
+              ??
+              0,
+
+            lineItemOverflowItems:
+              fetched
+                .lineItemStats
+                ?.overflowItems
+              ??
+              0,
+
+            lineItemSnapshotsQueued:
+              lineItemWarehouse
+                .queuedSnapshots
+              ??
+              0,
+
+            lineItemWarehouseReceived:
+              lineItemWarehouse
+                .received
+              ??
+              0,
 
             durationMs:
               Date.now()
@@ -2000,7 +2200,7 @@ app.post(
             'customers'
           ||
           job.entity ===
-            'products'  
+            'products'
         );
 
       const isSupportedIncremental =
@@ -2546,7 +2746,7 @@ if (
               job.brandId,
 
             entity:
-              backfillEntity,  
+              backfillEntity,
 
             backfillRunId:
               job.backfillRunId,
@@ -3605,6 +3805,29 @@ if (
       let totalLoaded =
         0;
 
+            let totalLineItemSnapshots =
+        0;
+
+
+      let totalLineItems =
+        0;
+
+
+      let totalLineItemSnapshotsQueued =
+        0;
+
+
+      let totalLineItemOverflowOrders =
+        0;
+
+
+      let totalLineItemOverflowPages =
+        0;
+
+
+      let totalLineItemOverflowItems =
+        0;
+
 
       let tokenRefreshed =
         false;
@@ -3738,6 +3961,39 @@ if (
 
           });
 
+                if (
+          !Array.isArray(
+            page.lineItemSnapshots
+          )
+          ||
+          page.lineItemSnapshots.length !==
+            page.orders.length
+        ) {
+
+          throw new Error(
+            'SHOPIFY_LINE_ITEM_SNAPSHOT_COUNT_MISMATCH'
+          );
+
+        }
+
+
+        const lineItemWarehouse =
+          await writeShopifyOrderLineItemSnapshots({
+
+            workspaceId:
+              job.workspaceId,
+
+            brandId:
+              job.brandId,
+
+            integrationAccountId:
+              job.integrationAccountId,
+
+            snapshots:
+              page.lineItemSnapshots,
+
+          });
+
 
         totalFetched +=
           page.orders.length;
@@ -3767,9 +4023,66 @@ if (
           );
 
 
-        totalLoaded +=
+                totalLoaded +=
           Number(
             warehouse.loaded
+            ??
+            0
+          );
+
+
+        // ====================================================
+        // LINE ITEM TOTALS
+        // ====================================================
+
+        totalLineItemSnapshots +=
+          page.lineItemSnapshots.length;
+
+
+        totalLineItems +=
+          Number(
+            page
+              .lineItemStats
+              ?.lineItems
+            ??
+            0
+          );
+
+
+        totalLineItemSnapshotsQueued +=
+          Number(
+            lineItemWarehouse
+              .queuedSnapshots
+            ??
+            0
+          );
+
+
+        totalLineItemOverflowOrders +=
+          Number(
+            page
+              .lineItemStats
+              ?.overflowOrders
+            ??
+            0
+          );
+
+
+        totalLineItemOverflowPages +=
+          Number(
+            page
+              .lineItemStats
+              ?.overflowPages
+            ??
+            0
+          );
+
+
+        totalLineItemOverflowItems +=
+          Number(
+            page
+              .lineItemStats
+              ?.overflowItems
             ??
             0
           );
@@ -3855,6 +4168,43 @@ if (
 
             warehouseLoaded:
               warehouse.loaded,
+
+                        lineItemSnapshots:
+              page.lineItemSnapshots.length,
+
+            lineItemsFetched:
+              page
+                .lineItemStats
+                ?.lineItems
+              ??
+              0,
+
+            lineItemOverflowOrders:
+              page
+                .lineItemStats
+                ?.overflowOrders
+              ??
+              0,
+
+            lineItemOverflowPages:
+              page
+                .lineItemStats
+                ?.overflowPages
+              ??
+              0,
+
+            lineItemOverflowItems:
+              page
+                .lineItemStats
+                ?.overflowItems
+              ??
+              0,
+
+            lineItemSnapshotsQueued:
+              lineItemWarehouse
+                .queuedSnapshots
+              ??
+              0,
 
           }
         );
@@ -4011,6 +4361,24 @@ if (
 
           warehouseLoaded:
             totalLoaded,
+
+                    lineItemSnapshots:
+            totalLineItemSnapshots,
+
+          lineItemsFetched:
+            totalLineItems,
+
+          lineItemSnapshotsQueued:
+            totalLineItemSnapshotsQueued,
+
+          lineItemOverflowOrders:
+            totalLineItemOverflowOrders,
+
+          lineItemOverflowPages:
+            totalLineItemOverflowPages,
+
+          lineItemOverflowItems:
+            totalLineItemOverflowItems,
 
           durationMs:
             Date.now()
@@ -6355,6 +6723,616 @@ app.post(
   }
 );
 
+// ============================================================
+// SHOPIFY COMMERCE CONTRACT V2 PROBE
+//
+// READ ONLY.
+//
+// Purpose:
+//
+// - validate Commerce Contract V2 against real Shopify
+// - measure GraphQL query cost
+// - determine safe incremental page size
+//
+// Does NOT:
+// - write BigQuery
+// - update sync state
+// - start Bulk Operations
+// - mutate Shopify
+// - return customer/order payload data
+// ============================================================
+
+app.post(
+  '/internal/shopify/commerce-contract-probe',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+    try {
+
+      const input =
+        req.body
+        ??
+        {};
+
+      // ======================================================
+      // EXISTING GROWTH OS / SHOPIFY IDENTITY
+      // ======================================================
+
+      const job = {
+
+        workspaceId:
+          requireString(
+            input.workspaceId,
+            'SHOPIFY_JOB_WORKSPACE_MISSING'
+          ),
+
+        brandId:
+          requireString(
+            input.brandId,
+            'SHOPIFY_JOB_BRAND_MISSING'
+          ),
+
+        connectionId:
+          requireString(
+            input.connectionId,
+            'SHOPIFY_JOB_CONNECTION_MISSING'
+          ),
+
+        integrationAccountId:
+          requireString(
+            input.integrationAccountId,
+            'SHOPIFY_JOB_ACCOUNT_MISSING'
+          ),
+
+        providerAccountId:
+          requireString(
+            input.providerAccountId,
+            'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
+          ),
+
+      };
+
+
+      // ======================================================
+      // AUTHORITATIVE RUNTIME / CREDENTIAL RESOLUTION
+      // ======================================================
+
+      const runtime =
+        await resolveShopifyRuntimeContext(
+          job
+        );
+
+
+      // ======================================================
+      // READ-ONLY SHOPIFY GRAPHQL PROBE
+      // ======================================================
+
+      const result =
+        await probeShopifyOrderCoreContract(
+
+          runtime,
+
+          {
+
+            first:
+              input.first
+              ??
+              1,
+
+          }
+
+        );
+
+
+      // ======================================================
+      // SAFE DIAGNOSTIC LOG
+      //
+      // No order data / PII is logged.
+      // ======================================================
+
+      console.log(
+        'SHOPIFY_COMMERCE_CONTRACT_PROBE_OK',
+        {
+
+          workspaceId:
+            job.workspaceId,
+
+          brandId:
+            job.brandId,
+
+          integrationAccountId:
+            job.integrationAccountId,
+
+          commerceContractVersion:
+            result.commerceContractVersion,
+
+          orderContractVersion:
+            result.orderContractVersion,
+
+          requestedPageSize:
+            result.requestedPageSize,
+
+          requestedQueryCost:
+            result
+              .cost
+              ?.requestedQueryCost
+            ??
+            null,
+
+          actualQueryCost:
+            result
+              .cost
+              ?.actualQueryCost
+            ??
+            null,
+
+          returnedTopLevelFieldCount:
+            result.returnedTopLevelFieldCount,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result: {
+
+            ...result,
+
+            durationMs:
+              Date.now()
+              -
+              startedAt,
+
+          },
+
+        });
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ??
+          'Shopify commerce contract probe failed'
+        );
+
+      console.error(
+        'SHOPIFY_COMMERCE_CONTRACT_PROBE_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_COMMERCE_CONTRACT_PROBE_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+// ============================================================
+// ORDER LINE ITEM CONTRACT PROBE
+//
+// READ ONLY.
+//
+// No warehouse writes.
+// No state mutation.
+// No Shopify mutation.
+// ============================================================
+
+app.post(
+  '/internal/shopify/line-item-contract-probe',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const input =
+        req.body
+        ??
+        {};
+
+
+      const job = {
+
+        workspaceId:
+          requireString(
+            input.workspaceId,
+            'SHOPIFY_JOB_WORKSPACE_MISSING'
+          ),
+
+        brandId:
+          requireString(
+            input.brandId,
+            'SHOPIFY_JOB_BRAND_MISSING'
+          ),
+
+        connectionId:
+          requireString(
+            input.connectionId,
+            'SHOPIFY_JOB_CONNECTION_MISSING'
+          ),
+
+        integrationAccountId:
+          requireString(
+            input.integrationAccountId,
+            'SHOPIFY_JOB_ACCOUNT_MISSING'
+          ),
+
+        providerAccountId:
+          requireString(
+            input.providerAccountId,
+            'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
+          ),
+
+      };
+
+
+      const orderId =
+        requireString(
+          input.orderId,
+          'SHOPIFY_LINE_ITEM_PROBE_ORDER_ID_MISSING'
+        );
+
+
+      const runtime =
+        await resolveShopifyRuntimeContext(
+          job
+        );
+
+
+      const result =
+        await probeShopifyOrderLineItemContract(
+
+          runtime,
+
+          {
+
+            orderId,
+
+            first:
+              input.first
+              ??
+              1,
+
+          }
+
+        );
+
+
+      console.log(
+        'SHOPIFY_LINE_ITEM_CONTRACT_PROBE_OK',
+        {
+
+          workspaceId:
+            job.workspaceId,
+
+          brandId:
+            job.brandId,
+
+          integrationAccountId:
+            job.integrationAccountId,
+
+          lineItemContractVersion:
+            result.lineItemContractVersion,
+
+          requestedPageSize:
+            result.requestedPageSize,
+
+          returnedLineItemCount:
+            result.returnedLineItemCount,
+
+          requestedQueryCost:
+            result
+              .cost
+              ?.requestedQueryCost
+            ??
+            null,
+
+          actualQueryCost:
+            result
+              .cost
+              ?.actualQueryCost
+            ??
+            null,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ??
+          'SHOPIFY_LINE_ITEM_CONTRACT_PROBE_FAILED'
+        );
+
+
+      console.error(
+        'SHOPIFY_LINE_ITEM_CONTRACT_PROBE_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_LINE_ITEM_CONTRACT_PROBE_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
+
+// ============================================================
+// ORDERS + LINE ITEMS COMBINED COST PROBE
+//
+// READ ONLY.
+// ============================================================
+
+app.post(
+  '/internal/shopify/orders-line-items-contract-probe',
+
+  async (
+    req,
+    res
+  ) => {
+
+    const startedAt =
+      Date.now();
+
+
+    try {
+
+      const input =
+        req.body
+        ??
+        {};
+
+
+      const job = {
+
+        workspaceId:
+          requireString(
+            input.workspaceId,
+            'SHOPIFY_JOB_WORKSPACE_MISSING'
+          ),
+
+        brandId:
+          requireString(
+            input.brandId,
+            'SHOPIFY_JOB_BRAND_MISSING'
+          ),
+
+        connectionId:
+          requireString(
+            input.connectionId,
+            'SHOPIFY_JOB_CONNECTION_MISSING'
+          ),
+
+        integrationAccountId:
+          requireString(
+            input.integrationAccountId,
+            'SHOPIFY_JOB_ACCOUNT_MISSING'
+          ),
+
+        providerAccountId:
+          requireString(
+            input.providerAccountId,
+            'SHOPIFY_JOB_PROVIDER_ACCOUNT_MISSING'
+          ),
+
+      };
+
+
+      const runtime =
+        await resolveShopifyRuntimeContext(
+          job
+        );
+
+
+      const result =
+        await probeShopifyOrdersWithLineItemsContract(
+
+          runtime,
+
+          {
+
+            ordersFirst:
+              input.ordersFirst
+              ??
+              1,
+
+            lineItemsFirst:
+              input.lineItemsFirst
+              ??
+              5,
+
+          }
+
+        );
+
+
+      console.log(
+        'SHOPIFY_ORDERS_LINE_ITEMS_CONTRACT_PROBE_OK',
+        {
+
+          workspaceId:
+            job.workspaceId,
+
+          brandId:
+            job.brandId,
+
+          requestedOrdersPageSize:
+            result.requestedOrdersPageSize,
+
+          requestedLineItemsPageSize:
+            result.requestedLineItemsPageSize,
+
+          requestedQueryCost:
+            result
+              .cost
+              ?.requestedQueryCost
+            ??
+            null,
+
+          actualQueryCost:
+            result
+              .cost
+              ?.actualQueryCost
+            ??
+            null,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(200)
+        .json({
+
+          ok:
+            true,
+
+          result,
+
+        });
+
+
+    } catch (
+      error
+    ) {
+
+      const message =
+        String(
+          error?.message
+          ??
+          'SHOPIFY_ORDERS_LINE_ITEMS_CONTRACT_PROBE_FAILED'
+        );
+
+
+      console.error(
+        'SHOPIFY_ORDERS_LINE_ITEMS_CONTRACT_PROBE_FAILED',
+        {
+
+          message,
+
+          durationMs:
+            Date.now()
+            -
+            startedAt,
+
+        }
+      );
+
+
+      return res
+        .status(500)
+        .json({
+
+          ok:
+            false,
+
+          error:
+            'SHOPIFY_ORDERS_LINE_ITEMS_CONTRACT_PROBE_FAILED',
+
+          message,
+
+        });
+
+    }
+
+  }
+);
 
 app.listen(
   PORT,

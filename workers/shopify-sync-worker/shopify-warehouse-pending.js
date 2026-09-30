@@ -187,6 +187,7 @@ export async function enqueueShopifyWarehouseRecords(
       'orders',
       'customers',
       'products',
+      'order_line_items',
     ].includes(
       entity
     )

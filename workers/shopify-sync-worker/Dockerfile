@@ -23,8 +23,19 @@ COPY shopify-api.js ./
 COPY shopify-writer.js ./
 COPY shopify-customer-writer.js ./
 COPY shopify-product-writer.js ./
+
+COPY shopify-meta-events-adapter.js ./
+COPY meta-events-publisher.js ./
+
+# Order Line Items
+COPY shopify-order-line-item-writer.js ./
+COPY shopify-order-line-item-bulk-warehouse.js ./
+
 COPY shopify-warehouse-pending.js ./
 COPY shopify-warehouse-refresh.js ./
+
+COPY shopify-commerce-contract.js ./
+COPY shopify-commerce-probe.js ./
 
 COPY shopify-bulk.js ./
 COPY shopify-backfill-state.js ./

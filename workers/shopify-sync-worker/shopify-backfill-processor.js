@@ -19,6 +19,10 @@ import {
 } from './shopify-bulk-warehouse.js';
 
 import {
+  writeShopifyOrderLineItemBulkStage,
+} from './shopify-order-line-item-bulk-warehouse.js';
+
+import {
   writeShopifyCustomerBulkStage,
 } from './shopify-customer-bulk-warehouse.js';
 
@@ -252,19 +256,19 @@ function buildRuntimeJob(
 // Multiple calls are safe:
 //
 // running
-//    ↓
+//    â†“
 // status check
 //
 // result_ready
-//    ↓
+//    â†“
 // conditional loading claim
 //
 // loading
-//    ↓
+//    â†“
 // another processor owns it
 //
 // completed
-//    ↓
+//    â†“
 // return immediately
 // ============================================================
 
@@ -533,6 +537,12 @@ export async function processShopifyBackfillWindow(
       objectCount:
         operation.rootObjectCount,
 
+      rootObjectCount:
+  operation.rootObjectCount,
+
+totalObjectCount:
+  operation.objectCount,
+
       fileSize:
         operation.fileSize,
 
@@ -613,7 +623,7 @@ export async function processShopifyBackfillWindow(
 
 
   // ==========================================================
-  // running → result_ready
+  // running â†’ result_ready
   //
   // markBackfillResultReady is safe for redelivery.
   // ==========================================================
@@ -723,7 +733,7 @@ export async function processShopifyBackfillWindow(
   // CLAIM HIGH-SPEED LOAD
   //
   // result_ready / retry_wait
-  //            ↓
+  //            â†“
   //          loading
   // ==========================================================
 
@@ -804,7 +814,7 @@ export async function processShopifyBackfillWindow(
   try {
 
     // ========================================================
-    // SHOPIFY JSONL → GCS
+    // SHOPIFY JSONL â†’ GCS
     //
     // Deterministic and idempotent.
     // Existing object is reused.
@@ -854,7 +864,7 @@ export async function processShopifyBackfillWindow(
 
 
     // ========================================================
-    // GCS → LOSSLESS BIGQUERY STAGE
+    // GCS â†’ LOSSLESS BIGQUERY STAGE
     // ========================================================
 
     const stage =
@@ -872,58 +882,307 @@ export async function processShopifyBackfillWindow(
       });
 
 
-    if (
-      operation.rootObjectCount > 0
-      &&
-      stage.rowsLoaded !==
+    // ========================================================
+// STAGE COUNT VALIDATION
+//
+// Customers / Products:
+//   JSONL rows = rootObjectCount
+//
+// Orders V2:
+//   JSONL rows = objectCount
+//             = Orders + LineItem children
+//
+// We therefore validate Orders against Shopify's TOTAL
+// objectCount while preserving rootObjectCount for the
+// canonical Order count.
+// ========================================================
+
+if (
+  entity ===
+    'orders'
+) {
+
+  if (
+    operation.objectCount !==
+      null
+    &&
+    operation.objectCount !==
+      undefined
+    &&
+    stage.rowsLoaded !==
+      Number(
+        operation.objectCount
+      )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_STAGE_TOTAL_OBJECT_COUNT_MISMATCH'
+    );
+
+  }
+
+} else {
+
+  if (
+    operation.rootObjectCount !==
+      null
+    &&
+    operation.rootObjectCount !==
+      undefined
+    &&
+    stage.rowsLoaded !==
+      Number(
         operation.rootObjectCount
-    ) {
+      )
+  ) {
 
-      throw new Error(
-        'SHOPIFY_BACKFILL_STAGE_ROW_COUNT_MISMATCH'
-      );
+    throw new Error(
+      'SHOPIFY_BACKFILL_STAGE_ROW_COUNT_MISMATCH'
+    );
 
-    }
+  }
+
+}
 
 
     // ========================================================
-    // LOSSLESS STAGE → CANONICAL RAW + STATE
+    // LOSSLESS STAGE â†’ CANONICAL RAW + STATE
     //
     // CURRENT remains a view.
     // ========================================================
 
     const warehouse =
-      await warehouseWriter({
+  await warehouseWriter({
 
-        workspaceId:
-          runtimeJob.workspaceId,
+    workspaceId:
+      runtimeJob.workspaceId,
 
-        brandId:
-          runtimeJob.brandId,
+    brandId:
+      runtimeJob.brandId,
 
-        integrationAccountId:
-          runtimeJob.integrationAccountId,
+    integrationAccountId:
+      runtimeJob.integrationAccountId,
 
-        stageTableId:
-          stage.tableId,
+    stageTableId:
+      stage.tableId,
 
-      });
+  });
 
 
-    if (
-      warehouse.received !==
+// ========================================================
+// ORDERS V2 CHILD WAREHOUSE
+//
+// ONE Shopify Bulk operation:
+//
+// Order roots
+// +
+// LineItem children
+//
+// Order roots continue through the existing Orders writer.
+//
+// LineItem children go through the dedicated SET-BASED
+// historical writer into the SAME Line Item RAW / STATE /
+// CURRENT canonical warehouse used by realtime/incremental.
+// ========================================================
+
+let lineItemWarehouse =
+  null;
+
+
+if (
+  entity ===
+    'orders'
+) {
+
+  const classifiedOrderRows =
+    Number(
+      warehouse
+        ?.validation
+        ?.orderRows
+      ??
+      0
+    );
+
+  const classifiedLineItemRows =
+    Number(
+      warehouse
+        ?.validation
+        ?.lineItemRows
+      ??
+      0
+    );
+
+
+  // ======================================================
+  // ROOT OBJECT CONTRACT
+  //
+  // Shopify rootObjectCount must equal the number of
+  // classified Order roots in the staged JSONL.
+  // ======================================================
+
+  if (
+    operation.rootObjectCount !==
+      null
+    &&
+    operation.rootObjectCount !==
+      undefined
+    &&
+    classifiedOrderRows !==
+      Number(
+        operation.rootObjectCount
+      )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_ORDER_ROOT_COUNT_MISMATCH'
+    );
+
+  }
+
+
+  // ======================================================
+  // ORDER WRITER CONTRACT
+  // ======================================================
+
+  if (
+    Number(
+      warehouse.received
+      ??
+      0
+    )
+    !==
+    classifiedOrderRows
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_ORDER_WAREHOUSE_COUNT_MISMATCH'
+    );
+
+  }
+
+
+  // ======================================================
+  // LINE ITEM WRITER
+  // ======================================================
+
+  lineItemWarehouse =
+    await writeShopifyOrderLineItemBulkStage({
+
+      workspaceId:
+        runtimeJob.workspaceId,
+
+      brandId:
+        runtimeJob.brandId,
+
+      integrationAccountId:
+        runtimeJob.integrationAccountId,
+
+      stageTableId:
+        stage.tableId,
+
+    });
+
+
+  // ======================================================
+  // CHILD COUNT CONTRACT
+  // ======================================================
+
+  if (
+    Number(
+      lineItemWarehouse.received
+      ??
+      0
+    )
+    !==
+    classifiedLineItemRows
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_LINE_ITEM_WAREHOUSE_COUNT_MISMATCH'
+    );
+
+  }
+
+
+  // ======================================================
+  // COMPLETE SNAPSHOT CONTRACT
+  //
+  // Every root Order in the Bulk stage must also have an
+  // Order snapshot available to the Line Item writer,
+  // including Orders containing zero current Line Items.
+  // ======================================================
+
+  if (
+    Number(
+      lineItemWarehouse.orderSnapshots
+      ??
+      0
+    )
+    !==
+    classifiedOrderRows
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_LINE_ITEM_SNAPSHOT_COUNT_MISMATCH'
+    );
+
+  }
+
+
+  // ======================================================
+  // FINAL STAGE CLASSIFICATION CONTRACT
+  // ======================================================
+
+  if (
+    (
+      classifiedOrderRows
+      +
+      classifiedLineItemRows
+    )
+    !==
+      Number(
         stage.rowsLoaded
-    ) {
+        ??
+        0
+      )
+  ) {
 
-      throw new Error(
-        'SHOPIFY_BACKFILL_WAREHOUSE_ROW_COUNT_MISMATCH'
-      );
+    throw new Error(
+      'SHOPIFY_BACKFILL_CLASSIFIED_STAGE_COUNT_MISMATCH'
+    );
 
-    }
+  }
 
+} else {
+
+  // ======================================================
+  // EXISTING CUSTOMERS / PRODUCTS CONTRACT
+  // ======================================================
+
+  if (
+    Number(
+      warehouse.received
+      ??
+      0
+    )
+    !==
+      Number(
+        stage.rowsLoaded
+        ??
+        0
+      )
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BACKFILL_WAREHOUSE_ROW_COUNT_MISMATCH'
+    );
+
+  }
+
+}
 
     // ========================================================
-    // loading → completed
+    // loading â†’ completed
     //
     // Existing state function also reconciles run counters.
     // ========================================================
@@ -969,12 +1228,18 @@ export async function processShopifyBackfillWindow(
         id:
           bulkOperationId,
 
-        objectCount:
-          operation.rootObjectCount,
+         // Backward-compatible root entity count.
+  objectCount:
+    operation.rootObjectCount,
 
-        fileSize:
-          operation.fileSize,
+  rootObjectCount:
+    operation.rootObjectCount,
 
+  totalObjectCount:
+    operation.objectCount,
+
+  fileSize:
+    operation.fileSize,
       },
 
       gcs: {
@@ -1030,6 +1295,42 @@ export async function processShopifyBackfillWindow(
         -
         startedAt,
 
+      lineItems:
+  lineItemWarehouse
+    ?
+      {
+
+        orderSnapshots:
+          lineItemWarehouse.orderSnapshots,
+
+        received:
+          lineItemWarehouse.received,
+
+        changed:
+          lineItemWarehouse.changed,
+
+        skipped:
+          lineItemWarehouse.skipped,
+
+        loaded:
+          lineItemWarehouse.loaded,
+
+        rawInserted:
+          lineItemWarehouse.rawInserted,
+
+        rawAlreadyPresent:
+          lineItemWarehouse.rawAlreadyPresent,
+
+        removed:
+          lineItemWarehouse.removed,
+
+        durationMs:
+          lineItemWarehouse.durationMs,
+
+      }
+    :
+      null,
+
     };
 
 
@@ -1049,7 +1350,7 @@ export async function processShopifyBackfillWindow(
     // Release ONLY if we still own the load state.
     //
     // loading
-    //    ↓
+    //    â†“
     // retry_wait
     // ========================================================
 

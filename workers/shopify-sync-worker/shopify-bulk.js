@@ -2,6 +2,11 @@ import {
   getValidShopifyAccessToken,
 } from './shopify-auth.js';
 
+import {
+  SHOPIFY_ORDER_CORE_SELECTION,
+  SHOPIFY_ORDER_LINE_ITEM_SELECTION,
+} from './shopify-commerce-contract.js';
+
 
 const API_VERSION =
   String(
@@ -72,6 +77,7 @@ function buildOrdersBulkQuery(
   return `
 
     {
+
       orders(
         query: "${search}"
         sortKey: CREATED_AT
@@ -81,102 +87,39 @@ function buildOrdersBulkQuery(
 
           node {
 
-            id
-            legacyResourceId
-            name
-
-            createdAt
-            updatedAt
-            cancelledAt
-            closedAt
-
-            currencyCode
-
-            displayFinancialStatus
-            displayFulfillmentStatus
-
-            email
-            sourceName
-            tags
+            ${SHOPIFY_ORDER_CORE_SELECTION}
 
 
-            currentSubtotalPriceSet {
+            # ==================================================
+            # ORDER LINE ITEMS
+            #
+            # Shopify Bulk emits every LineItem as a separate
+            # JSONL object.
+            #
+            # For those child rows:
+            #
+            # __parentId = Order GID
+            #
+            # Growth OS will NOT retain __parentId inside the
+            # canonical Line Item payload. It is used only to
+            # establish order_id.
+            #
+            # Orders and Line Items therefore remain separate
+            # canonical warehouse entities.
+            # ==================================================
 
-              shopMoney {
-                amount
-                currencyCode
+            lineItems {
+
+              edges {
+
+                node {
+
+                  ${SHOPIFY_ORDER_LINE_ITEM_SELECTION}
+
+                }
+
               }
 
-              presentmentMoney {
-                amount
-                currencyCode
-              }
-
-            }
-
-
-            currentTotalDiscountsSet {
-
-              shopMoney {
-                amount
-                currencyCode
-              }
-
-              presentmentMoney {
-                amount
-                currencyCode
-              }
-
-            }
-
-
-            currentTotalTaxSet {
-
-              shopMoney {
-                amount
-                currencyCode
-              }
-
-              presentmentMoney {
-                amount
-                currencyCode
-              }
-
-            }
-
-
-            currentShippingPriceSet {
-
-              shopMoney {
-                amount
-                currencyCode
-              }
-
-              presentmentMoney {
-                amount
-                currencyCode
-              }
-
-            }
-
-
-            currentTotalPriceSet {
-
-              shopMoney {
-                amount
-                currencyCode
-              }
-
-              presentmentMoney {
-                amount
-                currencyCode
-              }
-
-            }
-
-
-            customer {
-              id
             }
 
           }
@@ -190,7 +133,6 @@ function buildOrdersBulkQuery(
   `;
 
 }
-
 
 // ============================================================
 // CUSTOMERS BULK QUERY

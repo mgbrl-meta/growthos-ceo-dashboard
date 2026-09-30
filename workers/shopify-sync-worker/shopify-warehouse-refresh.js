@@ -14,6 +14,10 @@ import {
   writeShopifyProducts,
 } from './shopify-product-writer.js';
 
+import {
+  writeShopifyOrderLineItemSnapshots,
+} from './shopify-order-line-item-writer.js';
+
 
 const PROJECT_ID =
   String(
@@ -124,10 +128,10 @@ function timestampValue(
 
   if (
     value ===
-    null
+      null
     ||
     value ===
-    undefined
+      undefined
   ) {
 
     return null;
@@ -135,33 +139,312 @@ function timestampValue(
   }
 
 
+  let normalized;
+
+
   if (
     typeof value ===
       'string'
   ) {
 
-    return value;
+    normalized =
+      value;
+
+  } else if (
+    value?.value !==
+      null
+    &&
+    value?.value !==
+      undefined
+  ) {
+
+    normalized =
+      String(
+        value.value
+      );
+
+  } else {
+
+    normalized =
+      String(
+        value
+      );
 
   }
 
 
-  if (
-    value?.value
+  normalized =
+    normalized.trim();
+
+
+  // ==========================================================
+  // REMOVE OPTIONAL SERIALIZATION WRAPPER QUOTES
+  // ==========================================================
+
+  while (
+    normalized.length >=
+      2
+    &&
+    (
+      (
+        normalized.startsWith(
+          "'"
+        )
+        &&
+        normalized.endsWith(
+          "'"
+        )
+      )
+      ||
+      (
+        normalized.startsWith(
+          '"'
+        )
+        &&
+        normalized.endsWith(
+          '"'
+        )
+      )
+    )
   ) {
 
-    return String(
-      value.value
+    normalized =
+      normalized
+        .slice(
+          1,
+          -1
+        )
+        .trim();
+
+  }
+
+
+  // ==========================================================
+  // BIGQUERY TIMESTAMP PRECISION
+  //
+  // BigQuery TIMESTAMP is microsecond precision.
+  //
+  // The Node client may expose a timestamp wrapper such as:
+  //
+  // 2026-09-27T10:07:25.165999000Z
+  //
+  // TIMESTAMP(string) must receive:
+  //
+  // 2026-09-27T10:07:25.165999Z
+  //
+  // Keep the first six fractional digits and discard any
+  // additional precision. Do not use JavaScript Date here,
+  // because Date would reduce this to millisecond precision.
+  // ==========================================================
+
+  normalized =
+    normalized.replace(
+      /(\.\d{6})\d+(?=Z$|[+-]\d{2}:\d{2}$)/,
+      '$1'
+    );
+
+
+  return normalized
+    ||
+    null;
+
+}
+
+// ============================================================
+// CANONICAL WAREHOUSE ENTITY SUPPORT
+//
+// IMPORTANT:
+//
+// The warehouse uses one brand-level pending cutoff.
+//
+// Therefore a worker MUST NOT advance that cutoff if the
+// pending window contains an entity this worker version does
+// not understand.
+//
+// This is an upgrade-safety boundary.
+//
+// Example:
+//
+// old worker:
+//   orders
+//   customers
+//   products
+//
+// newer producer:
+//   order_line_items
+//
+// Without this guard, the old worker could silently advance
+// past order_line_items and permanently skip that data.
+// ============================================================
+
+const SUPPORTED_WAREHOUSE_ENTITIES =
+  Object.freeze([
+
+    'orders',
+
+    'customers',
+
+    'products',
+
+    'order_line_items',
+
+  ]);
+
+async function assertPendingEntitiesSupported(
+  input
+) {
+
+  const [
+    rows,
+  ] =
+    await bigquery.query({
+
+      query: `
+
+        SELECT DISTINCT
+
+          entity
+
+        FROM
+          \`${PROJECT_ID}.${DATASET_ID}.${PENDING_TABLE}\`
+
+        WHERE
+
+          queued_at >=
+            TIMESTAMP_SUB(
+              CURRENT_TIMESTAMP(),
+              INTERVAL 14 DAY
+            )
+
+          AND workspace_id =
+            @workspace_id
+
+          AND brand_id =
+            @brand_id
+
+          AND queued_at >
+            TIMESTAMP(
+              @after_cutoff
+            )
+
+          AND queued_at <=
+            TIMESTAMP(
+              @cutoff
+            )
+
+        ORDER BY
+          entity
+
+      `,
+
+      location:
+        LOCATION,
+
+      params: {
+
+        workspace_id:
+          input.workspaceId,
+
+        brand_id:
+          input.brandId,
+
+        after_cutoff:
+          input.afterCutoff,
+
+        cutoff:
+          input.cutoff,
+
+      },
+
+      types: {
+
+        workspace_id:
+          'STRING',
+
+        brand_id:
+          'STRING',
+
+        after_cutoff:
+          'STRING',
+
+        cutoff:
+          'STRING',
+
+      },
+
+    });
+
+
+  const pendingEntities =
+    rows
+      .map(
+        row =>
+          String(
+            row.entity
+            ??
+            ''
+          ).trim()
+      )
+      .filter(
+        Boolean
+      );
+
+
+  const unsupportedEntities =
+    pendingEntities.filter(
+      entity =>
+        !SUPPORTED_WAREHOUSE_ENTITIES.includes(
+          entity
+        )
+    );
+
+
+  if (
+    unsupportedEntities.length >
+      0
+  ) {
+
+    console.error(
+      'SHOPIFY_WAREHOUSE_UNSUPPORTED_PENDING_ENTITIES',
+      {
+
+        workspaceId:
+          input.workspaceId,
+
+        brandId:
+          input.brandId,
+
+        afterCutoff:
+          input.afterCutoff,
+
+        cutoff:
+          input.cutoff,
+
+        unsupportedEntities,
+
+        supportedEntities:
+          SUPPORTED_WAREHOUSE_ENTITIES,
+
+      }
+    );
+
+
+    throw new Error(
+      `SHOPIFY_WAREHOUSE_UNSUPPORTED_PENDING_ENTITIES:${unsupportedEntities.join(',')}`
     );
 
   }
 
 
-  return String(
-    value
-  );
+  return {
+
+    pendingEntities,
+
+    unsupportedEntities,
+
+  };
 
 }
-
 
 async function ensureMissingPolicies() {
 
@@ -680,6 +963,32 @@ async function writeCanonicalChunk(
 
   }
 
+    if (
+    input.entity ===
+      'order_line_items'
+  ) {
+
+    return writeShopifyOrderLineItemSnapshots({
+
+      workspaceId:
+        input.workspaceId,
+
+      brandId:
+        input.brandId,
+
+      integrationAccountId:
+        input.integrationAccountId,
+
+      snapshots:
+        input.records,
+
+      bypassWarehouseDeferral:
+        true,
+
+    });
+
+  }
+
 
   throw new Error(
     'WAREHOUSE_REFRESH_ENTITY_UNSUPPORTED'
@@ -971,9 +1280,32 @@ async function flushBrand(
     ||
     '1970-01-01T00:00:00.000Z';
 
-  const cutoff =
+    const cutoff =
     new Date()
       .toISOString();
+
+
+  // ==========================================================
+  // UPGRADE-SAFETY GUARD
+  //
+  // Inspect the entire pending window BEFORE writing any
+  // entity and BEFORE advancing the shared brand cutoff.
+  //
+  // Unknown entity = fail closed.
+  // ==========================================================
+
+  const entityCompatibility =
+    await assertPendingEntitiesSupported({
+
+      workspaceId,
+
+      brandId,
+
+      afterCutoff,
+
+      cutoff,
+
+    });
 
 
   const totals = {
@@ -1007,11 +1339,7 @@ async function flushBrand(
 
   for (
     const entity
-    of [
-      'orders',
-      'customers',
-      'products',
-    ]
+    of SUPPORTED_WAREHOUSE_ENTITIES
   ) {
 
     totals[entity] =
@@ -1065,6 +1393,14 @@ async function flushBrand(
       afterCutoff,
 
     cutoff,
+
+    pendingEntities:
+      entityCompatibility
+        .pendingEntities,
+
+    supportedEntities:
+      SUPPORTED_WAREHOUSE_ENTITIES,
+
     totals,
 
   };

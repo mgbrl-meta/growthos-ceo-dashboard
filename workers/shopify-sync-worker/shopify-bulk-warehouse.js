@@ -182,41 +182,177 @@ async function validateStage(
 
       query: `
 
+        WITH inspected AS
+        (
+
+          SELECT
+
+            payload_raw,
+
+            SAFE.PARSE_JSON(
+              payload_raw
+            )
+              AS parsed_json,
+
+            JSON_VALUE(
+              payload_raw,
+              '$.id'
+            )
+              AS record_id,
+
+            JSON_VALUE(
+              payload_raw,
+              '$.__parentId'
+            )
+              AS parent_id
+
+          FROM
+            \`${PROJECT_ID}.${STAGE_DATASET}.${input.stageTableId}\`
+
+        )
+
         SELECT
 
           COUNT(*)
             AS rows_loaded,
 
+
           COUNTIF(
-            SAFE.PARSE_JSON(
-              payload_raw
-            )
-            IS NULL
+            parsed_json IS NULL
           )
             AS invalid_json,
 
+
           COUNTIF(
-            JSON_VALUE(
-              payload_raw,
-              '$.id'
-            )
-            IS NULL
+            record_id IS NULL
+            OR
+            TRIM(record_id) = ''
           )
             AS missing_id,
+
 
           COUNT(*)
           -
           COUNT(
-            DISTINCT
-            JSON_VALUE(
-              payload_raw,
-              '$.id'
+            DISTINCT record_id
+          )
+            AS duplicate_ids,
+
+
+          -- ==================================================
+          -- ROOT ORDER ROWS
+          --
+          -- Bulk root Orders have no __parentId.
+          -- ==================================================
+
+          COUNTIF(
+            STARTS_WITH(
+              record_id,
+              'gid://shopify/Order/'
+            )
+            AND parent_id IS NULL
+          )
+            AS order_rows,
+
+
+          -- ==================================================
+          -- LINE ITEM CHILD ROWS
+          --
+          -- Shopify Bulk child contract:
+          --
+          -- id         = LineItem GID
+          -- __parentId = Order GID
+          -- ==================================================
+
+          COUNTIF(
+            STARTS_WITH(
+              record_id,
+              'gid://shopify/LineItem/'
+            )
+            AND STARTS_WITH(
+              IFNULL(
+                parent_id,
+                ''
+              ),
+              'gid://shopify/Order/'
             )
           )
-            AS duplicate_ids
+            AS line_item_rows,
+
+
+          -- ==================================================
+          -- INVALID LINE ITEM PARENT
+          -- ==================================================
+
+          COUNTIF(
+            STARTS_WITH(
+              record_id,
+              'gid://shopify/LineItem/'
+            )
+            AND NOT STARTS_WITH(
+              IFNULL(
+                parent_id,
+                ''
+              ),
+              'gid://shopify/Order/'
+            )
+          )
+            AS invalid_line_item_parent,
+
+
+          -- ==================================================
+          -- UNKNOWN / UNSUPPORTED JSONL OBJECT
+          --
+          -- Fail closed.
+          --
+          -- If another nested connection is ever added to the
+          -- Shopify Bulk contract, the historical pipeline must
+          -- be upgraded deliberately rather than silently
+          -- treating it as an Order.
+          -- ==================================================
+
+          COUNTIF(
+
+            parsed_json IS NOT NULL
+
+            AND record_id IS NOT NULL
+
+            AND TRIM(record_id) != ''
+
+            AND NOT
+            (
+
+              (
+                STARTS_WITH(
+                  record_id,
+                  'gid://shopify/Order/'
+                )
+                AND parent_id IS NULL
+              )
+
+              OR
+
+              (
+                STARTS_WITH(
+                  record_id,
+                  'gid://shopify/LineItem/'
+                )
+                AND STARTS_WITH(
+                  IFNULL(
+                    parent_id,
+                    ''
+                  ),
+                  'gid://shopify/Order/'
+                )
+              )
+
+            )
+
+          )
+            AS unknown_rows
 
         FROM
-          \`${PROJECT_ID}.${STAGE_DATASET}.${input.stageTableId}\`
+          inspected
 
       `,
 
@@ -262,40 +398,109 @@ async function validateStage(
         0
       ),
 
+    orderRows:
+      Number(
+        row.order_rows
+        ??
+        0
+      ),
+
+    lineItemRows:
+      Number(
+        row.line_item_rows
+        ??
+        0
+      ),
+
+    invalidLineItemParent:
+      Number(
+        row.invalid_line_item_parent
+        ??
+        0
+      ),
+
+    unknownRows:
+      Number(
+        row.unknown_rows
+        ??
+        0
+      ),
+
   };
 
 
   if (
-    result.invalidJson !==
+    result.invalidJson >
       0
   ) {
 
     throw new Error(
-      'SHOPIFY_BULK_WAREHOUSE_INVALID_JSON'
+      'SHOPIFY_BULK_STAGE_INVALID_JSON'
     );
 
   }
 
 
   if (
-    result.missingId !==
+    result.missingId >
       0
   ) {
 
     throw new Error(
-      'SHOPIFY_BULK_WAREHOUSE_ORDER_ID_MISSING'
+      'SHOPIFY_BULK_STAGE_MISSING_ID'
     );
 
   }
 
 
   if (
-    result.duplicateIds !==
+    result.duplicateIds >
       0
   ) {
 
     throw new Error(
-      'SHOPIFY_BULK_WAREHOUSE_DUPLICATE_ORDER_IDS'
+      'SHOPIFY_BULK_STAGE_DUPLICATE_ID'
+    );
+
+  }
+
+
+  if (
+    result.invalidLineItemParent >
+      0
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BULK_STAGE_LINE_ITEM_PARENT_INVALID'
+    );
+
+  }
+
+
+  if (
+    result.unknownRows >
+      0
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BULK_STAGE_UNSUPPORTED_OBJECT'
+    );
+
+  }
+
+
+  if (
+    (
+      result.orderRows
+      +
+      result.lineItemRows
+    )
+    !==
+      result.rowsLoaded
+  ) {
+
+    throw new Error(
+      'SHOPIFY_BULK_STAGE_CLASSIFICATION_MISMATCH'
     );
 
   }
@@ -304,7 +509,6 @@ async function validateStage(
   return result;
 
 }
-
 
 // ============================================================
 // CANONICAL NORMALIZATION SQL
@@ -434,6 +638,22 @@ function canonicalSql(
 
       FROM
         \`${PROJECT_ID}.${STAGE_DATASET}.${stageTableId}\`
+
+            WHERE
+
+        STARTS_WITH(
+          JSON_VALUE(
+            payload_raw,
+            '$.id'
+          ),
+          'gid://shopify/Order/'
+        )
+
+        AND JSON_VALUE(
+          payload_raw,
+          '$.__parentId'
+        )
+          IS NULL
 
     )
 
