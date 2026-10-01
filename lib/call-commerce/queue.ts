@@ -20,16 +20,16 @@ export type CallCommerceCallEventJob = {
   payload: unknown;
 };
 
-export type CallCommerceMetaFlushJob = {
+export type CallCommerceFlushJob = {
   version: 1;
-  jobType: 'meta_flush';
+  jobType: 'meta_flush' | 'analytics_flush';
   jobId: string;
   requestedAt: string;
   workspaceId: string;
   brandId: string;
 };
 
-export type CallCommerceJob = CallCommerceCallEventJob | CallCommerceMetaFlushJob;
+export type CallCommerceJob = CallCommerceCallEventJob | CallCommerceFlushJob;
 
 export function newCallDeliveryId() {
   return `cce_${crypto.randomUUID().replace(/-/g, '')}`;
@@ -63,6 +63,18 @@ export async function enqueueMetaFlush(workspaceId: string, brandId: string) {
     version: 1,
     jobType: 'meta_flush',
     jobId: `ccm_${crypto.randomUUID().replace(/-/g, '')}`,
+    requestedAt: new Date().toISOString(),
+    workspaceId,
+    brandId,
+  });
+}
+
+
+export async function enqueueAnalyticsFlush(workspaceId: string, brandId: string) {
+  return enqueueCallCommerceJob({
+    version: 1,
+    jobType: 'analytics_flush',
+    jobId: `cca_${crypto.randomUUID().replace(/-/g, '')}`,
     requestedAt: new Date().toISOString(),
     workspaceId,
     brandId,

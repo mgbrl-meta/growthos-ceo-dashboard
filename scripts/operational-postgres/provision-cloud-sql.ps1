@@ -1,0 +1,220 @@
+param(
+  [string]$RepoRoot = "",
+  [string]$ProjectId = "shopify-colab",
+  [string]$Region = "asia-south1",
+  [string]$InstanceName = "growthos-operational",
+  [string]$DatabaseVersion = "POSTGRES_16",
+  [string]$Edition = "ENTERPRISE",
+  [string]$Tier = "db-g1-small",
+  [int]$StorageSizeGB = 20,
+  [string]$DatabaseName = "growthos",
+  [string]$DatabaseUser = "growthos_app",
+  [string]$PasswordSecret = "growthos-postgres-password",
+  [switch]$Yes
+)
+
+$ErrorActionPreference = "Stop"
+
+function Invoke-Gcloud {
+  param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+  & gcloud @Args
+  if ($LASTEXITCODE -ne 0) { throw "gcloud failed: gcloud $($Args -join ' ')" }
+}
+
+function Get-GcloudValue {
+  param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+
+  # gcloud.ps1 writes expected lookup misses (for example a 404 when an
+  # instance/secret does not exist yet) to PowerShell's error stream. With
+  # $ErrorActionPreference = "Stop", that can become a terminating
+  # NativeCommandError before we get a chance to inspect $LASTEXITCODE.
+  # Suppress native stderr only for these existence/value probes, then return
+  # an empty string when gcloud reports a non-zero exit code. Mutating gcloud
+  # commands still use Invoke-Gcloud and remain fail-fast.
+  $PreviousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'SilentlyContinue'
+    $value = & gcloud @Args 2>$null
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $PreviousErrorActionPreference
+  }
+
+  if ($exitCode -ne 0) { return "" }
+  return ([string]($value -join "`n")).Trim()
+}
+
+function New-RandomPassword {
+  param([int]$Length = 48)
+  $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+  $bytes = New-Object byte[] $Length
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  try {
+    $rng.GetBytes($bytes)
+  } finally {
+    $rng.Dispose()
+  }
+  $chars = for ($i = 0; $i -lt $Length; $i++) {
+    $alphabet[$bytes[$i] % $alphabet.Length]
+  }
+  return -join $chars
+}
+
+function Read-EnvValue {
+  param([string]$Path,[string]$Name)
+  if (-not (Test-Path $Path)) { return "" }
+  $line = Get-Content $Path | Where-Object { $_ -match "^\s*$([Regex]::Escape($Name))\s*=" } | Select-Object -First 1
+  if (-not $line) { return "" }
+  $value = ($line -split '=',2)[1].Trim()
+  if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+    $value = $value.Substring(1,$value.Length-2)
+  }
+  return $value
+}
+
+if (-not $RepoRoot) {
+  $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+  $RepoRoot = (Resolve-Path (Join-Path $ScriptDir "..\..")).Path
+} else {
+  $RepoRoot = (Resolve-Path $RepoRoot).Path
+}
+
+Write-Host ""
+Write-Host "Growth OS Operational PostgreSQL V1 - Cloud SQL provisioner" -ForegroundColor Cyan
+Write-Host "Project:       $ProjectId"
+Write-Host "Region:        $Region"
+Write-Host "Instance:      $InstanceName"
+Write-Host "PostgreSQL:    $DatabaseVersion"
+Write-Host "Edition:       $Edition"
+Write-Host "Tier:          $Tier"
+Write-Host "Storage:       $StorageSizeGB GB SSD (auto-grow)"
+Write-Host "Database:      $DatabaseName"
+Write-Host "User:          $DatabaseUser"
+Write-Host ""
+Write-Warning "Cloud SQL is a billable Google Cloud resource. The default tier is intentionally small and can be resized later."
+
+if (-not $Yes) {
+  $answer = Read-Host "Create/reuse this Cloud SQL instance and continue? (YES to continue)"
+  if ($answer -ne 'YES') { throw "Provisioning cancelled." }
+}
+
+Invoke-Gcloud config set project $ProjectId | Out-Null
+Invoke-Gcloud services enable `
+  sqladmin.googleapis.com `
+  secretmanager.googleapis.com `
+  run.googleapis.com `
+  pubsub.googleapis.com `
+  cloudbuild.googleapis.com `
+  artifactregistry.googleapis.com `
+  --project=$ProjectId | Out-Null
+
+$InstanceConnectionName = Get-GcloudValue sql instances describe $InstanceName `
+  --project=$ProjectId --format="value(connectionName)"
+
+if (-not $InstanceConnectionName) {
+  Write-Host "Creating Cloud SQL PostgreSQL instance..." -ForegroundColor Cyan
+  Invoke-Gcloud sql instances create $InstanceName `
+    --project=$ProjectId `
+    --database-version=$DatabaseVersion `
+    --edition=$Edition `
+    --region=$Region `
+    --tier=$Tier `
+    --availability-type=zonal `
+    --storage-type=SSD `
+    --storage-size=$StorageSizeGB `
+    --storage-auto-increase `
+    --assign-ip
+
+  $InstanceConnectionName = Get-GcloudValue sql instances describe $InstanceName `
+    --project=$ProjectId --format="value(connectionName)"
+}
+
+if (-not $InstanceConnectionName) { throw "Unable to resolve Cloud SQL connection name." }
+Write-Host "Cloud SQL connection name: $InstanceConnectionName" -ForegroundColor Green
+
+$DatabaseExists = Get-GcloudValue sql databases list `
+  --project=$ProjectId --instance=$InstanceName `
+  --filter="name=$DatabaseName" --format="value(name)"
+if (-not $DatabaseExists) {
+  Invoke-Gcloud sql databases create $DatabaseName `
+    --project=$ProjectId --instance=$InstanceName
+}
+
+$DbPassword = New-RandomPassword
+$UserExists = Get-GcloudValue sql users list `
+  --project=$ProjectId --instance=$InstanceName `
+  --filter="name=$DatabaseUser" --format="value(name)"
+if ($UserExists) {
+  Invoke-Gcloud sql users set-password $DatabaseUser `
+    --project=$ProjectId --instance=$InstanceName `
+    --password=$DbPassword
+} else {
+  Invoke-Gcloud sql users create $DatabaseUser `
+    --project=$ProjectId --instance=$InstanceName `
+    --password=$DbPassword
+}
+
+$SecretExists = Get-GcloudValue secrets describe $PasswordSecret `
+  --project=$ProjectId --format="value(name)"
+if (-not $SecretExists) {
+  Invoke-Gcloud secrets create $PasswordSecret `
+    --project=$ProjectId --replication-policy=automatic
+}
+
+$TempSecret = Join-Path $env:TEMP "growthos-postgres-password-$([Guid]::NewGuid().ToString('N')).txt"
+try {
+  $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($TempSecret,$DbPassword,$Utf8NoBom)
+  Invoke-Gcloud secrets versions add $PasswordSecret `
+    --project=$ProjectId --data-file=$TempSecret | Out-Null
+} finally {
+  Remove-Item $TempSecret -Force -ErrorAction SilentlyContinue
+}
+
+# Grant the dashboard/Vercel service account access when it can be resolved
+# from the repo's existing GCP environment configuration.
+$EnvFile = Join-Path $RepoRoot '.env.local'
+$DashboardServiceAccount = Read-EnvValue -Path $EnvFile -Name 'GCP_CLIENT_EMAIL'
+if ($DashboardServiceAccount) {
+  Write-Host "Granting dashboard service account Cloud SQL + Secret Manager access: $DashboardServiceAccount"
+  Invoke-Gcloud projects add-iam-policy-binding $ProjectId `
+    --member="serviceAccount:$DashboardServiceAccount" `
+    --role="roles/cloudsql.client" `
+    --condition=None | Out-Null
+  # The active operator may have project IAM permission but not
+  # secretmanager.secrets.setIamPolicy on an individual secret.
+  # Grant the runtime service account Secret Manager access at project scope
+  # so provisioning remains automatable with the same IAM capability already
+  # used for the Cloud SQL Client role.
+  Invoke-Gcloud projects add-iam-policy-binding $ProjectId `
+    --member="serviceAccount:$DashboardServiceAccount" `
+    --role="roles/secretmanager.secretAccessor" `
+    --condition=None | Out-Null
+} else {
+  Write-Warning "GCP_CLIENT_EMAIL was not found in .env.local. Grant roles/cloudsql.client and Secret Manager accessor to the dashboard service account before PostgreSQL cutover."
+}
+
+# Current-process configuration for migration/backfill/validation scripts.
+$env:GCP_PROJECT_ID = $ProjectId
+$env:GROWTHOS_PG_INSTANCE_CONNECTION_NAME = $InstanceConnectionName
+$env:GROWTHOS_PG_DATABASE = $DatabaseName
+$env:GROWTHOS_PG_USER = $DatabaseUser
+$env:GROWTHOS_PG_PASSWORD_SECRET = $PasswordSecret
+$env:GROWTHOS_PG_IP_TYPE = 'PUBLIC'
+$env:GROWTHOS_CALL_COMMERCE_DATASET = 'growthos_call_commerce'
+$env:GROWTHOS_CALL_COMMERCE_LOCATION = $Region
+
+Write-Host ""
+Write-Host "Cloud SQL provisioned. Install dependencies, then run:" -ForegroundColor Green
+Write-Host "  node scripts/operational-postgres/migrate.mjs"
+Write-Host "  node scripts/operational-postgres/backfill-call-commerce.mjs"
+Write-Host "  node scripts/operational-postgres/validate-call-commerce.mjs"
+Write-Host ""
+Write-Host "Vercel/runtime environment values (no database password is exposed):" -ForegroundColor Cyan
+Write-Host "  GROWTHOS_CALL_COMMERCE_STORE=postgres"
+Write-Host "  GROWTHOS_PG_INSTANCE_CONNECTION_NAME=$InstanceConnectionName"
+Write-Host "  GROWTHOS_PG_DATABASE=$DatabaseName"
+Write-Host "  GROWTHOS_PG_USER=$DatabaseUser"
+Write-Host "  GROWTHOS_PG_PASSWORD_SECRET=$PasswordSecret"
+Write-Host "  GROWTHOS_PG_IP_TYPE=PUBLIC"
+Write-Host ""

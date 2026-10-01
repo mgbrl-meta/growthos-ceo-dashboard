@@ -19,7 +19,12 @@ import {
 } from './call-commerce-meta-worker.js';
 
 import {
+  processAnalyticsOutbox,
+} from './call-commerce-analytics-worker.js';
+
+import {
   enqueueMetaFlush,
+  enqueueAnalyticsFlush,
 } from './call-commerce-queue.js';
 
 
@@ -138,7 +143,7 @@ function validateCallCommerceMessage(payload) {
       'CALL_COMMERCE_JOB_TYPE_MISSING'
     );
 
-  if (!['call_event', 'meta_flush'].includes(jobType)) {
+  if (!['call_event', 'meta_flush', 'analytics_flush'].includes(jobType)) {
     throw new Error('CALL_COMMERCE_JOB_TYPE_UNSUPPORTED');
   }
 
@@ -154,14 +159,16 @@ function validateCallCommerceMessage(payload) {
       'CALL_COMMERCE_JOB_BRAND_MISSING'
     );
 
-  if (jobType === 'meta_flush') {
+  if (jobType === 'meta_flush' || jobType === 'analytics_flush') {
     return {
       version: 1,
       jobType,
       jobId:
         requireString(
           payload.jobId,
-          'CALL_COMMERCE_META_JOB_ID_MISSING'
+          jobType === 'meta_flush'
+            ? 'CALL_COMMERCE_META_JOB_ID_MISSING'
+            : 'CALL_COMMERCE_ANALYTICS_JOB_ID_MISSING'
         ),
       requestedAt: payload.requestedAt ?? null,
       workspaceId,
@@ -389,6 +396,24 @@ async function processCallEvent(job, message) {
       );
     }
 
+    // BigQuery stays downstream analytics only. Exporting is a separate
+    // asynchronous queue hop and never blocks operational call ingestion.
+    try {
+      await enqueueAnalyticsFlush(
+        context.workspace_id,
+        context.brand_id
+      );
+    } catch (error) {
+      console.error(
+        'CALL_COMMERCE_ANALYTICS_ENQUEUE_FAILED',
+        {
+          workspaceId: context.workspace_id,
+          brandId: context.brand_id,
+          error: error?.message || 'ANALYTICS_ENQUEUE_FAILED',
+        }
+      );
+    }
+
     return {
       acknowledged: true,
       rawEventId,
@@ -524,6 +549,28 @@ app.post(
     }
 
     try {
+      if (job.jobType === 'analytics_flush') {
+        const result =
+          await processAnalyticsOutbox(
+            job.workspaceId,
+            job.brandId
+          );
+
+        console.log(
+          'CALL_COMMERCE_ANALYTICS_FLUSH_COMPLETED',
+          {
+            pubsubMessageId: message.messageId ?? null,
+            jobId: job.jobId,
+            workspaceId: job.workspaceId,
+            brandId: job.brandId,
+            result,
+            durationMs: Date.now() - startedAt,
+          }
+        );
+
+        return res.status(204).end();
+      }
+
       if (job.jobType === 'meta_flush') {
         const result =
           await processMetaQueue(

@@ -31,33 +31,38 @@ const pubsub =
   });
 
 
-export async function enqueueMetaFlush(workspaceId, brandId) {
-  const jobId = `ccm_${crypto.randomUUID().replace(/-/g, '')}`;
+async function enqueueFlushJob(jobType, workspaceId, brandId) {
+  const prefix = jobType === 'analytics_flush' ? 'cca' : 'ccm';
+  const jobId = `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
 
   const payload = {
     version: 1,
-    jobType: 'meta_flush',
+    jobType,
     jobId,
     requestedAt: new Date().toISOString(),
     workspaceId,
     brandId,
   };
 
-  const messageId =
-    await pubsub
-      .topic(TOPIC)
-      .publishMessage({
-        data: Buffer.from(JSON.stringify(payload), 'utf8'),
-        attributes: {
-          job_type: 'meta_flush',
-          workspace_id: String(workspaceId),
-          brand_id: String(brandId),
-          job_id: jobId,
-        },
-      });
+  const messageId = await pubsub
+    .topic(TOPIC)
+    .publishMessage({
+      data: Buffer.from(JSON.stringify(payload), 'utf8'),
+      attributes: {
+        job_type: jobType,
+        workspace_id: String(workspaceId),
+        brand_id: String(brandId),
+        job_id: jobId,
+      },
+    });
 
-  return {
-    jobId,
-    messageId,
-  };
+  return { jobId, messageId };
+}
+
+export function enqueueMetaFlush(workspaceId, brandId) {
+  return enqueueFlushJob('meta_flush', workspaceId, brandId);
+}
+
+export function enqueueAnalyticsFlush(workspaceId, brandId) {
+  return enqueueFlushJob('analytics_flush', workspaceId, brandId);
 }

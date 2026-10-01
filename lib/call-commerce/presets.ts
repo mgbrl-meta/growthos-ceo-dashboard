@@ -17,7 +17,10 @@ export const MSG91_PRESET: CallingProviderPreset = {
   aliases: ['msg 91'],
   fieldMappings: [
     { canonicalField: 'providerCallId', sourcePath: '$.uuid', required: true },
-    { canonicalField: 'customerPhone', sourcePath: '$.source', transform: 'phone', required: true },
+    { canonicalField: 'providerEventId', sourcePath: '$.requestId' },
+    // MSG91 uses source for inbound and destination for outbound. The
+    // normalizer resolves customerPhone direction-aware after generic mapping.
+    { canonicalField: 'customerPhone', sourcePath: '$.source', transform: 'phone' },
     { canonicalField: 'businessNumber', sourcePath: '$.callerId', transform: 'phone' },
     { canonicalField: 'agentName', sourcePath: '$.agentName' },
     { canonicalField: 'startedAt', sourcePath: '$.startTime', transform: 'timestamp' },

@@ -122,18 +122,28 @@ function isMsg91Provider(providerKey) {
   return normalizeProviderName(providerKey) === 'msg91';
 }
 
-function partyFromMsg91Disconnect(disconnectedBy, connected) {
+function partyFromMsg91Disconnect(disconnectedBy, connected, direction) {
   const side = normalizeDisconnectValue(disconnectedBy);
+
+  // Outbound MSG91 reverses source/destination relative to the customer:
+  // destination is the customer; source/caller is the business/agent side.
+  if (direction === 'OUTBOUND') {
+    if (['destination', 'callee', 'customer'].includes(side)) {
+      return 'CUSTOMER';
+    }
+
+    if (['source', 'caller', 'agent'].includes(side)) {
+      return connected ? 'AGENT' : 'BUSINESS_ROUTING';
+    }
+
+    return 'UNKNOWN';
+  }
 
   if (['source', 'caller', 'customer'].includes(side)) {
     return 'CUSTOMER';
   }
 
-  if (['destination', 'callee'].includes(side)) {
-    return connected ? 'AGENT' : 'BUSINESS_ROUTING';
-  }
-
-  if (['agent'].includes(side)) {
+  if (['destination', 'callee', 'agent'].includes(side)) {
     return connected ? 'AGENT' : 'BUSINESS_ROUTING';
   }
 
@@ -149,7 +159,8 @@ function deriveMsg91Outcome(input) {
 
   const answeredEvidence =
     ivrStatuses.some(status => ['answered', 'connected', 'success'].includes(status))
-    || ['answered', 'connected'].includes(rawStatus);
+    || ['answered', 'connected'].includes(rawStatus)
+    || (rawEventType === 'completed' && Number(input.durationSeconds || 0) > 0);
 
   const noAnswerEvidence =
     ivrStatuses.some(status => ['no-answer', 'noanswer', 'unanswered', 'missed'].includes(status))
@@ -172,6 +183,9 @@ function deriveMsg91Outcome(input) {
 
   const disconnectedByDestination =
     ['destination', 'callee', 'agent'].includes(disconnectedBy);
+
+  const callerDroppedBeforeAnswer =
+    input.direction !== 'OUTBOUND' && disconnectedBySource;
 
   let eventType = input.eventType;
 
@@ -205,7 +219,7 @@ function deriveMsg91Outcome(input) {
     }
 
     const disconnectParty =
-      partyFromMsg91Disconnect(disconnectedBy, true);
+      partyFromMsg91Disconnect(disconnectedBy, true, input.direction);
 
     return {
       eventType,
@@ -228,14 +242,14 @@ function deriveMsg91Outcome(input) {
     || cancelledEvidence
   ) {
     const disconnectParty =
-      partyFromMsg91Disconnect(disconnectedBy, false);
+      partyFromMsg91Disconnect(disconnectedBy, false, input.direction);
 
     return {
       eventType,
       callStatus: 'NO_ANSWER',
       disconnectParty,
       endReason:
-        disconnectedBySource
+        callerDroppedBeforeAnswer
           ? 'CALLER_DROPPED_BEFORE_ANSWER'
           : 'UNANSWERED',
       outcomeSource:
@@ -250,7 +264,7 @@ function deriveMsg91Outcome(input) {
       eventType,
       callStatus: 'NO_ANSWER',
       disconnectParty:
-        partyFromMsg91Disconnect(disconnectedBy, false),
+        partyFromMsg91Disconnect(disconnectedBy, false, input.direction),
       endReason: 'USER_UNREACHABLE',
       outcomeSource: 'MSG91_REASON',
     };
@@ -261,9 +275,9 @@ function deriveMsg91Outcome(input) {
       eventType,
       callStatus: 'NO_ANSWER',
       disconnectParty:
-        partyFromMsg91Disconnect(disconnectedBy, false),
+        partyFromMsg91Disconnect(disconnectedBy, false, input.direction),
       endReason:
-        disconnectedBySource
+        callerDroppedBeforeAnswer
           ? 'CALLER_DROPPED_BEFORE_ANSWER'
           : 'UNANSWERED',
       outcomeSource: 'MSG91_IVR_STATUS',
@@ -285,7 +299,7 @@ function deriveMsg91Outcome(input) {
       eventType,
       callStatus: 'FAILED',
       disconnectParty:
-        partyFromMsg91Disconnect(disconnectedBy, false),
+        partyFromMsg91Disconnect(disconnectedBy, false, input.direction),
       endReason: 'PROVIDER_FAILURE',
       outcomeSource: 'MSG91_EVENT',
     };
@@ -296,7 +310,7 @@ function deriveMsg91Outcome(input) {
   // as a caller drop. Destination-side completed events without evidence
   // remain UNKNOWN rather than being falsely counted as answered.
   if (rawEventType === 'completed') {
-    if (disconnectedBySource) {
+    if (callerDroppedBeforeAnswer) {
       return {
         eventType,
         callStatus: 'NO_ANSWER',
@@ -353,6 +367,7 @@ export function normalizeCallingPayload(input) {
     if (
       mapping?.required
       && (value === null || value === undefined || value === '')
+      && !(isMsg91Provider(input.providerKey) && mapping?.canonicalField === 'customerPhone')
     ) {
       throw new Error(
         `CALLING_MAPPING_REQUIRED_FIELD_MISSING:${mapping?.canonicalField || 'unknown'}`
@@ -370,6 +385,40 @@ export function normalizeCallingPayload(input) {
   const rawEventType = String(mapped.rawEventType ?? '').trim();
   const rawStatus = String(mapped.rawStatus ?? '').trim();
   const rawDirection = String(mapped.direction ?? '').trim();
+
+  // MSG91 publishes different customer-number fields by direction:
+  // inbound  -> source
+  // outbound -> destination
+  // Keep provider-specific semantics here rather than in the CRM/UI layer.
+  if (isMsg91Provider(input.providerKey)) {
+    const directionToken = String(rawDirection || payload.direction || '').trim().toLowerCase();
+    const inboundPhone = normalizePhone(payload.source);
+    const outboundPhone = normalizePhone(payload.destination);
+    const currentlyMappedPhone = normalizePhone(mapped.customerPhone);
+
+    if (!currentlyMappedPhone) {
+      mapped.customerPhone =
+        directionToken === 'outbound'
+          ? (outboundPhone || inboundPhone)
+          : (inboundPhone || outboundPhone);
+    }
+
+    if (!normalizePhone(mapped.businessNumber) && payload.callerId) {
+      mapped.businessNumber = normalizePhone(payload.callerId);
+    }
+
+    if (!mapped.providerEventId && payload.requestId) {
+      mapped.providerEventId = String(payload.requestId);
+    }
+  }
+
+  if (!String(mapped.providerCallId ?? '').trim()) {
+    throw new Error('CALLING_MAPPING_REQUIRED_FIELD_MISSING:providerCallId');
+  }
+
+  if (!normalizePhone(mapped.customerPhone)) {
+    throw new Error('CALLING_MAPPING_REQUIRED_FIELD_MISSING:customerPhone');
+  }
 
   let eventType =
     mapValue('EVENT_TYPE', rawEventType, valueMappings)
@@ -415,6 +464,10 @@ export function normalizeCallingPayload(input) {
       ? mapped.ivrInputs
       : (payload.ivrInputs ?? null);
 
+  const durationSeconds = mapped.durationSeconds === null || mapped.durationSeconds === undefined
+    ? null
+    : Number(mapped.durationSeconds);
+
   let disconnectParty = 'UNKNOWN';
   let endReason = null;
   let outcomeSource = 'VALUE_MAPPING';
@@ -429,6 +482,8 @@ export function normalizeCallingPayload(input) {
         disconnectedBy,
         reason,
         ivrInputs,
+        direction: ['INBOUND', 'OUTBOUND'].includes(direction) ? direction : 'UNKNOWN',
+        durationSeconds,
       });
 
     eventType = outcome.eventType;
@@ -457,10 +512,7 @@ export function normalizeCallingPayload(input) {
     answeredAt: mapped.answeredAt ? String(mapped.answeredAt) : null,
     endedAt: mapped.endedAt ? String(mapped.endedAt) : null,
     updatedAt: mapped.updatedAt ? String(mapped.updatedAt) : null,
-    durationSeconds:
-      mapped.durationSeconds === null || mapped.durationSeconds === undefined
-        ? null
-        : Number(mapped.durationSeconds),
+    durationSeconds,
     disconnectedBy,
     disconnectParty,
     endReason,

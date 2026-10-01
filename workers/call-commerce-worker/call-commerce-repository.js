@@ -1,152 +1,55 @@
 import crypto from 'crypto';
+import { pgQuery, pgTransaction, getPostgresConfig } from './postgres.js';
 
-import {
-  BigQuery,
-} from '@google-cloud/bigquery';
+const PROJECT_ID = String(
+  process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || ''
+).trim();
 
+const DEFAULT_REOPEN_GRACE_MINUTES = Number(
+  process.env.CALL_COMMERCE_REOPEN_GRACE_MINUTES || 30
+);
 
-// ============================================================
-// CONFIG
-// ============================================================
+const DEFAULT_CONTACT_MIN_DURATION_SECONDS = Number(
+  process.env.CALL_COMMERCE_CONTACT_MIN_DURATION_SECONDS || 20
+);
 
-const PROJECT_ID =
-  String(
-    process.env.GCP_PROJECT_ID
-    || process.env.GOOGLE_CLOUD_PROJECT
-    || ''
-  ).trim();
+const id = prefix => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
+const deterministic = (prefix, parts) => `${prefix}_${crypto
+  .createHash('sha256')
+  .update(parts.map(value => String(value ?? '')).join(':'))
+  .digest('hex')
+  .slice(0, 24)}`;
 
-
-const DATASET_ID =
-  String(
-    process.env.GROWTHOS_CALL_COMMERCE_DATASET
-    || 'growthos_call_commerce'
-  ).trim();
-
-
-const CONTROL_DATASET =
-  String(
-    process.env.GROWTHOS_CONTROL_DATASET
-    || 'growthos_control'
-  ).trim();
-
-
-const LOCATION =
-  String(
-    process.env.GROWTHOS_CALL_COMMERCE_LOCATION
-    || process.env.GCP_BQ_LOCATION
-    || 'asia-south1'
-  ).trim();
-
-
-const REOPEN_GRACE_MINUTES =
-  Number(
-    process.env.CALL_COMMERCE_REOPEN_GRACE_MINUTES
-    || 30
-  );
-
-
-const CONTACT_MIN_DURATION_SECONDS =
-  Number(
-    process.env.CALL_COMMERCE_CONTACT_MIN_DURATION_SECONDS
-    || 20
-  );
-
-
-if (!PROJECT_ID) {
-  throw new Error('CALL_COMMERCE_WORKER_PROJECT_MISSING');
-}
-
-
-const bigquery =
-  new BigQuery({
-    projectId: PROJECT_ID,
-  });
-
-
-const table =
-  name =>
-    `\`${PROJECT_ID}.${DATASET_ID}.${name}\``;
-
-
-const controlTable =
-  name =>
-    `\`${PROJECT_ID}.${CONTROL_DATASET}.${name}\``;
-
-
-const id =
-  prefix =>
-    `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
-
-
-const deterministic =
-  (prefix, parts) =>
-    `${prefix}_${crypto
-      .createHash('sha256')
-      .update(parts.join(':'))
-      .digest('hex')
-      .slice(0, 24)}`;
-
-
-const OPEN_LEAD_STATUSES =
-  new Set([
-    'NEW',
-    'QUALIFIED',
-    'FOLLOW_UP',
-  ]);
-
-
-const TERMINAL_LEAD_STATUSES =
-  new Set([
-    'PURCHASED',
-    'UNQUALIFIED',
-    'CLOSED_LOST',
-  ]);
-
-
-// ============================================================
-// HELPERS
-// ============================================================
+const OPEN_LEAD_STATUSES = new Set(['NEW', 'QUALIFIED', 'FOLLOW_UP']);
+const TERMINAL_LEAD_STATUSES = new Set(['PURCHASED', 'UNQUALIFIED', 'CLOSED_LOST']);
+const SETTINGS_CACHE_TTL_MS = 60_000;
+const settingsCache = new Map();
 
 function normalizePhone(value) {
   return String(value ?? '').replace(/[^0-9+]/g, '').trim();
 }
 
-
 function asDate(value) {
-  const raw = value?.value ?? value;
-
-  if (!raw) return null;
-
-  const date = raw instanceof Date ? raw : new Date(raw);
-
-  return Number.isNaN(date.getTime())
-    ? null
-    : date;
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
-
 
 function earlierIso(a, b) {
   const da = asDate(a);
   const db = asDate(b);
-
   if (!da) return db?.toISOString() || null;
   if (!db) return da.toISOString();
-
   return (da.getTime() <= db.getTime() ? da : db).toISOString();
 }
-
 
 function laterIso(a, b) {
   const da = asDate(a);
   const db = asDate(b);
-
   if (!da) return db?.toISOString() || null;
   if (!db) return da.toISOString();
-
   return (da.getTime() >= db.getTime() ? da : db).toISOString();
 }
-
 
 function callStatusRank(status) {
   const ranks = {
@@ -161,90 +64,93 @@ function callStatusRank(status) {
     FAILED: 65,
     ANSWERED: 100,
   };
-
   return ranks[String(status || '').toUpperCase()] ?? 30;
 }
-
 
 function isAnswered(status) {
   return String(status || '').toUpperCase() === 'ANSWERED';
 }
 
-
 function normalizeAcceptedAt(value) {
-  const date = asDate(value);
-  return date?.toISOString() || new Date().toISOString();
+  return asDate(value)?.toISOString() || new Date().toISOString();
 }
 
-function nullableString(value) {
-  if (value === null || value === undefined) return '';
-  return String(value);
+async function run(client, text, values = []) {
+  return client ? client.query(text, values) : pgQuery(text, values);
 }
 
+async function getRuntimeSettings(workspaceId, brandId, client = null) {
+  const key = `${workspaceId}:${brandId}`;
+  const cached = settingsCache.get(key);
+  if (!client && cached && cached.expiresAt > Date.now()) return cached.value;
 
-function nullableIntegerString(value) {
-  if (value === null || value === undefined || value === '') return '';
-  const number = Number(value);
-  return Number.isFinite(number) ? String(Math.trunc(number)) : '';
-}
+  const result = await run(
+    client,
+    `SELECT contact_min_duration_seconds,reopen_grace_minutes
+     FROM call_commerce.settings
+     WHERE workspace_id=$1 AND brand_id=$2
+     LIMIT 1`,
+    [workspaceId, brandId]
+  );
 
+  const value = {
+    contactMinDurationSeconds: Number(
+      result.rows[0]?.contact_min_duration_seconds ?? DEFAULT_CONTACT_MIN_DURATION_SECONDS
+    ),
+    reopenGraceMinutes: Number(
+      result.rows[0]?.reopen_grace_minutes ?? DEFAULT_REOPEN_GRACE_MINUTES
+    ),
+  };
 
-// ============================================================
-// CALLING CONTEXT INTEGRITY
-//
-// The queue message does not get to define tenant identity by
-// itself. The persisted calling connection is authoritative.
-// ============================================================
-
-export async function resolveCallingContext(job) {
-  const [rows] =
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        SELECT
-          c.connection_id,
-          c.workspace_id,
-          c.brand_id,
-          c.provider_key,
-          c.status,
-          c.active_mapping_version_id,
-          m.mapping_version_id,
-          m.status AS mapping_status,
-          m.field_mappings,
-          m.value_mappings
-        FROM ${table('calling_connections')} c
-        LEFT JOIN ${table('calling_mapping_versions')} m
-          ON m.mapping_version_id=c.active_mapping_version_id
-        WHERE c.connection_id=@connection_id
-        LIMIT 1
-      `,
-      params: {
-        connection_id: job.connectionId,
-      },
+  if (!client) {
+    settingsCache.set(key, {
+      expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS,
+      value,
     });
-
-  const row = rows?.[0] || null;
-
-  if (!row) {
-    throw new Error('CALLING_CONNECTION_NOT_FOUND');
   }
 
+  return value;
+}
+
+export async function resolveCallingContext(job) {
+  const result = await pgQuery(
+    `SELECT
+       c.connection_id,
+       c.workspace_id,
+       c.brand_id,
+       c.provider_key,
+       c.status,
+       c.active_mapping_version_id,
+       m.mapping_version_id,
+       m.status AS mapping_status,
+       m.field_mappings,
+       m.value_mappings
+     FROM call_commerce.calling_connections c
+     LEFT JOIN call_commerce.calling_mapping_versions m
+       ON m.mapping_version_id=c.active_mapping_version_id
+     WHERE c.connection_id=$1
+     LIMIT 1`,
+    [job.connectionId]
+  );
+
+  const row = result.rows[0] || null;
+  if (!row) throw new Error('CALLING_CONNECTION_NOT_FOUND');
   if (String(row.status || '').toLowerCase() !== 'active') {
     throw new Error('CALLING_CONNECTION_NOT_ACTIVE');
   }
 
   if (
-    String(row.workspace_id || '') !== String(job.workspaceId || '')
-    || String(row.brand_id || '') !== String(job.brandId || '')
-    || String(row.provider_key || '') !== String(job.providerKey || '')
+    String(row.workspace_id || '') !== String(job.workspaceId || '') ||
+    String(row.brand_id || '') !== String(job.brandId || '') ||
+    String(row.provider_key || '') !== String(job.providerKey || '')
   ) {
     throw new Error('CALLING_JOB_TENANT_MISMATCH');
   }
 
   if (
-    !row.active_mapping_version_id
-    || String(row.active_mapping_version_id) !== String(job.mappingVersionId || '')
-    || String(row.mapping_version_id || '') !== String(job.mappingVersionId || '')
+    !row.active_mapping_version_id ||
+    String(row.active_mapping_version_id) !== String(job.mappingVersionId || '') ||
+    String(row.mapping_version_id || '') !== String(job.mappingVersionId || '')
   ) {
     throw new Error('CALLING_MAPPING_VERSION_MISMATCH');
   }
@@ -256,250 +162,143 @@ export async function resolveCallingContext(job) {
   return row;
 }
 
-
-// ============================================================
-// RAW DELIVERY
-// ============================================================
-
 export async function beginRawEventDelivery(input) {
   const receivedAt = normalizeAcceptedAt(input.acceptedAt);
+  const rawEventId = deterministic('raw', [
+    input.workspaceId,
+    input.brandId,
+    input.connectionId,
+    input.deliveryId,
+  ]);
 
-  const rawEventId =
-    deterministic(
-      'raw',
-      [
-        input.workspaceId,
-        input.brandId,
-        input.connectionId,
-        input.deliveryId,
-      ]
-    );
-
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      MERGE ${table('raw_call_events')} t
-      USING (SELECT @delivery_id AS delivery_id) s
-      ON t.workspace_id=@workspace_id
-       AND t.brand_id=@brand_id
-       AND t.connection_id=@connection_id
-       AND t.delivery_id=s.delivery_id
-
-      WHEN MATCHED THEN
-        UPDATE SET
-          pubsub_message_id=COALESCE(NULLIF(@pubsub_message_id,''),t.pubsub_message_id),
-          processing_status=IF(t.processing_status='processed',t.processing_status,'processing'),
-          processing_error=IF(t.processing_status='processed',t.processing_error,NULL)
-
-      WHEN NOT MATCHED THEN
-        INSERT (
-          raw_event_id,
-          delivery_id,
-          pubsub_message_id,
-          workspace_id,
-          brand_id,
-          connection_id,
-          provider_key,
-          payload,
-          mapping_version_id,
-          processing_status,
-          processing_error,
-          received_at,
-          processed_at
-        )
-        VALUES (
-          @raw_event_id,
-          @delivery_id,
-          NULLIF(@pubsub_message_id,''),
-          @workspace_id,
-          @brand_id,
-          @connection_id,
-          @provider_key,
-          PARSE_JSON(@payload),
-          @mapping_version_id,
-          'processing',
-          NULL,
-          COALESCE(SAFE_CAST(@accepted_at AS TIMESTAMP),CURRENT_TIMESTAMP()),
-          NULL
-        )
-    `,
-    params: {
-      raw_event_id: rawEventId,
-      delivery_id: input.deliveryId,
-      pubsub_message_id: nullableString(input.pubsubMessageId),
-      workspace_id: input.workspaceId,
-      brand_id: input.brandId,
-      connection_id: input.connectionId,
-      provider_key: input.providerKey,
-      payload: JSON.stringify(input.payload ?? {}),
-      mapping_version_id: input.mappingVersionId,
-      accepted_at: receivedAt,
-    },
-  });
+  await pgQuery(
+    `INSERT INTO call_commerce.raw_call_events (
+       raw_event_id,delivery_id,pubsub_message_id,workspace_id,brand_id,
+       connection_id,provider_key,payload,mapping_version_id,
+       processing_status,processing_error,received_at,processed_at
+     ) VALUES ($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8::jsonb,$9,'processing',NULL,$10::timestamptz,NULL)
+     ON CONFLICT (delivery_id) DO UPDATE SET
+       pubsub_message_id=COALESCE(NULLIF(EXCLUDED.pubsub_message_id,''),call_commerce.raw_call_events.pubsub_message_id),
+       processing_status=CASE
+         WHEN call_commerce.raw_call_events.processing_status='processed'
+           THEN call_commerce.raw_call_events.processing_status
+         ELSE 'processing'
+       END,
+       processing_error=CASE
+         WHEN call_commerce.raw_call_events.processing_status='processed'
+           THEN call_commerce.raw_call_events.processing_error
+         ELSE NULL
+       END`,
+    [
+      rawEventId,
+      input.deliveryId,
+      input.pubsubMessageId || '',
+      input.workspaceId,
+      input.brandId,
+      input.connectionId,
+      input.providerKey,
+      JSON.stringify(input.payload ?? {}),
+      input.mappingVersionId,
+      receivedAt,
+    ]
+  );
 
   return rawEventId;
 }
 
-
 export async function finalizeRawEventDelivery(input) {
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      UPDATE ${table('raw_call_events')}
-      SET
-        provider_call_id=COALESCE(NULLIF(@provider_call_id,''),provider_call_id),
-        provider_event_id=COALESCE(NULLIF(@provider_event_id,''),provider_event_id),
-        raw_event_type=COALESCE(NULLIF(@raw_event_type,''),raw_event_type),
-        raw_status=COALESCE(NULLIF(@raw_status,''),raw_status),
-        processing_status=@processing_status,
-        processing_error=NULLIF(@processing_error,''),
-        processed_at=IF(
-          @processing_status IN ('processed','raw_only','failed'),
-          CURRENT_TIMESTAMP(),
-          processed_at
-        )
-      WHERE raw_event_id=@raw_event_id
-    `,
-    params: {
-      raw_event_id: input.rawEventId,
-      provider_call_id: nullableString(input.event?.providerCallId),
-      provider_event_id: nullableString(input.event?.providerEventId),
-      raw_event_type: nullableString(input.event?.rawEventType),
-      raw_status: nullableString(input.event?.rawStatus),
-      processing_status: input.status,
-      processing_error: nullableString(input.error),
-    },
-  });
+  await pgQuery(
+    `UPDATE call_commerce.raw_call_events
+     SET
+       provider_call_id=COALESCE(NULLIF($2,''),provider_call_id),
+       provider_event_id=COALESCE(NULLIF($3,''),provider_event_id),
+       raw_event_type=COALESCE(NULLIF($4,''),raw_event_type),
+       raw_status=COALESCE(NULLIF($5,''),raw_status),
+       processing_status=$6,
+       processing_error=NULLIF($7,''),
+       processed_at=CASE
+         WHEN $6 IN ('processed','raw_only','failed') THEN NOW()
+         ELSE processed_at
+       END
+     WHERE raw_event_id=$1`,
+    [
+      input.rawEventId,
+      input.event?.providerCallId || '',
+      input.event?.providerEventId || '',
+      input.event?.rawEventType || '',
+      input.event?.rawStatus || '',
+      input.status,
+      input.error || '',
+    ]
+  );
 }
-
 
 export async function markCallingConnectionProcessingResult(input) {
   const acceptedAt = normalizeAcceptedAt(input.acceptedAt);
-
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      UPDATE ${table('calling_connections')}
-      SET
-        last_event_at=IF(
-          last_event_at IS NULL
-          OR last_event_at<SAFE_CAST(@accepted_at AS TIMESTAMP),
-          SAFE_CAST(@accepted_at AS TIMESTAMP),
-          last_event_at
-        ),
-        last_success_at=IF(@success,CURRENT_TIMESTAMP(),last_success_at),
-        last_error=IF(@success,NULL,NULLIF(@last_error,'')),
-        updated_at=CURRENT_TIMESTAMP()
-      WHERE connection_id=@connection_id
-    `,
-    params: {
-      connection_id: input.connectionId,
-      accepted_at: acceptedAt,
-      success: Boolean(input.success),
-      last_error: nullableString(input.error),
-    },
-  });
+  await pgQuery(
+    `UPDATE call_commerce.calling_connections
+     SET
+       last_event_at=CASE
+         WHEN last_event_at IS NULL OR last_event_at < $2::timestamptz THEN $2::timestamptz
+         ELSE last_event_at
+       END,
+       last_success_at=CASE WHEN $3::boolean THEN NOW() ELSE last_success_at END,
+       last_error=CASE WHEN $3::boolean THEN NULL ELSE NULLIF($4,'') END,
+       updated_at=NOW()
+     WHERE connection_id=$1`,
+    [input.connectionId, acceptedAt, Boolean(input.success), input.error || '']
+  );
 }
 
-
-// ============================================================
-// CALL ATTEMPT / LEAD THREADING
-// ============================================================
-
-async function getProviderAttempt(event) {
-  const [rows] =
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        SELECT *
-        FROM ${table('call_attempts')}
-        WHERE workspace_id=@workspace_id
-          AND brand_id=@brand_id
-          AND connection_id=@connection_id
-          AND provider_call_id=@provider_call_id
-        ORDER BY created_at ASC
-        LIMIT 1
-      `,
-      params: {
-        workspace_id: event.workspaceId,
-        brand_id: event.brandId,
-        connection_id: event.connectionId,
-        provider_call_id: event.providerCallId,
-      },
-    });
-
-  return rows?.[0] || null;
+async function getProviderAttempt(event, client = null) {
+  const result = await run(
+    client,
+    `SELECT *
+     FROM call_commerce.call_attempts
+     WHERE workspace_id=$1
+       AND brand_id=$2
+       AND connection_id=$3
+       AND provider_call_id=$4
+     LIMIT 1`,
+    [event.workspaceId, event.brandId, event.connectionId, event.providerCallId]
+  );
+  return result.rows[0] || null;
 }
 
-
-async function findAttachableLead(input) {
+async function findAttachableLead(input, settings, client) {
   const phone = normalizePhone(input.phone);
-
   if (!phone) return null;
 
-  const [rows] =
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        SELECT
-          lead_id,
-          status,
-          status_changed_at,
-          latest_call_at,
-          updated_at,
-          created_at
-        FROM ${table('call_leads')}
-        WHERE workspace_id=@workspace_id
-          AND brand_id=@brand_id
-          AND phone=@phone
-          AND is_archived=FALSE
-          AND status IN ('NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST')
-        ORDER BY COALESCE(latest_call_at,updated_at,created_at) DESC
-        LIMIT 50
-      `,
-      params: {
-        workspace_id: input.workspaceId,
-        brand_id: input.brandId,
-        phone,
-      },
-    });
+  const result = await run(
+    client,
+    `SELECT lead_id,status,status_changed_at,latest_call_at,updated_at,created_at
+     FROM call_commerce.call_leads
+     WHERE workspace_id=$1
+       AND brand_id=$2
+       AND phone=$3
+       AND is_archived=FALSE
+       AND status IN ('NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST')
+     ORDER BY COALESCE(latest_call_at,updated_at,created_at) DESC
+     LIMIT 50`,
+    [input.workspaceId, input.brandId, phone]
+  );
 
-  const candidates = rows || [];
-
-  const open =
-    candidates.find(
-      row =>
-        OPEN_LEAD_STATUSES.has(
-          String(row.status || '').toUpperCase()
-        )
-    );
-
+  const candidates = result.rows || [];
+  const open = candidates.find(row => OPEN_LEAD_STATUSES.has(String(row.status || '').toUpperCase()));
   if (open) return open;
 
   const callAt = asDate(input.callAt) || new Date();
-  const graceMs = REOPEN_GRACE_MINUTES * 60_000;
-
+  const graceMs = Number(settings.reopenGraceMinutes || 0) * 60_000;
   let bestTerminal = null;
   let bestTerminalAt = -1;
 
   for (const row of candidates) {
     const status = String(row.status || '').toUpperCase();
-
     if (!TERMINAL_LEAD_STATUSES.has(status)) continue;
-
-    const terminalAt =
-      asDate(row.status_changed_at)
-      || asDate(row.updated_at);
-
+    const terminalAt = asDate(row.status_changed_at) || asDate(row.updated_at);
     if (!terminalAt) continue;
-
     const delta = callAt.getTime() - terminalAt.getTime();
-
-    if (
-      delta >= 0
-      && delta <= graceMs
-      && terminalAt.getTime() > bestTerminalAt
-    ) {
+    if (delta >= 0 && delta <= graceMs && terminalAt.getTime() > bestTerminalAt) {
       bestTerminal = row;
       bestTerminalAt = terminalAt.getTime();
     }
@@ -508,103 +307,60 @@ async function findAttachableLead(input) {
   return bestTerminal;
 }
 
-
-async function createCallLead(input) {
+async function createCallLead(input, client) {
   const leadId = id('CL');
+  const startedAt = asDate(input.startedAt)?.toISOString() || new Date().toISOString();
 
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      INSERT INTO ${table('call_leads')} (
-        lead_id,
-        workspace_id,
-        brand_id,
-        phone,
-        customer_name,
-        email,
-        product,
-        status,
-        notes,
-        currency,
-        status_changed_at,
-        first_call_at,
-        latest_call_at,
-        call_attempt_count,
-        answered_attempt_count,
-        unanswered_attempt_count,
-        is_archived,
-        created_at,
-        updated_at,
-        created_by,
-        updated_by
-      ) VALUES (
-        @lead_id,
-        @workspace_id,
-        @brand_id,
-        @phone,
-        NULLIF(@customer_name,''),
-        NULLIF(@email,''),
-        NULLIF(@product,''),
-        'NEW',
-        NULLIF(@notes,''),
-        'INR',
-        CURRENT_TIMESTAMP(),
-        COALESCE(SAFE_CAST(@started_at AS TIMESTAMP),CURRENT_TIMESTAMP()),
-        COALESCE(SAFE_CAST(@started_at AS TIMESTAMP),CURRENT_TIMESTAMP()),
-        0,
-        0,
-        0,
-        FALSE,
-        CURRENT_TIMESTAMP(),
-        CURRENT_TIMESTAMP(),
-        @actor,
-        @actor
-      )
-    `,
-    params: {
-      lead_id: leadId,
-      workspace_id: input.workspaceId,
-      brand_id: input.brandId,
-      phone: normalizePhone(input.phone),
-      customer_name: nullableString(input.customerName),
-      email: nullableString(input.email),
-      product: nullableString(input.product),
-      notes: nullableString(input.notes),
-      started_at: input.startedAt || '',
-      actor: input.actor,
-    },
-  });
+  await run(
+    client,
+    `INSERT INTO call_commerce.call_leads (
+       lead_id,workspace_id,brand_id,phone,customer_name,email,product,status,
+       notes,currency,status_changed_at,first_call_at,latest_call_at,
+       call_attempt_count,answered_attempt_count,unanswered_attempt_count,
+       is_archived,created_at,updated_at,created_by,updated_by
+     ) VALUES (
+       $1,$2,$3,$4,NULLIF($5,''),NULLIF($6,''),NULLIF($7,''),'NEW',
+       NULLIF($8,''),'INR',NOW(),$9::timestamptz,$9::timestamptz,
+       0,0,0,FALSE,NOW(),NOW(),$10,$10
+     )`,
+    [
+      leadId,
+      input.workspaceId,
+      input.brandId,
+      normalizePhone(input.phone),
+      input.customerName || '',
+      input.email || '',
+      input.product || '',
+      input.notes || '',
+      startedAt,
+      input.actor,
+    ]
+  );
 
   return leadId;
 }
 
-
-async function upsertCallAttempt(event, leadId, existingAttempt) {
+async function upsertCallAttempt(event, leadId, existingAttempt, client) {
   const created = !existingAttempt;
-  const attemptId =
-    existingAttempt?.attempt_id
-    || deterministic('CA', [
-      event.workspaceId,
-      event.brandId,
-      event.connectionId,
-      event.providerCallId,
-    ]);
+  const attemptId = existingAttempt?.attempt_id || deterministic('CA', [
+    event.workspaceId,
+    event.brandId,
+    event.connectionId,
+    event.providerCallId,
+  ]);
+
   const oldStatus = String(existingAttempt?.call_status || '');
   const incomingStatus = String(event.callStatus || '');
   const oldUpdatedAt = asDate(existingAttempt?.provider_updated_at);
-
   const incomingUpdatedAt =
-    asDate(event.updatedAt)
-    || asDate(event.endedAt)
-    || asDate(event.startedAt)
-    || new Date();
+    asDate(event.updatedAt) || asDate(event.endedAt) || asDate(event.startedAt) || new Date();
 
   const incomingWins =
-    !oldStatus
-    || callStatusRank(incomingStatus) > callStatusRank(oldStatus)
-    || (
-      callStatusRank(incomingStatus) === callStatusRank(oldStatus)
-      && (!oldUpdatedAt || incomingUpdatedAt.getTime() >= oldUpdatedAt.getTime())
+    !oldStatus ||
+    callStatusRank(incomingStatus) > callStatusRank(oldStatus) ||
+    (
+      callStatusRank(incomingStatus) === callStatusRank(oldStatus) &&
+      (!oldUpdatedAt || incomingUpdatedAt.getTime() >= oldUpdatedAt.getTime())
     );
 
   const values = {
@@ -656,515 +412,341 @@ async function upsertCallAttempt(event, leadId, existingAttempt) {
       : (existingAttempt?.raw_status || null),
   };
 
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      MERGE ${table('call_attempts')} t
-      USING (
-        SELECT
-          @workspace_id AS workspace_id,
-          @brand_id AS brand_id,
-          @connection_id AS connection_id,
-          @provider_call_id AS provider_call_id
-      ) s
-      ON t.workspace_id=s.workspace_id
-       AND t.brand_id=s.brand_id
-       AND t.connection_id=s.connection_id
-       AND t.provider_call_id=s.provider_call_id
-
-      WHEN MATCHED THEN
-        UPDATE SET
-          lead_id=@lead_id,
-          business_number=COALESCE(NULLIF(@business_number,''),t.business_number),
-          event_type=@event_type,
-          call_status=@call_status,
-          direction=@direction,
-          agent_id=NULLIF(@agent_id,''),
-          agent_name=NULLIF(@agent_name,''),
-          agent_phone=NULLIF(@agent_phone,''),
-          call_started_at=COALESCE(SAFE_CAST(@started_at AS TIMESTAMP),t.call_started_at),
-          call_answered_at=COALESCE(SAFE_CAST(@answered_at AS TIMESTAMP),t.call_answered_at),
-          call_ended_at=COALESCE(SAFE_CAST(@ended_at AS TIMESTAMP),t.call_ended_at),
-          provider_updated_at=COALESCE(SAFE_CAST(@provider_updated_at AS TIMESTAMP),t.provider_updated_at),
-          duration_seconds=GREATEST(COALESCE(t.duration_seconds,0),COALESCE(@duration_seconds,0)),
-          disconnected_by=NULLIF(@disconnected_by,''),
-          disconnect_party=NULLIF(@disconnect_party,''),
-          end_reason=NULLIF(@end_reason,''),
-          outcome_source=NULLIF(@outcome_source,''),
-          recording_url=COALESCE(NULLIF(@recording_url,''),t.recording_url),
-          reason=NULLIF(@reason,''),
-          ivr_inputs=PARSE_JSON(@ivr_inputs),
-          raw_event_type=NULLIF(@raw_event_type,''),
-          raw_status=NULLIF(@raw_status,''),
-          updated_at=CURRENT_TIMESTAMP()
-
-      WHEN NOT MATCHED THEN
-        INSERT (
-          attempt_id,
-          workspace_id,
-          brand_id,
-          connection_id,
-          provider_key,
-          provider_call_id,
-          lead_id,
-          phone,
-          business_number,
-          event_type,
-          call_status,
-          direction,
-          agent_id,
-          agent_name,
-          agent_phone,
-          call_started_at,
-          call_answered_at,
-          call_ended_at,
-          provider_updated_at,
-          duration_seconds,
-          disconnected_by,
-          disconnect_party,
-          end_reason,
-          outcome_source,
-          recording_url,
-          reason,
-          ivr_inputs,
-          raw_event_type,
-          raw_status,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          @attempt_id,
-          @workspace_id,
-          @brand_id,
-          @connection_id,
-          @provider_key,
-          @provider_call_id,
-          @lead_id,
-          @phone,
-          NULLIF(@business_number,''),
-          @event_type,
-          @call_status,
-          @direction,
-          NULLIF(@agent_id,''),
-          NULLIF(@agent_name,''),
-          NULLIF(@agent_phone,''),
-          SAFE_CAST(@started_at AS TIMESTAMP),
-          SAFE_CAST(@answered_at AS TIMESTAMP),
-          SAFE_CAST(@ended_at AS TIMESTAMP),
-          SAFE_CAST(@provider_updated_at AS TIMESTAMP),
-          @duration_seconds,
-          NULLIF(@disconnected_by,''),
-          NULLIF(@disconnect_party,''),
-          NULLIF(@end_reason,''),
-          NULLIF(@outcome_source,''),
-          NULLIF(@recording_url,''),
-          NULLIF(@reason,''),
-          PARSE_JSON(@ivr_inputs),
-          NULLIF(@raw_event_type,''),
-          NULLIF(@raw_status,''),
-          CURRENT_TIMESTAMP(),
-          CURRENT_TIMESTAMP()
-        )
-    `,
-    params: {
-      ...values,
-      business_number: nullableString(values.business_number),
-      agent_id: nullableString(values.agent_id),
-      agent_name: nullableString(values.agent_name),
-      agent_phone: nullableString(values.agent_phone),
-      disconnected_by: nullableString(values.disconnected_by),
-      disconnect_party: nullableString(values.disconnect_party),
-      end_reason: nullableString(values.end_reason),
-      outcome_source: nullableString(values.outcome_source),
-      recording_url: nullableString(values.recording_url),
-      reason: nullableString(values.reason),
-      raw_event_type: nullableString(values.raw_event_type),
-      raw_status: nullableString(values.raw_status),
-      started_at: values.started_at || '',
-      answered_at: values.answered_at || '',
-      ended_at: values.ended_at || '',
-      provider_updated_at: values.provider_updated_at || '',
-      ivr_inputs: JSON.stringify(values.ivr_inputs ?? null),
-    },
-  });
-
-  const [rows] =
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        SELECT *
-        FROM ${table('call_attempts')}
-        WHERE workspace_id=@workspace_id
-          AND brand_id=@brand_id
-          AND connection_id=@connection_id
-          AND provider_call_id=@provider_call_id
-        ORDER BY created_at ASC
-        LIMIT 1
-      `,
-      params: {
-        workspace_id: event.workspaceId,
-        brand_id: event.brandId,
-        connection_id: event.connectionId,
-        provider_call_id: event.providerCallId,
-      },
-    });
+  const result = await run(
+    client,
+    `INSERT INTO call_commerce.call_attempts (
+       attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,
+       lead_id,phone,business_number,event_type,call_status,direction,agent_id,agent_name,
+       agent_phone,call_started_at,call_answered_at,call_ended_at,provider_updated_at,
+       duration_seconds,disconnected_by,disconnect_party,end_reason,outcome_source,
+       recording_url,reason,ivr_inputs,raw_event_type,raw_status,created_at,updated_at
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
+       $16::timestamptz,$17::timestamptz,$18::timestamptz,$19::timestamptz,
+       $20,$21,$22,$23,$24,$25,$26,$27::jsonb,$28,$29,NOW(),NOW()
+     )
+     ON CONFLICT (workspace_id,brand_id,connection_id,provider_call_id)
+     DO UPDATE SET
+       lead_id=EXCLUDED.lead_id,
+       business_number=COALESCE(EXCLUDED.business_number,call_commerce.call_attempts.business_number),
+       event_type=EXCLUDED.event_type,
+       call_status=EXCLUDED.call_status,
+       direction=EXCLUDED.direction,
+       agent_id=EXCLUDED.agent_id,
+       agent_name=EXCLUDED.agent_name,
+       agent_phone=EXCLUDED.agent_phone,
+       call_started_at=COALESCE(EXCLUDED.call_started_at,call_commerce.call_attempts.call_started_at),
+       call_answered_at=COALESCE(EXCLUDED.call_answered_at,call_commerce.call_attempts.call_answered_at),
+       call_ended_at=COALESCE(EXCLUDED.call_ended_at,call_commerce.call_attempts.call_ended_at),
+       provider_updated_at=COALESCE(EXCLUDED.provider_updated_at,call_commerce.call_attempts.provider_updated_at),
+       duration_seconds=GREATEST(COALESCE(call_commerce.call_attempts.duration_seconds,0),COALESCE(EXCLUDED.duration_seconds,0)),
+       disconnected_by=EXCLUDED.disconnected_by,
+       disconnect_party=EXCLUDED.disconnect_party,
+       end_reason=EXCLUDED.end_reason,
+       outcome_source=EXCLUDED.outcome_source,
+       recording_url=COALESCE(EXCLUDED.recording_url,call_commerce.call_attempts.recording_url),
+       reason=EXCLUDED.reason,
+       ivr_inputs=EXCLUDED.ivr_inputs,
+       raw_event_type=EXCLUDED.raw_event_type,
+       raw_status=EXCLUDED.raw_status,
+       updated_at=NOW()
+     RETURNING *`,
+    [
+      values.attempt_id,
+      values.workspace_id,
+      values.brand_id,
+      values.connection_id,
+      values.provider_key,
+      values.provider_call_id,
+      values.lead_id,
+      values.phone,
+      values.business_number,
+      values.event_type,
+      values.call_status,
+      values.direction,
+      values.agent_id,
+      values.agent_name,
+      values.agent_phone,
+      values.started_at,
+      values.answered_at,
+      values.ended_at,
+      values.provider_updated_at,
+      values.duration_seconds,
+      values.disconnected_by,
+      values.disconnect_party,
+      values.end_reason,
+      values.outcome_source,
+      values.recording_url,
+      values.reason,
+      JSON.stringify(values.ivr_inputs ?? null),
+      values.raw_event_type,
+      values.raw_status,
+    ]
+  );
 
   return {
     created,
-    attempt: rows?.[0] || values,
+    attempt: result.rows[0] || values,
   };
 }
 
+async function refreshLeadCallSummary(input, client) {
+  const summaryResult = await run(
+    client,
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE call_status='ANSWERED')::int AS answered,
+       COUNT(*) FILTER (WHERE call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED'))::int AS unanswered,
+       MIN(COALESCE(call_started_at,created_at)) AS first_call_at
+     FROM call_commerce.call_attempts
+     WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
+    [input.workspaceId, input.brandId, input.leadId]
+  );
 
-async function refreshLeadCallSummary(input) {
-  const [rows] =
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        WITH attempts AS (
-          SELECT
-            *,
-            COALESCE(call_started_at,created_at) AS activity_at
-          FROM ${table('call_attempts')}
-          WHERE workspace_id=@workspace_id
-            AND brand_id=@brand_id
-            AND lead_id=@lead_id
-        )
-        SELECT
-          COUNT(*) AS total,
-          COUNTIF(call_status='ANSWERED') AS answered,
-          COUNTIF(call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED')) AS unanswered,
-          MIN(activity_at) AS first_call_at,
-          ARRAY_AGG(
-            STRUCT(
-              attempt_id,
-              provider_call_id,
-              business_number,
-              call_status,
-              agent_name,
-              duration_seconds,
-              disconnect_party,
-              end_reason,
-              activity_at,
-              call_ended_at,
-              provider_updated_at
-            )
-            ORDER BY activity_at DESC,COALESCE(provider_updated_at,updated_at) DESC
-            LIMIT 1
-          )[SAFE_OFFSET(0)] AS latest
-        FROM attempts
-      `,
-      params: {
-        workspace_id: input.workspaceId,
-        brand_id: input.brandId,
-        lead_id: input.leadId,
-      },
-    });
+  const latestResult = await run(
+    client,
+    `SELECT
+       attempt_id,provider_call_id,business_number,call_status,agent_name,duration_seconds,
+       disconnect_party,end_reason,COALESCE(call_started_at,created_at) AS activity_at,
+       call_ended_at,provider_updated_at
+     FROM call_commerce.call_attempts
+     WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3
+     ORDER BY COALESCE(call_started_at,created_at) DESC,COALESCE(provider_updated_at,updated_at) DESC
+     LIMIT 1`,
+    [input.workspaceId, input.brandId, input.leadId]
+  );
 
-  const summary = rows?.[0] || {};
-  const latest = summary.latest || {};
+  const summary = summaryResult.rows[0] || {};
+  const latest = latestResult.rows[0] || {};
 
-  const firstCallAt = asDate(summary.first_call_at)?.toISOString() || '';
-  const latestCallAt = asDate(latest.activity_at)?.toISOString() || '';
-
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      UPDATE ${table('call_leads')}
-      SET
-        first_call_at=COALESCE(SAFE_CAST(@first_call_at AS TIMESTAMP),first_call_at),
-        latest_call_at=SAFE_CAST(@latest_call_at AS TIMESTAMP),
-        latest_call_status=NULLIF(@latest_call_status,''),
-        latest_agent_name=NULLIF(@latest_agent_name,''),
-        latest_attempt_id=NULLIF(@latest_attempt_id,''),
-        latest_provider_call_id=NULLIF(@latest_provider_call_id,''),
-        latest_business_number=NULLIF(@latest_business_number,''),
-        latest_duration_seconds=SAFE_CAST(NULLIF(@latest_duration_seconds,'') AS INT64),
-        latest_disconnect_party=NULLIF(@latest_disconnect_party,''),
-        latest_end_reason=NULLIF(@latest_end_reason,''),
-        call_attempt_count=@total,
-        answered_attempt_count=@answered,
-        unanswered_attempt_count=@unanswered,
-        updated_at=CURRENT_TIMESTAMP(),
-        updated_by=@actor
-      WHERE workspace_id=@workspace_id
-        AND brand_id=@brand_id
-        AND lead_id=@lead_id
-    `,
-    params: {
-      first_call_at: firstCallAt,
-      latest_call_at: latestCallAt,
-      latest_call_status: nullableString(latest.call_status),
-      latest_agent_name: nullableString(latest.agent_name),
-      latest_attempt_id: nullableString(latest.attempt_id),
-      latest_provider_call_id: nullableString(latest.provider_call_id),
-      latest_business_number: nullableString(latest.business_number),
-      latest_duration_seconds:
-        nullableIntegerString(latest.duration_seconds),
-      latest_disconnect_party: nullableString(latest.disconnect_party),
-      latest_end_reason: nullableString(latest.end_reason),
-      total: Number(summary.total || 0),
-      answered: Number(summary.answered || 0),
-      unanswered: Number(summary.unanswered || 0),
-      actor: input.actor,
-      workspace_id: input.workspaceId,
-      brand_id: input.brandId,
-      lead_id: input.leadId,
-    },
-  });
+  await run(
+    client,
+    `UPDATE call_commerce.call_leads
+     SET
+       first_call_at=COALESCE($4::timestamptz,first_call_at),
+       latest_call_at=$5::timestamptz,
+       latest_call_status=$6,
+       latest_agent_name=$7,
+       latest_attempt_id=$8,
+       latest_provider_call_id=$9,
+       latest_business_number=$10,
+       latest_duration_seconds=$11,
+       latest_disconnect_party=$12,
+       latest_end_reason=$13,
+       call_attempt_count=$14,
+       answered_attempt_count=$15,
+       unanswered_attempt_count=$16,
+       updated_at=NOW(),
+       updated_by=$17
+     WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
+    [
+      input.workspaceId,
+      input.brandId,
+      input.leadId,
+      asDate(summary.first_call_at)?.toISOString() || null,
+      asDate(latest.activity_at)?.toISOString() || null,
+      latest.call_status || null,
+      latest.agent_name || null,
+      latest.attempt_id || null,
+      latest.provider_call_id || null,
+      latest.business_number || null,
+      latest.duration_seconds == null ? null : Number(latest.duration_seconds),
+      latest.disconnect_party || null,
+      latest.end_reason || null,
+      Number(summary.total || 0),
+      Number(summary.answered || 0),
+      Number(summary.unanswered || 0),
+      input.actor,
+    ]
+  );
 
   return summary;
 }
 
-
-// ============================================================
-// META CONNECTION / QUEUE
-// ============================================================
-
-async function getMetaEventsConnection(workspaceId, brandId) {
-  const [rows] =
-    await bigquery.query({
-      location: LOCATION,
-      query: `
-        SELECT
-          connection_id,
-          workspace_id,
-          brand_id,
-          provider,
-          status,
-          provider_account_id,
-          secret_name
-        FROM ${controlTable('integration_connections')}
-        WHERE workspace_id=@workspace_id
-          AND brand_id=@brand_id
-          AND provider='meta_events'
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `,
-      params: {
-        workspace_id: workspaceId,
-        brand_id: brandId,
-      },
-    });
-
-  return rows?.[0] || null;
-}
-
-
 export async function queueMetaEvent(input) {
-  const metaConnection =
-    await getMetaEventsConnection(
+  const eventCallIdentity = input.eventKey === 'CALL_LEAD_CONNECTED' ? '' : (input.callId || '');
+  const eventId = deterministic('cc_meta', [
+    input.workspaceId,
+    input.brandId,
+    input.eventKey,
+    input.leadId,
+    eventCallIdentity,
+    input.eventKey === 'CALL_LEAD_CONVERTED' ? String(input.payload?.order_id || '') : '',
+  ]);
+  const queueId = deterministic('queue', [input.workspaceId, input.brandId, eventId]);
+
+  await pgQuery(
+    `INSERT INTO call_commerce.meta_event_queue (
+       queue_id,workspace_id,brand_id,lead_id,call_id,event_key,event_name,event_id,
+       payload,status,attempts,next_attempt_at,created_at,updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,'PENDING',0,NOW(),NOW(),NOW())
+     ON CONFLICT (workspace_id,brand_id,event_id) DO NOTHING`,
+    [
+      queueId,
       input.workspaceId,
-      input.brandId
-    );
-
-  if (
-    !metaConnection
-    || String(metaConnection.status || '').toLowerCase() !== 'connected'
-  ) {
-    return null;
-  }
-
-  const eventCallIdentity =
-    input.eventKey === 'CALL_LEAD_CONNECTED'
-      ? ''
-      : (input.callId || '');
-
-  const eventId =
-    deterministic(
-      'cc_meta',
-      [
-        input.workspaceId,
-        input.brandId,
-        input.eventKey,
-        input.leadId,
-        eventCallIdentity,
-        input.eventKey === 'CALL_LEAD_CONVERTED'
-          ? String(input.payload?.order_id || '')
-          : '',
-      ]
-    );
-
-  const queueId =
-    deterministic(
-      'queue',
-      [
-        input.workspaceId,
-        input.brandId,
-        eventId,
-      ]
-    );
-
-  await bigquery.query({
-    location: LOCATION,
-    query: `
-      MERGE ${table('meta_event_queue')} t
-      USING (SELECT @event_id AS event_id) s
-      ON t.workspace_id=@workspace_id
-       AND t.brand_id=@brand_id
-       AND t.event_id=s.event_id
-
-      WHEN NOT MATCHED THEN
-        INSERT (
-          queue_id,
-          workspace_id,
-          brand_id,
-          lead_id,
-          call_id,
-          event_key,
-          event_name,
-          event_id,
-          payload,
-          status,
-          attempts,
-          next_attempt_at,
-          created_at,
-          updated_at
-        )
-        VALUES (
-          @queue_id,
-          @workspace_id,
-          @brand_id,
-          @lead_id,
-          NULLIF(@call_id,''),
-          @event_key,
-          @event_name,
-          @event_id,
-          PARSE_JSON(@payload),
-          'PENDING',
-          0,
-          CURRENT_TIMESTAMP(),
-          CURRENT_TIMESTAMP(),
-          CURRENT_TIMESTAMP()
-        )
-    `,
-    params: {
-      queue_id: queueId,
-      workspace_id: input.workspaceId,
-      brand_id: input.brandId,
-      lead_id: input.leadId,
-      call_id: nullableString(input.callId),
-      event_key: input.eventKey,
-      event_name: input.eventName,
-      event_id: eventId,
-      payload: JSON.stringify(input.payload ?? {}),
-    },
-  });
+      input.brandId,
+      input.leadId,
+      input.callId || null,
+      input.eventKey,
+      input.eventName,
+      eventId,
+      JSON.stringify(input.payload ?? {}),
+    ]
+  );
 
   return eventId;
 }
 
+async function queueAnalyticsEvent(input, client) {
+  const analyticsEventId = deterministic('cca', [
+    input.workspaceId,
+    input.brandId,
+    input.eventType,
+    input.entityType,
+    input.entityId,
+    input.occurredAt || '',
+  ]);
 
-// ============================================================
-// CANONICAL EVENT INGESTION
-// ============================================================
+  await run(
+    client,
+    `INSERT INTO call_commerce.analytics_outbox (
+       analytics_event_id,workspace_id,brand_id,event_type,entity_type,entity_id,
+       occurred_at,payload,status,attempts,created_at,updated_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz,$8::jsonb,'PENDING',0,NOW(),NOW())
+     ON CONFLICT (analytics_event_id) DO NOTHING`,
+    [
+      analyticsEventId,
+      input.workspaceId,
+      input.brandId,
+      input.eventType,
+      input.entityType,
+      input.entityId,
+      input.occurredAt || new Date().toISOString(),
+      JSON.stringify(input.payload ?? {}),
+    ]
+  );
+}
 
 export async function ingestCanonicalEvent(event, actor = 'calling-cloud-run') {
-  const existingAttempt = await getProviderAttempt(event);
-  let lead = null;
+  const settings = await getRuntimeSettings(event.workspaceId, event.brandId);
 
-  if (existingAttempt?.lead_id) {
-    const [leadRows] =
-      await bigquery.query({
-        location: LOCATION,
-        query: `
-          SELECT lead_id,status
-          FROM ${table('call_leads')}
-          WHERE workspace_id=@workspace_id
-            AND brand_id=@brand_id
-            AND lead_id=@lead_id
-          LIMIT 1
-        `,
-        params: {
-          workspace_id: event.workspaceId,
-          brand_id: event.brandId,
-          lead_id: existingAttempt.lead_id,
+  const result = await pgTransaction(async client => {
+    const lockKey = `${event.workspaceId}:${event.brandId}:${normalizePhone(event.customerPhone)}`;
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+
+    const existingAttempt = await getProviderAttempt(event, client);
+    let lead = null;
+
+    if (existingAttempt?.lead_id) {
+      const leadResult = await client.query(
+        `SELECT lead_id,status
+         FROM call_commerce.call_leads
+         WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3
+         LIMIT 1`,
+        [event.workspaceId, event.brandId, existingAttempt.lead_id]
+      );
+      lead = leadResult.rows[0] || null;
+    }
+
+    if (!lead) {
+      lead = await findAttachableLead(
+        {
+          workspaceId: event.workspaceId,
+          brandId: event.brandId,
+          phone: event.customerPhone,
+          callAt: event.startedAt || event.updatedAt || null,
         },
-      });
+        settings,
+        client
+      );
+    }
 
-    lead = leadRows?.[0] || null;
-  }
-
-  if (!lead) {
-    lead =
-      await findAttachableLead({
+    const createdLead = !lead;
+    const leadId = lead?.lead_id || await createCallLead(
+      {
         workspaceId: event.workspaceId,
         brandId: event.brandId,
         phone: event.customerPhone,
-        callAt: event.startedAt || event.updatedAt || null,
-      });
-  }
-
-  const createdLead = !lead;
-
-  const leadId =
-    lead?.lead_id
-    || await createCallLead({
-      workspaceId: event.workspaceId,
-      brandId: event.brandId,
-      phone: event.customerPhone,
-      startedAt: event.startedAt || null,
-      actor,
-    });
-
-  const attemptResult =
-    await upsertCallAttempt(
-      event,
-      leadId,
-      existingAttempt
+        startedAt: event.startedAt || null,
+        actor,
+      },
+      client
     );
 
-  const attempt = attemptResult.attempt;
+    const attemptResult = await upsertCallAttempt(event, leadId, existingAttempt, client);
+    const attempt = attemptResult.attempt;
 
-  await refreshLeadCallSummary({
-    workspaceId: event.workspaceId,
-    brandId: event.brandId,
-    leadId,
-    actor,
+    await refreshLeadCallSummary({
+      workspaceId: event.workspaceId,
+      brandId: event.brandId,
+      leadId,
+      actor,
+    }, client);
+
+    await queueAnalyticsEvent({
+      workspaceId: event.workspaceId,
+      brandId: event.brandId,
+      eventType: 'call_attempt.upserted',
+      entityType: 'call_attempt',
+      entityId: attempt.attempt_id,
+      occurredAt: event.updatedAt || event.endedAt || event.startedAt || new Date().toISOString(),
+      payload: {
+        lead_id: leadId,
+        provider_call_id: event.providerCallId,
+        call_status: attempt.call_status,
+        direction: attempt.direction,
+        duration_seconds: attempt.duration_seconds,
+      },
+    }, client);
+
+    return {
+      leadId,
+      attempt,
+      createdLead,
+      createdAttempt: attemptResult.created,
+    };
   });
 
   if (
-    isAnswered(attempt.call_status)
-    && Number(attempt.duration_seconds || 0) >= CONTACT_MIN_DURATION_SECONDS
+    isAnswered(result.attempt.call_status) &&
+    Number(result.attempt.duration_seconds || 0) >= settings.contactMinDurationSeconds
   ) {
     await queueMetaEvent({
       workspaceId: event.workspaceId,
       brandId: event.brandId,
-      leadId,
-      callId: attempt.attempt_id,
+      leadId: result.leadId,
+      callId: result.attempt.attempt_id,
       eventKey: 'CALL_LEAD_CONNECTED',
       eventName: 'ConnectedCallLead',
       payload: {
         lead_type: 'call',
         source_module: 'call_commerce',
-        lead_id: leadId,
-        call_id: attempt.attempt_id,
+        lead_id: result.leadId,
+        call_id: result.attempt.attempt_id,
         provider_call_id: event.providerCallId,
         phone: event.customerPhone,
         business_number: event.businessNumber || null,
-        duration_seconds: Number(attempt.duration_seconds || 0),
+        duration_seconds: Number(result.attempt.duration_seconds || 0),
       },
     });
   }
 
   return {
-    leadId,
-    attemptId: attempt.attempt_id,
+    leadId: result.leadId,
+    attemptId: result.attempt.attempt_id,
     providerCallId: event.providerCallId,
-    createdLead,
-    createdAttempt: attemptResult.created,
-    attachedToExistingLead: !createdLead,
+    createdLead: result.createdLead,
+    createdAttempt: result.createdAttempt,
+    attachedToExistingLead: !result.createdLead,
   };
 }
 
-
 export function getCallCommerceConfig() {
   return {
-    projectId: PROJECT_ID,
-    datasetId: DATASET_ID,
-    controlDataset: CONTROL_DATASET,
-    location: LOCATION,
-    contactMinDurationSeconds: CONTACT_MIN_DURATION_SECONDS,
-    reopenGraceMinutes: REOPEN_GRACE_MINUTES,
+    projectId: PROJECT_ID || null,
+    store: 'postgres',
+    postgres: getPostgresConfig(),
+    defaultContactMinDurationSeconds: DEFAULT_CONTACT_MIN_DURATION_SECONDS,
+    defaultReopenGraceMinutes: DEFAULT_REOPEN_GRACE_MINUTES,
   };
 }
