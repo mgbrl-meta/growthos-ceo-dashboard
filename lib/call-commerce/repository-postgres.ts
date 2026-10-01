@@ -858,7 +858,7 @@ export async function getSummary(workspaceId: string, brandId: string, start?: s
     ),
     pgQuery(
       `SELECT
-         EXTRACT(HOUR FROM (COALESCE(call_started_at,created_at) AT TIME ZONE 'Asia/Kolkata'))::int hour,
+         EXTRACT(HOUR FROM (COALESCE(call_started_at,created_at) AT TIME ZONE 'Asia/Kolkata'))::int AS "hour",
          COUNT(*)::bigint calls,
          COUNT(*) FILTER (WHERE call_status='ANSWERED')::bigint answered
        FROM call_commerce.call_attempts
