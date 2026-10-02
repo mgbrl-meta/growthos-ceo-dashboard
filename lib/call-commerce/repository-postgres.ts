@@ -248,49 +248,87 @@ export async function listLeads(input: {
     offset,
   ];
 
+  // IMPORTANT:
+  // listLeads joins call_leads to the latest call_attempt so every shared
+  // column must be explicitly scoped. This keeps the query deterministic as
+  // the Call Commerce schema grows and prevents PostgreSQL "column ... is
+  // ambiguous" errors.
   const where = `
-    workspace_id=$1
-    AND brand_id=$2
-    AND is_archived=$3
-    AND ($4='' OR status=$4)
+    l.workspace_id=$1
+    AND l.brand_id=$2
+    AND l.is_archived=$3
+    AND ($4='' OR l.status=$4)
     AND (
       $5=''
-      OR LOWER(CONCAT_WS(' ',COALESCE(phone,''),COALESCE(customer_name,''),COALESCE(email,''),COALESCE(product,''),COALESCE(order_id,'')))
-         LIKE '%' || LOWER($5) || '%'
+      OR LOWER(CONCAT_WS(
+        ' ',
+        COALESCE(l.phone,''),
+        COALESCE(l.customer_name,''),
+        COALESCE(l.email,''),
+        COALESCE(l.product,''),
+        COALESCE(l.order_id,'')
+      )) LIKE '%' || LOWER($5) || '%'
     )
-    AND ($6='' OR LOWER(COALESCE(latest_agent_name,''))=LOWER($6))
-    AND ($7='' OR COALESCE(latest_business_number,'')=$7)
-    AND ($8='' OR COALESCE(NULLIF(latest_call_status,''),'UNKNOWN')=$8)
+    AND ($6='' OR LOWER(COALESCE(l.latest_agent_name,''))=LOWER($6))
+    AND ($7='' OR COALESCE(l.latest_business_number,'')=$7)
+    AND ($8='' OR COALESCE(NULLIF(l.latest_call_status,''),'UNKNOWN')=$8)
     AND ($9='' OR COALESCE(latest_attempt.direction,'UNKNOWN')=$9)
   `;
 
   const [rowsResult, countResult] = await Promise.all([
     pgQuery(
       `SELECT
-         lead_id,phone,customer_name,email,product,status,notes,currency,status_changed_at,
-         first_call_at,latest_call_at,COALESCE(NULLIF(latest_call_status,''),'UNKNOWN') AS latest_call_status,latest_agent_name,latest_attempt_id,
-         latest_provider_call_id,latest_business_number,latest_duration_seconds,
-         latest_disconnect_party,latest_end_reason,call_attempt_count,answered_attempt_count,
-         unanswered_attempt_count,next_follow_up_at,order_id,order_amount,purchased_at,
-         unqualified_reason,closed_lost_reason,created_at,updated_at,
-         latest_attempt.direction AS latest_direction
-       FROM call_commerce.call_leads
+         l.lead_id,
+         l.phone,
+         l.customer_name,
+         l.email,
+         l.product,
+         l.status,
+         l.notes,
+         l.currency,
+         l.status_changed_at,
+         l.first_call_at,
+         l.latest_call_at,
+         COALESCE(NULLIF(l.latest_call_status,''),'UNKNOWN') AS latest_call_status,
+         l.latest_agent_name,
+         l.latest_attempt_id,
+         l.latest_provider_call_id,
+         l.latest_business_number,
+         l.latest_duration_seconds,
+         l.latest_disconnect_party,
+         l.latest_end_reason,
+         l.call_attempt_count,
+         l.answered_attempt_count,
+         l.unanswered_attempt_count,
+         l.next_follow_up_at,
+         l.order_id,
+         l.order_amount,
+         l.purchased_at,
+         l.unqualified_reason,
+         l.closed_lost_reason,
+         l.created_at,
+         l.updated_at,
+         COALESCE(latest_attempt.direction,'UNKNOWN') AS latest_direction
+       FROM call_commerce.call_leads l
        LEFT JOIN call_commerce.call_attempts latest_attempt
-         ON latest_attempt.attempt_id=call_leads.latest_attempt_id
-        AND latest_attempt.workspace_id=call_leads.workspace_id
-        AND latest_attempt.brand_id=call_leads.brand_id
+         ON latest_attempt.attempt_id=l.latest_attempt_id
+        AND latest_attempt.workspace_id=l.workspace_id
+        AND latest_attempt.brand_id=l.brand_id
        WHERE ${where}
-       ORDER BY latest_call_at DESC NULLS LAST,updated_at DESC,lead_id DESC
+       ORDER BY
+         l.latest_call_at DESC NULLS LAST,
+         l.updated_at DESC,
+         l.lead_id DESC
        LIMIT $10 OFFSET $11`,
       values
     ),
     pgQuery(
       `SELECT COUNT(*)::bigint AS total
-       FROM call_commerce.call_leads
+       FROM call_commerce.call_leads l
        LEFT JOIN call_commerce.call_attempts latest_attempt
-         ON latest_attempt.attempt_id=call_leads.latest_attempt_id
-        AND latest_attempt.workspace_id=call_leads.workspace_id
-        AND latest_attempt.brand_id=call_leads.brand_id
+         ON latest_attempt.attempt_id=l.latest_attempt_id
+        AND latest_attempt.workspace_id=l.workspace_id
+        AND latest_attempt.brand_id=l.brand_id
        WHERE ${where}`,
       values.slice(0, 9)
     ),
