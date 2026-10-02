@@ -326,36 +326,16 @@ async function processCallEvent(job, message) {
       };
     }
 
+    // Every canonical call event, including RINGING, participates in the
+    // operational attempt state machine. Raw provider truth is still retained,
+    // but ringing is no longer raw-only because the latest physical call leg
+    // must be visible on the CRM front immediately.
     await finalizeRawEventDelivery({
       rawEventId,
       event,
-      status:
-        event.eventType === 'RINGING'
-          ? 'raw_only'
-          : 'processing',
+      status: 'processing',
       error: null,
     });
-
-    if (event.eventType === 'RINGING') {
-      await safeMarkCallingConnectionProcessingResult({
-        connectionId: context.connection_id,
-        acceptedAt,
-        success: true,
-      });
-
-      return {
-        acknowledged: true,
-        rawOnly: true,
-        rawEventId,
-        event: {
-          providerCallId: event.providerCallId,
-          eventType: event.eventType,
-          callStatus: event.callStatus,
-          disconnectParty: event.disconnectParty || null,
-          endReason: event.endReason || null,
-        },
-      };
-    }
 
     const data =
       await ingestCanonicalEvent(

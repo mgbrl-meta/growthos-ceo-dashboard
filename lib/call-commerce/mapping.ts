@@ -8,6 +8,7 @@ import type {
   CanonicalDirection,
   CanonicalDisconnectParty,
 } from './types';
+import { canonicalCallStatus, normalizePhoneIdentity } from './lifecycle';
 
 function readPath(input: unknown, path: string): unknown {
   const clean = String(path || '').trim().replace(/^\$\.?/, '');
@@ -22,7 +23,7 @@ function readPath(input: unknown, path: string): unknown {
 }
 
 function normalizePhone(value: unknown) {
-  return String(value ?? '').replace(/[^0-9+]/g, '').trim();
+  return normalizePhoneIdentity(value);
 }
 
 function transformValue(value: unknown, transform?: string | null) {
@@ -163,12 +164,11 @@ function deriveMsg91Outcome(input: {
   const disconnectedBy = normalizeDisconnectValue(input.disconnectedBy);
   const ivrStatuses = parseIvrStatuses(input.ivrInputs);
 
+  // Restore the pre-PostgreSQL outcome semantics. Duration is intentionally
+  // ignored as answer evidence because MSG91 duration can include routing/ring.
   const answeredEvidence =
     ivrStatuses.some(status => ['answered', 'connected', 'success'].includes(status))
-    || ['answered', 'connected'].includes(rawStatus)
-    // MSG91 outbound completion payloads can omit an explicit answered
-    // status even when they include a positive connected duration.
-    || (rawEventType === 'completed' && Number(input.durationSeconds || 0) > 0);
+    || ['answered', 'connected'].includes(rawStatus);
 
   const noAnswerEvidence =
     ivrStatuses.some(status => ['no-answer', 'noanswer', 'unanswered', 'missed'].includes(status))
@@ -188,9 +188,6 @@ function deriveMsg91Outcome(input: {
 
   const disconnectedBySource =
     ['source', 'caller', 'customer'].includes(disconnectedBy);
-
-  const disconnectedByDestination =
-    ['destination', 'callee', 'agent'].includes(disconnectedBy);
 
   const callerDroppedBeforeAnswer =
     input.direction !== 'OUTBOUND' && disconnectedBySource;
@@ -245,11 +242,13 @@ function deriveMsg91Outcome(input: {
     ['canceled', 'cancelled'].includes(rawEventType)
     || cancelledEvidence
   ) {
+    const disconnectParty =
+      partyFromMsg91Disconnect(disconnectedBy, false, input.direction);
+
     return {
       eventType,
       callStatus: 'NO_ANSWER',
-      disconnectParty:
-        partyFromMsg91Disconnect(disconnectedBy, false, input.direction),
+      disconnectParty,
       endReason:
         callerDroppedBeforeAnswer
           ? 'CALLER_DROPPED_BEFORE_ANSWER'
@@ -322,9 +321,7 @@ function deriveMsg91Outcome(input: {
       eventType,
       callStatus: 'UNKNOWN',
       disconnectParty:
-        disconnectedByDestination
-          ? 'BUSINESS_ROUTING'
-          : 'UNKNOWN',
+        partyFromMsg91Disconnect(disconnectedBy, false, input.direction),
       endReason: 'UNKNOWN',
       outcomeSource: 'MSG91_EVENT',
     };
@@ -435,11 +432,11 @@ export function normalizeCallingPayload(input: {
     'UPDATED'
   ) as CanonicalCallEventType;
 
-  let callStatus = (
+  let callStatus = canonicalCallStatus(
     mapValue('CALL_STATUS', rawStatus, input.valueMappings) ||
     mapValue('CALL_STATUS', rawEventType, input.valueMappings) ||
     'UNKNOWN'
-  ) as CanonicalCallStatus;
+  );
 
   const direction = (
     mapValue('DIRECTION', rawDirection, input.valueMappings) ||
@@ -462,9 +459,52 @@ export function normalizeCallingPayload(input: {
     ? null
     : Number(mapped.durationSeconds);
 
-  let disconnectParty: CanonicalDisconnectParty = 'UNKNOWN';
-  let endReason: CanonicalCallEndReason | null = null;
-  let outcomeSource = 'VALUE_MAPPING';
+  const mappedDisconnectParty = String(
+    mapValue(
+      'DISCONNECT_PARTY',
+      mapped.disconnectParty ?? disconnectedBy ?? '',
+      input.valueMappings
+    ) || mapped.disconnectParty || 'UNKNOWN'
+  ).toUpperCase();
+
+  const mappedEndReason = String(
+    mapValue(
+      'END_REASON',
+      mapped.endReason ?? reason ?? '',
+      input.valueMappings
+    ) || mapped.endReason || ''
+  ).toUpperCase();
+
+  const validDisconnectParties = new Set([
+    'CUSTOMER',
+    'AGENT',
+    'BUSINESS_ROUTING',
+    'SYSTEM',
+    'UNKNOWN',
+  ]);
+  const validEndReasons = new Set([
+    'CALLER_DROPPED_BEFORE_ANSWER',
+    'CUSTOMER_DISCONNECTED',
+    'AGENT_DISCONNECTED',
+    'UNANSWERED',
+    'USER_UNREACHABLE',
+    'NETWORK_FAILURE',
+    'PROVIDER_FAILURE',
+    'UNKNOWN',
+  ]);
+
+  let disconnectParty: CanonicalDisconnectParty =
+    validDisconnectParties.has(mappedDisconnectParty)
+      ? mappedDisconnectParty as CanonicalDisconnectParty
+      : 'UNKNOWN';
+  let endReason: CanonicalCallEndReason | null =
+    mappedEndReason && validEndReasons.has(mappedEndReason)
+      ? mappedEndReason as CanonicalCallEndReason
+      : null;
+  let outcomeSource =
+    disconnectParty !== 'UNKNOWN' || endReason
+      ? 'VALUE_MAPPING'
+      : 'UNMAPPED';
 
   if (isMsg91Provider(input.providerKey)) {
     const outcome = deriveMsg91Outcome({

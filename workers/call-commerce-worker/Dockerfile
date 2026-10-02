@@ -21,6 +21,7 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY server.js ./
 COPY postgres.js ./
 COPY call-commerce-mapping.js ./
+COPY call-commerce-lifecycle.js ./
 COPY call-commerce-repository.js ./
 COPY call-commerce-meta-worker.js ./
 COPY call-commerce-meta-publisher.js ./

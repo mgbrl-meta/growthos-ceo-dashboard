@@ -1,78 +1,181 @@
-# Growth OS Call Commerce V1
+# Growth OS Call Commerce — Identity & Lifecycle Contract V2
 
-## Locked product decisions
-- Module ID: `call-commerce`
-- Dedicated operational dataset: `growthos_call_commerce`
-- Region: inherited from `GCP_BQ_LOCATION`, default `asia-south1`
-- Canonical tenant identity: existing Growth OS `workspace_id` + `brand_id`
-- No Shopify dependency
-- No product catalogue dependency
-- Product / service remains free text
-- Purchase remains manually confirmed by the agent with order/reference ID + amount
-- Calling integration is generic; MSG91 is only the first preset
-- Meta outbound events use call-specific names:
-  - `ConnectedCallLead`
-  - `QualifiedCallLead`
-  - `UnqualifiedCallLead`
-  - `ConvertedCallLead`
+## Scope
 
-## Call Commerce tabs
-- Summary
-- Calls
-- Meta Events
-- Archive
-- Reports
-- System Status
+Call Commerce is a multi-brand, multi-connector, multi-business-number operational CRM. PostgreSQL is the operational source of truth. BigQuery is downstream analytics/history.
 
-## Calling integration
-Settings -> Integrations -> Calling Platform
+The core engine is provider-neutral. Known providers such as MSG91 may have an adapter/preset at the mapping boundary, but CRM lead/attempt resolution must not contain provider-specific branching.
 
-A connection gets an opaque webhook URL and secret. During testing, incoming payloads are captured and their JSON fields are discovered. Mapping is activated after mapping provider fields to the canonical event.
+## Identity model
 
-MSG91 preset maps common fields including `uuid`, `source`, `eventName`, `status`, `duration`, `agentName`, `startTime`, and `endTime`.
+Three identities are intentionally separate:
 
-## Meta Events integration
-Settings -> Integrations -> Meta Events
+1. **Customer/contact** — normalized customer phone within one `workspace_id + brand_id`.
+2. **Lead** — one business opportunity/lifecycle (`lead_id`).
+3. **Call attempt/leg** — one physical provider call, identified by:
+   `workspace_id + brand_id + connection_id + provider_call_id`.
 
-This is intentionally separate from Meta Ads reporting. It stores the CAPI access token in Secret Manager and the Dataset / Pixel ID in the Growth OS integration connection. Call Commerce queues namespaced call-lead events and processes them through this connection.
+Connector and business number are call-attempt attributes. They do not split the customer into separate leads inside the same brand.
 
-## Data tables
-Created automatically in `growthos_call_commerce` on first Call Commerce use:
-- calling_connections
-- calling_mapping_versions
-- calling_test_events
-- raw_call_events
-- call_attempts
-- call_leads
-- activity_log
-- meta_event_queue
-- meta_event_log
-- module_settings
+## Universal lead resolution
 
-## Access control
-`call-commerce` is inserted as an independently entitleable Growth OS module during capability-control migration. It is seeded Draft + Plan-controlled so Admin decides when and for whom it launches.
+Resolution order is fixed platform behavior; it is not configurable per brand in V2.
 
-Submodules:
-- summary
-- calls
-- meta-events
-- archive
-- reports
-- system-status
+1. If the scoped provider call identity already exists, update that exact attempt and keep its existing `lead_id` — even when the lead later becomes terminal.
+2. If this is a new provider call ID, resolve the customer by normalized phone within the same workspace + brand.
+3. If an open lead exists (`NEW`, `QUALIFIED`, `FOLLOW_UP`), create a new call attempt under that lead.
+4. If no open lead exists, create a new `NEW` lead and attach the new attempt.
+5. Terminal statuses (`PURCHASED`, `UNQUALIFIED`, `CLOSED_LOST`) are never auto-reopened by a new physical call.
+6. When a previously unseen call arrives late and provides a reliable `startedAt`, Growth OS uses the physical call start time to place that call inside the correct historical lead lifecycle. A call that actually happened before terminalization may therefore be attached to the historical terminal lead without reopening it.
 
-## Production rollout
-1. Install dependencies: `npm ci`
-2. Run the existing Growth OS capability/control-plane migration/bootstrap so `call-commerce` and its submodules are registered.
-3. Run `npm run build`.
-4. From Admin Modules, enable/release Call Commerce for the target workspace/brand/plan.
-5. In client Settings -> Integrations -> Calling Platform, create the calling connection.
-6. Configure provider webhook with the generated URL/secret.
-7. Send a test event, confirm/adjust field + value mappings, then activate the mapping.
-8. Optional: connect Settings -> Integrations -> Meta Events with Meta Dataset/Pixel ID and CAPI token.
-9. Test an answered call, repeated call, qualification, follow-up, unqualification, purchase and closed-lost flow before switching production traffic.
+A unique PostgreSQL invariant allows only one non-archived open lead for the same normalized phone in a workspace + brand.
 
-## Notes
-- Ringing events are retained in raw data but do not create/update operational call leads.
-- Repeated calls attach to active `NEW`, `QUALIFIED`, or `FOLLOW_UP` lead threads; terminal leads have the current 30-minute grace behavior.
-- Purchase fields are not editable through normal lead detail updates; they are written only by the Purchase workflow action.
-- Meta is optional. If Meta Events is not connected, Call Commerce does not create an undeliverable Meta queue entry.
+## Ringing and attempt state
+
+`RINGING` is operational, not raw-only.
+
+Example:
+
+```text
+Call ABC -> RINGING
+Call ABC -> ANSWERED
+```
+
+Both events update the same call-attempt row.
+
+A later new call ID creates a new leg:
+
+```text
+Lead L1
+  ABC -> ANSWERED
+  XYZ -> RINGING
+```
+
+The Calls front shows the canonical status of the chronologically latest attempt (`XYZ -> RINGING`).
+
+## Latest call projection
+
+Lead-level fields such as `latest_attempt_id` and `latest_call_status` are a denormalized projection from `call_attempts`.
+
+The latest attempt is selected by:
+
+1. `COALESCE(call_started_at, created_at)` descending;
+2. provider/update time descending;
+3. deterministic creation/attempt tie-breakers.
+
+Webhook arrival order must not make an older call become the latest call.
+
+If the latest attempt has no mapped canonical status, the front displays `UNKNOWN`.
+
+## Call status vs provider event vs end reason
+
+These fields are separate:
+
+- **Provider event:** `ringing`, `completed`, `failed`, etc.
+- **Canonical call status:** `RINGING`, `ANSWERED`, `NO_ANSWER`, `MISSED`, `BUSY`, `REJECTED`, `FAILED`, `UNKNOWN`.
+- **End reason:** `CALLER_DROPPED_BEFORE_ANSWER`, `USER_UNREACHABLE`, `CUSTOMER_DISCONNECTED`, `AGENT_DISCONNECTED`, etc.
+- **Lead workflow status:** `NEW`, `QUALIFIED`, `FOLLOW_UP`, `PURCHASED`, `UNQUALIFIED`, `CLOSED_LOST`.
+
+`completed` is never treated as synonymous with `ANSWERED` by the universal CRM layer. Positive duration alone is never answer evidence.
+
+`CALLER_DROPPED_BEFORE_ANSWER` is an end reason under `NO_ANSWER`, not a separate primary call status.
+
+## Same-attempt state reconciliation
+
+Status precedence is used only inside one scoped provider call identity to reconcile duplicate/out-of-order webhooks.
+
+- `RINGING` can resolve to a terminal status.
+- `NO_ANSWER` may upgrade to `ANSWERED` when a later fallback leg explicitly connects.
+- An already `ANSWERED` attempt is not downgraded by stale lower-confidence events.
+- A newer terminal provider lifecycle event with no mapped business outcome clears stale `RINGING` to `UNKNOWN`; Growth OS does not guess an answer/no-answer outcome.
+
+Status precedence never compares two separate physical call attempts. The newer physical call controls the lead's latest-call projection.
+
+## Inbound and outbound
+
+Inbound and outbound use exactly the same lead resolver.
+
+Direction is a call-attempt property only:
+
+```text
+direction = INBOUND | OUTBOUND | UNKNOWN
+```
+
+Known provider adapters normalize customer/business sides before the universal engine. For MSG91:
+
+- inbound customer: `source`
+- outbound customer: `destination`
+- business number: `callerId`
+
+A new outbound call to a customer with an open lead becomes another leg on that same lead. A new outbound call after a terminal lifecycle creates a new lead, just like inbound.
+
+## Multi-brand, multi-connector, multi-business-number behavior
+
+- Customer/lead lookup is always scoped by `workspace_id + brand_id`.
+- Same phone in another brand is a separate CRM lifecycle.
+- Attempt identity includes `connection_id`, so the same provider call ID on two connectors does not collide.
+- A customer can contact different business numbers/connectors and still remain on the same open lead in that brand.
+- `business_number` and `connection_id` remain available for filtering, analytics and diagnostics.
+
+## Provider integration boundary
+
+Every provider connection maps provider data into the canonical event contract:
+
+```text
+providerCallId
+providerEventId
+customerPhone
+businessNumber
+direction
+providerEvent/eventType
+callStatus
+startedAt
+answeredAt
+endedAt
+updatedAt
+durationSeconds
+agentId/agentName/agentPhone
+disconnectedBy
+disconnectParty
+endReason
+recordingUrl
+reason
+```
+
+Custom connectors can map event type, call status, direction, disconnect party and end reason values. Known provider adapters may add semantic interpretation only at this boundary.
+
+## Lead terminality and Meta
+
+Terminal lead statuses are:
+
+- `PURCHASED`
+- `UNQUALIFIED`
+- `CLOSED_LOST`
+
+A genuinely new call after terminalization starts a new lead. This protects funnel history, lifecycle timestamps and Meta conversion semantics.
+
+Admin status correction is a separate audited action. It may correct a mistaken terminal status back to an open status, requires a reason, does not emit a duplicate conversion event, and is blocked if another open lead already exists for that customer in the same brand.
+
+## Settings
+
+Brand settings continue to control call-quality thresholds, workflow-required fields and archive policy.
+
+Lead reuse/reopen/grace rules are **not** exposed to brands. The legacy `reopen_grace_minutes` storage column is retained only for compatibility and has no operational effect.
+
+## Storage
+
+PostgreSQL operational tables include:
+
+- `calling_connections`
+- `calling_mapping_versions`
+- `calling_test_events`
+- `raw_call_events`
+- `call_attempts`
+- `call_leads`
+- `activity_log`
+- `meta_event_queue`
+- `meta_event_log`
+- `settings`
+- `analytics_outbox`
+
+BigQuery receives downstream append-only analytics events and remains the warehouse/history plane.

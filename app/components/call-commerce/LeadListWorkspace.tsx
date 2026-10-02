@@ -38,12 +38,14 @@ export default function LeadListWorkspace({
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [callStatus, setCallStatus] = useState('');
+  const [direction, setDirection] = useState('');
   const [agent, setAgent] = useState('');
   const [businessNumber, setBusinessNumber] = useState('');
 
   const [selected, setSelected] = useState<any>(null);
   const [history, setHistory] = useState<any>(null);
   const [manualOpen, setManualOpen] = useState(false);
+  const [canCorrectStatus, setCanCorrectStatus] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -65,6 +67,7 @@ export default function LeadListWorkspace({
           status,
           search,
           callStatus,
+          direction,
           agent,
           businessNumber,
         });
@@ -80,6 +83,9 @@ export default function LeadListWorkspace({
 
         setRows(Array.isArray(body.data?.rows) ? body.data.rows : []);
         setTotal(Number(body.data?.total || 0));
+        setCanCorrectStatus(
+          Boolean(body.data?.capabilities?.canCorrectStatus)
+        );
 
         if (archived) {
           setArchiveFacets(body.data?.facets || {});
@@ -96,6 +102,7 @@ export default function LeadListWorkspace({
       search,
       status,
       callStatus,
+      direction,
       agent,
       businessNumber,
       archived,
@@ -322,12 +329,29 @@ export default function LeadListWorkspace({
               setPage(1);
             }}
             options={[
-              ['', 'All call outcomes'],
+              ['', 'All call statuses'],
               ['ANSWERED', 'Answered'],
               ['NO_ANSWER', 'No Answer'],
-              ['CALLER_DROPPED', 'Caller Dropped'],
-              ['UNKNOWN', 'Unknown'],
               ['RINGING', 'Ringing'],
+              ['FAILED', 'Failed'],
+              ['BUSY', 'Busy'],
+              ['REJECTED', 'Rejected'],
+              ['MISSED', 'Missed'],
+              ['UNKNOWN', 'Unknown'],
+            ]}
+          />
+
+          <Select
+            value={direction}
+            onChange={(value) => {
+              setDirection(value);
+              setPage(1);
+            }}
+            options={[
+              ['', 'All directions'],
+              ['INBOUND', 'Inbound'],
+              ['OUTBOUND', 'Outbound'],
+              ['UNKNOWN', 'Unknown'],
             ]}
           />
 
@@ -413,6 +437,7 @@ export default function LeadListWorkspace({
           lead={selected}
           history={history}
           loading={historyLoading}
+          canCorrectStatus={canCorrectStatus}
           onClose={() => {
             setSelected(null);
             setHistory(null);

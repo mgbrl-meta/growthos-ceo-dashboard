@@ -72,15 +72,121 @@ if (-not $RuntimeServiceAccount) {
 
 Write-Host "Runtime service account: $RuntimeServiceAccount"
 
-Invoke-Gcloud projects add-iam-policy-binding $ProjectId `
-  --member="serviceAccount:$RuntimeServiceAccount" `
-  --role="roles/cloudsql.client" `
-  --condition=None | Out-Null
+# Deployment must not rewrite IAM on every release.
+# IAM is an infrastructure/provisioning concern. Repeatedly mutating the
+# Secret Manager policy also makes normal application deployment depend on
+# secretmanager.secrets.setIamPolicy, which many deployer identities should
+# intentionally not have.
+#
+# For an existing PostgreSQL-backed service, reuse the already-proven runtime
+# service account and secret binding. For a brand-new service, require the
+# one-time infrastructure IAM prerequisite to be established first.
 
-Invoke-Gcloud projects add-iam-policy-binding $ProjectId `
-  --member="serviceAccount:$RuntimeServiceAccount" `
-  --role="roles/secretmanager.secretAccessor" `
-  --condition=None | Out-Null
+$RuntimeMember = "serviceAccount:$RuntimeServiceAccount"
+
+$ProjectIamJson = & gcloud projects get-iam-policy $ProjectId --format=json 2>$null
+$ProjectIam = $null
+if ($LASTEXITCODE -eq 0 -and $ProjectIamJson) {
+  $ProjectIam = $ProjectIamJson | ConvertFrom-Json
+}
+
+$HasCloudSqlClient = $false
+$HasProjectSecretAccessor = $false
+
+if ($ProjectIam -and $ProjectIam.bindings) {
+  foreach ($Binding in $ProjectIam.bindings) {
+    $Members = @($Binding.members)
+    if ($Members -contains $RuntimeMember) {
+      if ($Binding.role -eq "roles/cloudsql.client") {
+        $HasCloudSqlClient = $true
+      }
+      if ($Binding.role -eq "roles/secretmanager.secretAccessor") {
+        $HasProjectSecretAccessor = $true
+      }
+    }
+  }
+}
+
+if (-not $HasCloudSqlClient) {
+  throw @"
+Runtime service account is missing roles/cloudsql.client:
+
+  $RuntimeMember
+
+Grant this once from the infrastructure/provisioning path, then rerun deployment.
+The deploy script intentionally does not mutate IAM.
+"@
+}
+
+$HasSecretLevelAccessor = $false
+$SecretIamReadable = $false
+$SecretIamJson = & gcloud secrets get-iam-policy $PasswordSecret --project=$ProjectId --format=json 2>$null
+if ($LASTEXITCODE -eq 0 -and $SecretIamJson) {
+  $SecretIamReadable = $true
+  $SecretIam = $SecretIamJson | ConvertFrom-Json
+  if ($SecretIam -and $SecretIam.bindings) {
+    foreach ($Binding in $SecretIam.bindings) {
+      if (
+        $Binding.role -eq "roles/secretmanager.secretAccessor" -and
+        @($Binding.members) -contains $RuntimeMember
+      ) {
+        $HasSecretLevelAccessor = $true
+      }
+    }
+  }
+}
+
+# Existing Cloud Run configuration is also useful evidence: if this exact
+# runtime identity is already serving the PostgreSQL worker with the same
+# Secret Manager secret, a release should not need to re-grant that policy.
+$ExistingServiceJson = & gcloud run services describe $ServiceName `
+  --project=$ProjectId `
+  --region=$Region `
+  --format=json 2>$null
+
+$ExistingServiceUsesPasswordSecret = $false
+if ($LASTEXITCODE -eq 0 -and $ExistingServiceJson) {
+  try {
+    $ExistingService = $ExistingServiceJson | ConvertFrom-Json
+    $Containers = @($ExistingService.spec.template.spec.containers)
+    foreach ($Container in $Containers) {
+      foreach ($Env in @($Container.env)) {
+        if (
+          $Env.name -eq "GROWTHOS_PG_PASSWORD" -and
+          $Env.valueFrom.secretKeyRef.name -eq $PasswordSecret
+        ) {
+          $ExistingServiceUsesPasswordSecret = $true
+        }
+      }
+    }
+  } catch {
+    $ExistingServiceUsesPasswordSecret = $false
+  }
+}
+
+if ($HasProjectSecretAccessor) {
+  Write-Host "Secret access: project-level accessor already configured." -ForegroundColor DarkGray
+} elseif ($HasSecretLevelAccessor) {
+  Write-Host "Secret access: secret-level accessor already configured." -ForegroundColor DarkGray
+} elseif ($ExistingServiceUsesPasswordSecret) {
+  Write-Host "Secret access: existing PostgreSQL worker already uses this secret with the same runtime identity." -ForegroundColor DarkGray
+  if (-not $SecretIamReadable) {
+    Write-Host "Secret IAM policy is not readable by the deployer; no IAM mutation will be attempted." -ForegroundColor DarkGray
+  }
+} else {
+  throw @"
+Unable to verify Secret Manager access for:
+
+  $RuntimeMember
+  secret: $PasswordSecret
+
+This is a one-time infrastructure IAM prerequisite. Have an authorized
+infrastructure administrator grant roles/secretmanager.secretAccessor on the
+secret (preferred) or appropriate project scope. Then rerun deployment.
+
+The application deploy script intentionally does not modify secret IAM.
+"@
+}
 
 # Reuse the already-proven authenticated Pub/Sub push identity.
 $SubscriptionsJson = & gcloud pubsub subscriptions list --project=$ProjectId --format=json
@@ -115,7 +221,6 @@ $EnvVars = @(
   "GROWTHOS_META_EVENTS_TOPIC=$MetaEventsTopic",
   "GROWTHOS_CALL_COMMERCE_ANALYTICS_DATASET=growthos_call_commerce",
   "GROWTHOS_CALL_COMMERCE_ANALYTICS_TABLE=operational_events",
-  "CALL_COMMERCE_REOPEN_GRACE_MINUTES=30",
   "CALL_COMMERCE_CONTACT_MIN_DURATION_SECONDS=20",
   "CALL_COMMERCE_META_MAX_ATTEMPTS=5",
   "CALL_COMMERCE_META_RETRY_DELAY_MINUTES=5",

@@ -66,9 +66,17 @@ V1 creates shared operational schemas:
 
 All tenant-owned data retains `workspace_id` + `brand_id`.
 
-## MSG91 inbound + outbound
+## Call Commerce identity/lifecycle
 
-The normalizer is direction-aware.
+PostgreSQL stores the live lead and call-attempt state. Attempt identity is scoped by `workspace_id + brand_id + connection_id + provider_call_id`; lead identity is scoped by normalized customer phone inside `workspace_id + brand_id`. Connector and business number do not partition a lead.
+
+New physical calls attach to an existing `NEW`, `QUALIFIED` or `FOLLOW_UP` lead. A new physical call after `PURCHASED`, `UNQUALIFIED` or `CLOSED_LOST` creates a new lead. Same-call webhook updates always remain on their original attempt/lead.
+
+`RINGING` is persisted operationally and may resolve on the same attempt. The lead front projects the status of the chronologically latest attempt. Missing/unmapped status is `UNKNOWN`. Provider lifecycle events, canonical call status and end reason remain distinct.
+
+The core lifecycle resolver is provider-neutral and supports multiple brands, calling connections and business numbers. Known provider semantics stay in provider adapters/presets.
+
+### MSG91 adapter
 
 **Inbound**
 
@@ -84,24 +92,9 @@ destination -> customerPhone
 callerId    -> businessNumber
 ```
 
-Common mappings:
+Common mappings include `uuid -> providerCallId`, `requestId -> providerEventId`, `eventName -> rawEventType`, `direction`, timestamps, duration, agent fields, disconnect fields and IVR evidence.
 
-```text
-uuid            -> providerCallId
-requestId       -> providerEventId
-eventName       -> rawEventType
-direction       -> direction
-startTime       -> startedAt
-endTime         -> endedAt
-statusUpdatedAt -> updatedAt
-duration        -> durationSeconds
-agentName       -> agentName
-disconnectedBy  -> disconnectedBy
-```
-
-Legacy MSG91 mappings that marked `source -> customerPhone` as required are tolerated: the normalizer applies the direction-aware fallback before final customer-phone validation.
-
-A completed outbound MSG91 call with a positive duration is treated as answered even when MSG91 omits an explicit `answered` status. Outbound `disconnectedBy=destination` is correctly interpreted as the **customer** side.
+MSG91 `completed` is a provider lifecycle event, not proof that a human answered. Positive duration alone is never used as answer evidence. Multi-leg routing may contain early `No-answer` legs followed by a later `Answered` leg; explicit connected evidence wins inside that same provider call.
 
 ## Application cutover
 

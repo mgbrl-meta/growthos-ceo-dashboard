@@ -132,9 +132,6 @@ export async function PUT(
           contactMinDurationSeconds:
             body?.contactMinDurationSeconds,
 
-          reopenGraceMinutes:
-            body?.reopenGraceMinutes,
-
           autoArchiveTerminalLeads:
             body?.autoArchiveTerminalLeads,
 

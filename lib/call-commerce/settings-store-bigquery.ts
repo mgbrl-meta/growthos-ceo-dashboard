@@ -602,6 +602,10 @@ export async function updateCallCommerceSettings(
     validateSettings({
       ...current,
       ...input.settings,
+      // Compatibility column only. Lead lifecycle threading is system-managed
+      // and cannot be changed per brand in Call Commerce V2.
+      reopenGraceMinutes:
+        current.reopenGraceMinutes,
       updatedAt:
         current.updatedAt,
       updatedBy:

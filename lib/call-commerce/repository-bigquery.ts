@@ -7,6 +7,14 @@ import { getCallCommerceSettingsCached } from './settings-store';
 import { ensureCallCommerceSchema } from './schema';
 import { emitMetaSourceEvent } from '@/lib/meta-events/publisher';
 import type { CallingFieldMapping, CallingValueMapping, CanonicalCallEvent } from './types';
+import {
+  canonicalCallStatus,
+  isOpenLeadStatus,
+  normalizePhoneIdentity,
+  selectLeadForNewAttempt,
+  shouldIncomingLifecycleEventWin,
+  shouldIncomingStatusWin,
+} from './lifecycle';
 
 const PROJECT_ID = process.env.GCP_PROJECT_ID || process.env.BQ_PROJECT_ID || '';
 const table = (name: string) => `\`${PROJECT_ID}.${CALL_COMMERCE_DATASET}.${name}\``;
@@ -261,15 +269,8 @@ export async function markCallingConnectionProcessingResult(input: {
   });
 }
 
-const OPEN_LEAD_STATUSES = new Set(['NEW', 'QUALIFIED', 'FOLLOW_UP']);
-const TERMINAL_LEAD_STATUSES = new Set(['PURCHASED', 'UNQUALIFIED', 'CLOSED_LOST']);
-
 function isAnswered(status: string) { return status === 'ANSWERED'; }
 function isUnanswered(status: string) { return ['MISSED','NO_ANSWER','BUSY','REJECTED','FAILED'].includes(status); }
-
-function normalizePhone(value: unknown) {
-  return String(value ?? '').replace(/[^0-9+]/g, '').trim();
-}
 
 function asDate(value: any): Date | null {
   const raw = value?.value ?? value;
@@ -294,21 +295,6 @@ function laterIso(a: any, b: any) {
   return (da.getTime() >= db.getTime() ? da : db).toISOString();
 }
 
-function callStatusRank(status: string) {
-  const ranks: Record<string, number> = {
-    '': 0,
-    UNKNOWN: 1,
-    RINGING: 10,
-    MANUAL_CREATED: 20,
-    MISSED: 60,
-    NO_ANSWER: 65,
-    BUSY: 65,
-    REJECTED: 65,
-    FAILED: 65,
-    ANSWERED: 100,
-  };
-  return ranks[String(status || '').toUpperCase()] ?? 30;
-}
 
 async function getProviderAttempt(event: CanonicalCallEvent) {
   const [rows] = await bigquery.query({
@@ -330,26 +316,27 @@ async function getProviderAttempt(event: CanonicalCallEvent) {
   return (rows as any[])[0] || null;
 }
 
-async function findAttachableLead(input: {
+async function findLeadForNewAttempt(input: {
   workspaceId: string;
   brandId: string;
   phone: string;
-  callAt?: string | Date | null;
+  callStartedAt?: string | Date | null;
 }) {
-  const phone = normalizePhone(input.phone);
+  const phone = normalizePhoneIdentity(input.phone);
   if (!phone) return null;
 
   const [rows] = await bigquery.query({
     location: CALL_COMMERCE_LOCATION,
-    query: `SELECT lead_id,status,status_changed_at,latest_call_at,updated_at,created_at
+    query: `SELECT
+        lead_id,status,status_changed_at,first_call_at,latest_call_at,
+        updated_at,created_at,is_archived
       FROM ${table('call_leads')}
       WHERE workspace_id=@workspace_id
         AND brand_id=@brand_id
-        AND phone=@phone
-        AND is_archived=FALSE
+        AND REGEXP_REPLACE(COALESCE(phone,''), r'[^0-9]', '')=@phone
         AND status IN ('NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST')
-      ORDER BY COALESCE(latest_call_at,updated_at,created_at) DESC
-      LIMIT 50`,
+      ORDER BY COALESCE(first_call_at,created_at) DESC,created_at DESC
+      LIMIT 100`,
     params: {
       workspace_id: input.workspaceId,
       brand_id: input.brandId,
@@ -357,31 +344,7 @@ async function findAttachableLead(input: {
     },
   });
 
-  const candidates = rows as any[];
-  const open = candidates.find(row => OPEN_LEAD_STATUSES.has(String(row.status || '').toUpperCase()));
-  if (open) return open;
-
-  const runtimeSettings = await getCallCommerceSettingsCached(input.workspaceId, input.brandId);
-  const callAt = asDate(input.callAt) || new Date();
-  const graceMs = runtimeSettings.reopenGraceMinutes * 60_000;
-  let bestTerminal: any = null;
-  let bestTerminalAt = -1;
-
-  for (const row of candidates) {
-    const status = String(row.status || '').toUpperCase();
-    if (!TERMINAL_LEAD_STATUSES.has(status)) continue;
-    // status_changed_at is intentionally separate from call/webhook updated_at.
-    // A later provider callback must never extend the terminal reopen grace window.
-    const terminalAt = asDate(row.status_changed_at) || asDate(row.updated_at);
-    if (!terminalAt) continue;
-    const delta = callAt.getTime() - terminalAt.getTime();
-    if (delta >= 0 && delta <= graceMs && terminalAt.getTime() > bestTerminalAt) {
-      bestTerminal = row;
-      bestTerminalAt = terminalAt.getTime();
-    }
-  }
-
-  return bestTerminal;
+  return selectLeadForNewAttempt(rows as any[], input.callStartedAt || null);
 }
 
 async function createCallLead(input: {
@@ -411,7 +374,7 @@ async function createCallLead(input: {
       lead_id: leadId,
       workspace_id: input.workspaceId,
       brand_id: input.brandId,
-      phone: normalizePhone(input.phone),
+      phone: normalizePhoneIdentity(input.phone),
       customer_name: input.customerName || null,
       email: input.email || null,
       product: input.product || null,
@@ -432,17 +395,21 @@ async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, exis
     event.connectionId,
     event.providerCallId,
   ]);
-  const oldStatus = String(existingAttempt?.call_status || '');
-  const incomingStatus = String(event.callStatus || '');
-  const oldUpdatedAt = asDate(existingAttempt?.provider_updated_at);
+  const oldStatus = canonicalCallStatus(existingAttempt?.call_status || 'UNKNOWN');
+  const incomingStatus = canonicalCallStatus(event.callStatus || 'UNKNOWN');
   const incomingUpdatedAt = asDate(event.updatedAt) || asDate(event.endedAt) || asDate(event.startedAt) || new Date();
-  const incomingWins =
-    !oldStatus ||
-    callStatusRank(incomingStatus) > callStatusRank(oldStatus) ||
-    (
-      callStatusRank(incomingStatus) === callStatusRank(oldStatus) &&
-      (!oldUpdatedAt || incomingUpdatedAt.getTime() >= oldUpdatedAt.getTime())
-    );
+  const statusWins = shouldIncomingStatusWin({
+    existingStatus: existingAttempt?.call_status || '',
+    incomingStatus,
+    existingUpdatedAt: existingAttempt?.provider_updated_at,
+    incomingUpdatedAt,
+    incomingEventType: event.eventType,
+  });
+  const lifecycleWins = shouldIncomingLifecycleEventWin({
+    existingUpdatedAt: existingAttempt?.provider_updated_at,
+    incomingUpdatedAt,
+  });
+  const outcomeWins = statusWins || (incomingStatus === oldStatus && lifecycleWins);
 
   const values = {
     attempt_id: attemptId,
@@ -452,11 +419,14 @@ async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, exis
     provider_key: event.callingProvider,
     provider_call_id: event.providerCallId,
     lead_id: existingAttempt?.lead_id || leadId,
-    phone: normalizePhone(existingAttempt?.phone || event.customerPhone),
+    phone: normalizePhoneIdentity(existingAttempt?.phone || event.customerPhone),
     business_number: event.businessNumber || existingAttempt?.business_number || null,
-    event_type: incomingWins ? event.eventType : (existingAttempt?.event_type || event.eventType),
-    call_status: incomingWins ? incomingStatus : oldStatus,
-    direction: incomingWins ? event.direction : (existingAttempt?.direction || event.direction),
+    event_type: lifecycleWins ? event.eventType : (existingAttempt?.event_type || event.eventType),
+    call_status: statusWins ? incomingStatus : oldStatus,
+    direction:
+      lifecycleWins && ['INBOUND','OUTBOUND'].includes(String(event.direction || '').toUpperCase())
+        ? event.direction
+        : (existingAttempt?.direction || event.direction || 'UNKNOWN'),
     agent_id: event.agentId || existingAttempt?.agent_id || null,
     agent_name: event.agentName || existingAttempt?.agent_name || null,
     agent_phone: event.agentPhone || existingAttempt?.agent_phone || null,
@@ -465,15 +435,15 @@ async function upsertCallAttempt(event: CanonicalCallEvent, leadId: string, exis
     ended_at: laterIso(existingAttempt?.call_ended_at, event.endedAt),
     provider_updated_at: laterIso(existingAttempt?.provider_updated_at, incomingUpdatedAt),
     duration_seconds: Math.max(Number(existingAttempt?.duration_seconds || 0), Number(event.durationSeconds || 0)),
-    disconnected_by: incomingWins ? (event.disconnectedBy || existingAttempt?.disconnected_by || null) : (existingAttempt?.disconnected_by || null),
-    disconnect_party: incomingWins ? (event.disconnectParty || existingAttempt?.disconnect_party || null) : (existingAttempt?.disconnect_party || null),
-    end_reason: incomingWins ? (event.endReason || existingAttempt?.end_reason || null) : (existingAttempt?.end_reason || null),
-    outcome_source: incomingWins ? (event.outcomeSource || existingAttempt?.outcome_source || null) : (existingAttempt?.outcome_source || null),
+    disconnected_by: outcomeWins ? (event.disconnectedBy || existingAttempt?.disconnected_by || null) : (existingAttempt?.disconnected_by || null),
+    disconnect_party: outcomeWins ? (event.disconnectParty || existingAttempt?.disconnect_party || null) : (existingAttempt?.disconnect_party || null),
+    end_reason: outcomeWins ? (event.endReason || existingAttempt?.end_reason || null) : (existingAttempt?.end_reason || null),
+    outcome_source: outcomeWins ? (event.outcomeSource || existingAttempt?.outcome_source || null) : (existingAttempt?.outcome_source || null),
     recording_url: event.recordingUrl || existingAttempt?.recording_url || null,
-    reason: incomingWins ? (event.reason || existingAttempt?.reason || null) : (existingAttempt?.reason || null),
+    reason: outcomeWins ? (event.reason || existingAttempt?.reason || null) : (existingAttempt?.reason || null),
     ivr_inputs: event.ivrInputs ?? existingAttempt?.ivr_inputs ?? null,
-    raw_event_type: incomingWins ? (event.rawEventType || existingAttempt?.raw_event_type || null) : (existingAttempt?.raw_event_type || null),
-    raw_status: incomingWins ? (event.rawStatus || existingAttempt?.raw_status || null) : (existingAttempt?.raw_status || null),
+    raw_event_type: lifecycleWins ? (event.rawEventType || existingAttempt?.raw_event_type || null) : (existingAttempt?.raw_event_type || null),
+    raw_status: lifecycleWins ? (event.rawStatus || existingAttempt?.raw_status || null) : (existingAttempt?.raw_status || null),
   };
 
   await bigquery.query({
@@ -573,7 +543,7 @@ async function refreshLeadCallSummary(input: {
       ARRAY_AGG(STRUCT(
         attempt_id,provider_call_id,business_number,call_status,agent_name,duration_seconds,
         disconnect_party,end_reason,activity_at,call_ended_at,provider_updated_at
-      ) ORDER BY activity_at DESC,COALESCE(provider_updated_at,updated_at) DESC LIMIT 1)[SAFE_OFFSET(0)] latest
+      ) ORDER BY activity_at DESC,COALESCE(provider_updated_at,updated_at) DESC,created_at DESC,attempt_id DESC LIMIT 1)[SAFE_OFFSET(0)] latest
     FROM attempts`,
     params: {
       workspace_id: input.workspaceId,
@@ -606,7 +576,7 @@ async function refreshLeadCallSummary(input: {
     params: {
       first_call_at: asDate(summary.first_call_at)?.toISOString() || null,
       latest_call_at: asDate(latest.activity_at)?.toISOString() || null,
-      latest_call_status: latest.call_status || null,
+      latest_call_status: canonicalCallStatus(latest.call_status || 'UNKNOWN'),
       latest_agent_name: latest.agent_name || null,
       latest_attempt_id: latest.attempt_id || null,
       latest_provider_call_id: latest.provider_call_id || null,
@@ -657,11 +627,11 @@ export async function ingestCanonicalEvent(
   }
 
   if (!lead) {
-    lead = await findAttachableLead({
+    lead = await findLeadForNewAttempt({
       workspaceId: event.workspaceId,
       brandId: event.brandId,
       phone: event.customerPhone,
-      callAt: event.startedAt || event.updatedAt || null,
+      callStartedAt: event.startedAt || null,
     });
   }
 
@@ -723,6 +693,7 @@ export async function listLeads(input: {
   status?: string;
   search?: string;
   callStatus?: string;
+  direction?: string;
   agent?: string;
   businessNumber?: string;
   limit?: number;
@@ -741,6 +712,7 @@ export async function listLeads(input: {
     status: input.status || '',
     search: input.search || '',
     call_status: callStatus,
+    direction: String(input.direction || '').toUpperCase(),
     agent: input.agent || '',
     business_number: input.businessNumber || '',
     limit,
@@ -778,14 +750,11 @@ export async function listLeads(input: {
     )
     AND (
       @call_status=''
-      OR (
-        @call_status='CALLER_DROPPED'
-        AND latest_end_reason='CALLER_DROPPED_BEFORE_ANSWER'
-      )
-      OR (
-        @call_status!='CALLER_DROPPED'
-        AND latest_call_status=@call_status
-      )
+      OR COALESCE(NULLIF(latest_call_status,''),'UNKNOWN')=@call_status
+    )
+    AND (
+      @direction=''
+      OR COALESCE(latest_direction,'UNKNOWN')=@direction
     )
   `;
 
@@ -805,7 +774,7 @@ export async function listLeads(input: {
           status_changed_at,
           first_call_at,
           latest_call_at,
-          latest_call_status,
+          COALESCE(NULLIF(latest_call_status,''),'UNKNOWN') AS latest_call_status,
           latest_agent_name,
           latest_attempt_id,
           latest_provider_call_id,
@@ -823,8 +792,26 @@ export async function listLeads(input: {
           unqualified_reason,
           closed_lost_reason,
           created_at,
-          updated_at
-        FROM ${table('call_leads')}
+          updated_at,
+          latest_direction
+        FROM (
+          SELECT
+            l.*,
+            a.direction AS latest_direction
+          FROM ${table('call_leads')} l
+          LEFT JOIN (
+            SELECT
+              workspace_id,
+              brand_id,
+              attempt_id,
+              ANY_VALUE(direction) AS direction
+            FROM ${table('call_attempts')}
+            GROUP BY workspace_id,brand_id,attempt_id
+          ) a
+            ON a.workspace_id=l.workspace_id
+           AND a.brand_id=l.brand_id
+           AND a.attempt_id=l.latest_attempt_id
+        ) lead_rows
         WHERE ${where}
         ORDER BY
           latest_call_at DESC,
@@ -843,7 +830,24 @@ export async function listLeads(input: {
       location: CALL_COMMERCE_LOCATION,
       query: `
         SELECT COUNT(*) total
-        FROM ${table('call_leads')}
+        FROM (
+          SELECT
+            l.*,
+            a.direction AS latest_direction
+          FROM ${table('call_leads')} l
+          LEFT JOIN (
+            SELECT
+              workspace_id,
+              brand_id,
+              attempt_id,
+              ANY_VALUE(direction) AS direction
+            FROM ${table('call_attempts')}
+            GROUP BY workspace_id,brand_id,attempt_id
+          ) a
+            ON a.workspace_id=l.workspace_id
+           AND a.brand_id=l.brand_id
+           AND a.attempt_id=l.latest_attempt_id
+        ) lead_rows
         WHERE ${where}
       `,
       params,
@@ -1039,10 +1043,145 @@ const transitions: Record<string, string[]> = {
   FOLLOW_UP: ['FOLLOW_UP','PURCHASED','CLOSED_LOST'],
 };
 
-export async function updateLeadWorkflow(input: { workspaceId:string; brandId:string; leadId:string; actorUserId:string; action:string; data?:Record<string,unknown> }) {
+export async function updateLeadWorkflow(input: { workspaceId:string; brandId:string; leadId:string; actorUserId:string; allowStatusCorrection?:boolean; action:string; data?:Record<string,unknown> }) {
   const [rows] = await bigquery.query({ location: CALL_COMMERCE_LOCATION, query: `SELECT * FROM ${table('call_leads')} WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id LIMIT 1`, params: { workspace_id: input.workspaceId, brand_id: input.brandId, lead_id: input.leadId } });
   const lead = (rows as any[])[0];
   if (!lead) throw new Error('CALL_LEAD_NOT_FOUND');
+
+  if (input.action === 'admin_correct_status') {
+    if (!input.allowStatusCorrection) throw new Error('CALL_STATUS_CORRECTION_ADMIN_REQUIRED');
+
+    const target = String(input.data?.targetStatus || '').trim().toUpperCase();
+    const correctionReason = String(input.data?.correctionReason || '').trim();
+    const statusReason = String(input.data?.statusReason || '').trim();
+    const orderId = String(input.data?.orderId || '').trim();
+    const orderAmountRaw = input.data?.orderAmount;
+    const orderAmount = orderAmountRaw === undefined || orderAmountRaw === null || orderAmountRaw === ''
+      ? null
+      : Number(orderAmountRaw);
+    const allowedTargets = new Set(['NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST']);
+
+    if (orderAmount !== null && !Number.isFinite(orderAmount)) throw new Error('CALL_PURCHASE_AMOUNT_INVALID');
+    if (!allowedTargets.has(target)) throw new Error('INVALID_CALL_LEAD_CORRECTION_TARGET');
+    if (target === String(lead.status || '').toUpperCase()) throw new Error('CALL_LEAD_CORRECTION_STATUS_UNCHANGED');
+    if (!correctionReason) throw new Error('CALL_STATUS_CORRECTION_REASON_REQUIRED');
+
+    const workflowSettings = await getCallCommerceSettingsCached(input.workspaceId, input.brandId);
+
+    if (target === 'UNQUALIFIED' && workflowSettings.requireUnqualifiedReason && !statusReason) {
+      throw new Error('CALL_UNQUALIFIED_REASON_REQUIRED');
+    }
+    if (target === 'CLOSED_LOST' && workflowSettings.requireClosedLostReason && !statusReason) {
+      throw new Error('CALL_CLOSED_LOST_REASON_REQUIRED');
+    }
+    if (target === 'PURCHASED' && workflowSettings.requirePurchaseOrderId && !orderId) {
+      throw new Error('CALL_PURCHASE_ORDER_ID_REQUIRED');
+    }
+    if (target === 'PURCHASED' && workflowSettings.requirePurchaseAmount && (orderAmount === null || !Number.isFinite(orderAmount) || orderAmount <= 0)) {
+      throw new Error('CALL_PURCHASE_AMOUNT_REQUIRED');
+    }
+
+    if (isOpenLeadStatus(target)) {
+      const phoneIdentity = normalizePhoneIdentity(lead.phone);
+      if (phoneIdentity) {
+        const [openRows] = await bigquery.query({
+          location: CALL_COMMERCE_LOCATION,
+          query: `SELECT lead_id,status
+            FROM ${table('call_leads')}
+            WHERE workspace_id=@workspace_id
+              AND brand_id=@brand_id
+              AND lead_id!=@lead_id
+              AND is_archived=FALSE
+              AND status IN ('NEW','QUALIFIED','FOLLOW_UP')
+              AND REGEXP_REPLACE(COALESCE(phone,''), r'[^0-9]', '')=@phone
+            LIMIT 1`,
+          params: {
+            workspace_id: input.workspaceId,
+            brand_id: input.brandId,
+            lead_id: input.leadId,
+            phone: phoneIdentity,
+          },
+        });
+        if ((openRows as any[]).length) {
+          throw new Error('CALL_OPEN_LEAD_ALREADY_EXISTS');
+        }
+      }
+    }
+
+    const previousState = {
+      status: String(lead.status || ''),
+      unqualified_reason: lead.unqualified_reason || null,
+      closed_lost_reason: lead.closed_lost_reason || null,
+      next_follow_up_at: lead.next_follow_up_at || null,
+      order_id: lead.order_id || null,
+      order_amount: lead.order_amount === undefined || lead.order_amount === null ? null : Number(lead.order_amount),
+      purchased_at: lead.purchased_at || null,
+      is_archived: Boolean(lead.is_archived),
+      archived_at: lead.archived_at || null,
+    };
+
+    await bigquery.query({
+      location: CALL_COMMERCE_LOCATION,
+      query: `UPDATE ${table('call_leads')} SET
+        status=@target,
+        status_changed_at=CURRENT_TIMESTAMP(),
+        unqualified_reason=IF(@target='UNQUALIFIED',@status_reason,NULL),
+        closed_lost_reason=IF(@target='CLOSED_LOST',@status_reason,NULL),
+        next_follow_up_at=IF(@target='FOLLOW_UP',@next_follow_up_at,NULL),
+        order_id=IF(@target='PURCHASED',@order_id,NULL),
+        order_amount=IF(@target='PURCHASED',@order_amount,NULL),
+        purchased_at=IF(@target='PURCHASED',CURRENT_TIMESTAMP(),NULL),
+        is_archived=FALSE,
+        archived_at=NULL,
+        updated_at=CURRENT_TIMESTAMP(),
+        updated_by=@actor
+      WHERE workspace_id=@workspace_id AND brand_id=@brand_id AND lead_id=@lead_id`,
+      params: {
+        target,
+        status_reason: statusReason || null,
+        next_follow_up_at: input.data?.nextFollowUpAt || null,
+        order_id: orderId || null,
+        order_amount: orderAmount,
+        actor: input.actorUserId,
+        workspace_id: input.workspaceId,
+        brand_id: input.brandId,
+        lead_id: input.leadId,
+      },
+      types: {
+        status_reason: 'STRING',
+        next_follow_up_at: 'TIMESTAMP',
+        order_id: 'STRING',
+        order_amount: 'NUMERIC',
+      },
+    });
+
+    const correctionDetails = {
+      correction_reason: correctionReason,
+      status_reason: statusReason || null,
+      next_follow_up_at: target === 'FOLLOW_UP' ? input.data?.nextFollowUpAt || null : null,
+      order_id: target === 'PURCHASED' ? orderId || null : null,
+      order_amount: target === 'PURCHASED' ? orderAmount : null,
+      previous_state: previousState,
+    };
+
+    await bigquery.query({
+      location: CALL_COMMERCE_LOCATION,
+      query: `INSERT INTO ${table('activity_log')} (activity_id,workspace_id,brand_id,lead_id,activity_type,from_status,to_status,details,actor_user_id,created_at) VALUES (@activity_id,@workspace_id,@brand_id,@lead_id,'admin_status_correction',@from_status,@to_status,PARSE_JSON(@details),@actor,CURRENT_TIMESTAMP())`,
+      params: {
+        activity_id: id('act'),
+        workspace_id: input.workspaceId,
+        brand_id: input.brandId,
+        lead_id: input.leadId,
+        from_status: String(lead.status),
+        to_status: target,
+        details: JSON.stringify(correctionDetails),
+        actor: input.actorUserId,
+      },
+    });
+
+    return { status: target, corrected: true };
+  }
+
   if (['PURCHASED','UNQUALIFIED','CLOSED_LOST'].includes(String(lead.status)) && input.action !== 'update_details') throw new Error('CALL_LEAD_FINALIZED');
 
   if (input.action === 'update_details') {
@@ -1136,14 +1275,14 @@ export async function updateLeadWorkflow(input: { workspaceId:string; brandId:st
 
 export async function createManualLead(input:{ workspaceId:string;brandId:string;actorUserId:string;phone:string;customerName?:string;email?:string;product?:string;notes?:string }) {
   await ensureCallCommerceSchema();
-  const phone = normalizePhone(input.phone);
+  const phone = normalizePhoneIdentity(input.phone);
   if (!phone) throw new Error('CALL_PHONE_REQUIRED');
   const now = new Date();
-  let lead = await findAttachableLead({
+  let lead = await findLeadForNewAttempt({
     workspaceId: input.workspaceId,
     brandId: input.brandId,
     phone,
-    callAt: now,
+    callStartedAt: now,
   });
   const createdLead = !lead;
   const leadId = lead?.lead_id || await createCallLead({
@@ -1167,7 +1306,7 @@ export async function createManualLead(input:{ workspaceId:string;brandId:string
       event_type,call_status,direction,call_started_at,provider_updated_at,duration_seconds,created_at,updated_at
     ) VALUES (
       @attempt_id,@workspace_id,@brand_id,'manual','MANUAL',@provider_call_id,@lead_id,@phone,
-      'manual.incoming_call','MANUAL_CREATED','INBOUND',@started_at,@provider_updated_at,0,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()
+      'manual.incoming_call','UNKNOWN','INBOUND',@started_at,@provider_updated_at,0,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP()
     )`,
     params: {
       attempt_id: attemptId,

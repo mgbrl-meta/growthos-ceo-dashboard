@@ -5,17 +5,16 @@ import { pgQuery, withPgTransaction } from '@/lib/operational-postgres/client';
 import { enqueueMetaFlush, enqueueAnalyticsFlush } from './queue';
 import { getCallCommerceSettingsCached } from './settings-store';
 import type { CallingFieldMapping, CallingValueMapping } from './types';
+import {
+  canonicalCallStatus,
+  isOpenLeadStatus,
+  normalizePhoneIdentity,
+  selectLeadForNewAttempt,
+} from './lifecycle';
 
 const id = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`;
 const deterministic = (prefix: string, parts: Array<string | number | null | undefined>) =>
   `${prefix}_${crypto.createHash('sha256').update(parts.map(v => String(v ?? '')).join(':')).digest('hex').slice(0, 24)}`;
-
-const OPEN_LEAD_STATUSES = new Set(['NEW', 'QUALIFIED', 'FOLLOW_UP']);
-const TERMINAL_LEAD_STATUSES = new Set(['PURCHASED', 'UNQUALIFIED', 'CLOSED_LOST']);
-
-function normalizePhone(value: unknown) {
-  return String(value ?? '').replace(/[^0-9+]/g, '').trim();
-}
 
 function toDate(value: unknown) {
   if (!value) return null;
@@ -224,6 +223,7 @@ export async function listLeads(input: {
   status?: string;
   search?: string;
   callStatus?: string;
+  direction?: string;
   agent?: string;
   businessNumber?: string;
   limit?: number;
@@ -232,6 +232,7 @@ export async function listLeads(input: {
   const limit = Math.min(Math.max(Number(input.limit || 50), 1), 500);
   const offset = Math.max(Number(input.offset || 0), 0);
   const callStatus = String(input.callStatus || '').toUpperCase();
+  const direction = String(input.direction || '').toUpperCase();
 
   const values = [
     input.workspaceId,
@@ -242,6 +243,7 @@ export async function listLeads(input: {
     input.agent || '',
     input.businessNumber || '',
     callStatus,
+    direction,
     limit,
     offset,
   ];
@@ -258,33 +260,39 @@ export async function listLeads(input: {
     )
     AND ($6='' OR LOWER(COALESCE(latest_agent_name,''))=LOWER($6))
     AND ($7='' OR COALESCE(latest_business_number,'')=$7)
-    AND (
-      $8=''
-      OR ($8='CALLER_DROPPED' AND latest_end_reason='CALLER_DROPPED_BEFORE_ANSWER')
-      OR ($8!='CALLER_DROPPED' AND latest_call_status=$8)
-    )
+    AND ($8='' OR COALESCE(NULLIF(latest_call_status,''),'UNKNOWN')=$8)
+    AND ($9='' OR COALESCE(latest_attempt.direction,'UNKNOWN')=$9)
   `;
 
   const [rowsResult, countResult] = await Promise.all([
     pgQuery(
       `SELECT
          lead_id,phone,customer_name,email,product,status,notes,currency,status_changed_at,
-         first_call_at,latest_call_at,latest_call_status,latest_agent_name,latest_attempt_id,
+         first_call_at,latest_call_at,COALESCE(NULLIF(latest_call_status,''),'UNKNOWN') AS latest_call_status,latest_agent_name,latest_attempt_id,
          latest_provider_call_id,latest_business_number,latest_duration_seconds,
          latest_disconnect_party,latest_end_reason,call_attempt_count,answered_attempt_count,
          unanswered_attempt_count,next_follow_up_at,order_id,order_amount,purchased_at,
-         unqualified_reason,closed_lost_reason,created_at,updated_at
+         unqualified_reason,closed_lost_reason,created_at,updated_at,
+         latest_attempt.direction AS latest_direction
        FROM call_commerce.call_leads
+       LEFT JOIN call_commerce.call_attempts latest_attempt
+         ON latest_attempt.attempt_id=call_leads.latest_attempt_id
+        AND latest_attempt.workspace_id=call_leads.workspace_id
+        AND latest_attempt.brand_id=call_leads.brand_id
        WHERE ${where}
        ORDER BY latest_call_at DESC NULLS LAST,updated_at DESC,lead_id DESC
-       LIMIT $9 OFFSET $10`,
+       LIMIT $10 OFFSET $11`,
       values
     ),
     pgQuery(
       `SELECT COUNT(*)::bigint AS total
        FROM call_commerce.call_leads
+       LEFT JOIN call_commerce.call_attempts latest_attempt
+         ON latest_attempt.attempt_id=call_leads.latest_attempt_id
+        AND latest_attempt.workspace_id=call_leads.workspace_id
+        AND latest_attempt.brand_id=call_leads.brand_id
        WHERE ${where}`,
-      values.slice(0, 8)
+      values.slice(0, 9)
     ),
   ]);
 
@@ -430,6 +438,7 @@ export async function updateLeadWorkflow(input: {
   brandId: string;
   leadId: string;
   actorUserId: string;
+  allowStatusCorrection?: boolean;
   action: string;
   data?: Record<string, unknown>;
 }) {
@@ -445,6 +454,197 @@ export async function updateLeadWorkflow(input: {
     );
     const lead = leadResult.rows[0];
     if (!lead) throw new Error('CALL_LEAD_NOT_FOUND');
+
+    if (input.action === 'admin_correct_status') {
+      if (!input.allowStatusCorrection) {
+        throw new Error('CALL_STATUS_CORRECTION_ADMIN_REQUIRED');
+      }
+
+      const allowedTargets = new Set([
+        'NEW',
+        'QUALIFIED',
+        'FOLLOW_UP',
+        'PURCHASED',
+        'UNQUALIFIED',
+        'CLOSED_LOST',
+      ]);
+
+      const target = String(input.data?.targetStatus || '')
+        .trim()
+        .toUpperCase();
+      const correctionReason = String(input.data?.correctionReason || '')
+        .trim();
+      const statusReason = String(input.data?.statusReason || '')
+        .trim();
+      const orderId = String(input.data?.orderId || '').trim();
+      const orderAmountRaw = input.data?.orderAmount;
+      const orderAmount =
+        orderAmountRaw === undefined ||
+        orderAmountRaw === null ||
+        orderAmountRaw === ''
+          ? null
+          : Number(orderAmountRaw);
+
+      if (orderAmount !== null && !Number.isFinite(orderAmount)) {
+        throw new Error('CALL_PURCHASE_AMOUNT_INVALID');
+      }
+      if (!allowedTargets.has(target)) {
+        throw new Error('INVALID_CALL_LEAD_CORRECTION_TARGET');
+      }
+      if (target === String(lead.status || '').toUpperCase()) {
+        throw new Error('CALL_LEAD_CORRECTION_STATUS_UNCHANGED');
+      }
+      if (!correctionReason) {
+        throw new Error('CALL_STATUS_CORRECTION_REASON_REQUIRED');
+      }
+      if (
+        target === 'UNQUALIFIED' &&
+        workflowSettings.requireUnqualifiedReason &&
+        !statusReason
+      ) {
+        throw new Error('CALL_UNQUALIFIED_REASON_REQUIRED');
+      }
+      if (
+        target === 'CLOSED_LOST' &&
+        workflowSettings.requireClosedLostReason &&
+        !statusReason
+      ) {
+        throw new Error('CALL_CLOSED_LOST_REASON_REQUIRED');
+      }
+      if (
+        target === 'PURCHASED' &&
+        workflowSettings.requirePurchaseOrderId &&
+        !orderId
+      ) {
+        throw new Error('CALL_PURCHASE_ORDER_ID_REQUIRED');
+      }
+      if (
+        target === 'PURCHASED' &&
+        workflowSettings.requirePurchaseAmount &&
+        (
+          orderAmount === null ||
+          !Number.isFinite(orderAmount) ||
+          orderAmount <= 0
+        )
+      ) {
+        throw new Error('CALL_PURCHASE_AMOUNT_REQUIRED');
+      }
+
+      if (isOpenLeadStatus(target)) {
+        const phoneIdentity = normalizePhoneIdentity(lead.phone);
+        if (phoneIdentity) {
+          const conflict = await client.query(
+            `SELECT lead_id,status
+             FROM call_commerce.call_leads
+             WHERE workspace_id=$1
+               AND brand_id=$2
+               AND lead_id<>$3
+               AND is_archived=FALSE
+               AND status IN ('NEW','QUALIFIED','FOLLOW_UP')
+               AND regexp_replace(COALESCE(phone,''),'[^0-9]','','g')=$4
+             LIMIT 1
+             FOR UPDATE`,
+            [input.workspaceId, input.brandId, input.leadId, phoneIdentity]
+          );
+          if (conflict.rows.length) {
+            throw new Error('CALL_OPEN_LEAD_ALREADY_EXISTS');
+          }
+        }
+      }
+
+      const previousState = {
+        status: String(lead.status || ''),
+        unqualified_reason: lead.unqualified_reason || null,
+        closed_lost_reason: lead.closed_lost_reason || null,
+        next_follow_up_at: lead.next_follow_up_at || null,
+        order_id: lead.order_id || null,
+        order_amount: lead.order_amount === null || lead.order_amount === undefined
+          ? null
+          : Number(lead.order_amount),
+        purchased_at: lead.purchased_at || null,
+        is_archived: Boolean(lead.is_archived),
+        archived_at: lead.archived_at || null,
+      };
+
+      await client.query(
+        `UPDATE call_commerce.call_leads
+         SET
+           status=$4,
+           status_changed_at=NOW(),
+           unqualified_reason=CASE WHEN $4='UNQUALIFIED' THEN $5 ELSE NULL END,
+           closed_lost_reason=CASE WHEN $4='CLOSED_LOST' THEN $5 ELSE NULL END,
+           next_follow_up_at=CASE WHEN $4='FOLLOW_UP' THEN $6::timestamptz ELSE NULL END,
+           order_id=CASE WHEN $4='PURCHASED' THEN $7 ELSE NULL END,
+           order_amount=CASE WHEN $4='PURCHASED' THEN $8::numeric ELSE NULL END,
+           purchased_at=CASE WHEN $4='PURCHASED' THEN NOW() ELSE NULL END,
+           is_archived=FALSE,
+           archived_at=NULL,
+           updated_at=NOW(),
+           updated_by=$9
+         WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
+        [
+          input.workspaceId,
+          input.brandId,
+          input.leadId,
+          target,
+          statusReason || null,
+          input.data?.nextFollowUpAt || null,
+          orderId || null,
+          orderAmount,
+          input.actorUserId,
+        ]
+      );
+
+      const correctionDetails = {
+        correction_reason: correctionReason,
+        status_reason: statusReason || null,
+        next_follow_up_at:
+          target === 'FOLLOW_UP'
+            ? input.data?.nextFollowUpAt || null
+            : null,
+        order_id: target === 'PURCHASED' ? orderId || null : null,
+        order_amount: target === 'PURCHASED' ? orderAmount : null,
+        previous_state: previousState,
+      };
+
+      await client.query(
+        `INSERT INTO call_commerce.activity_log (
+           activity_id,workspace_id,brand_id,lead_id,activity_type,from_status,to_status,
+           details,actor_user_id,created_at
+         ) VALUES ($1,$2,$3,$4,'admin_status_correction',$5,$6,$7::jsonb,$8,NOW())`,
+        [
+          id('act'),
+          input.workspaceId,
+          input.brandId,
+          input.leadId,
+          String(lead.status),
+          target,
+          JSON.stringify(correctionDetails),
+          input.actorUserId,
+        ]
+      );
+
+      await appendAnalyticsEvent(client, {
+        workspaceId: input.workspaceId,
+        brandId: input.brandId,
+        eventType: 'lead.status_corrected',
+        entityType: 'call_lead',
+        entityId: input.leadId,
+        payload: {
+          from_status: String(lead.status),
+          to_status: target,
+          correction_reason: correctionReason,
+          actor_user_id: input.actorUserId,
+          admin_correction: true,
+        },
+      });
+
+      return {
+        status: target,
+        corrected: true,
+      };
+    }
+
     if (['PURCHASED', 'UNQUALIFIED', 'CLOSED_LOST'].includes(String(lead.status)) && input.action !== 'update_details') {
       throw new Error('CALL_LEAD_FINALIZED');
     }
@@ -607,106 +807,32 @@ export async function updateLeadWorkflow(input: {
   return result;
 }
 
-async function findAttachableLead(input: {
-  workspaceId: string;
-  brandId: string;
-  phone: string;
-  callAt: Date;
-}) {
-  const phone = normalizePhone(input.phone);
+async function findLeadForNewAttempt(
+  input: {
+    workspaceId: string;
+    brandId: string;
+    phone: string;
+    callStartedAt?: Date | string | null;
+  },
+  client?: { query: (text: string, values?: unknown[]) => Promise<any> }
+) {
+  const phone = normalizePhoneIdentity(input.phone);
   if (!phone) return null;
-  const settings = await getCallCommerceSettingsCached(input.workspaceId, input.brandId);
-  const result = await pgQuery(
-    `SELECT lead_id,status,status_changed_at,latest_call_at,updated_at,created_at
+  const query = client?.query.bind(client) || pgQuery;
+  const result = await query(
+    `SELECT
+       lead_id,status,status_changed_at,first_call_at,latest_call_at,
+       updated_at,created_at,is_archived
      FROM call_commerce.call_leads
-     WHERE workspace_id=$1 AND brand_id=$2 AND phone=$3 AND is_archived=FALSE
+     WHERE workspace_id=$1
+       AND brand_id=$2
+       AND regexp_replace(COALESCE(phone,''),'[^0-9]','','g')=$3
        AND status IN ('NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST')
-     ORDER BY COALESCE(latest_call_at,updated_at,created_at) DESC
-     LIMIT 50`,
+     ORDER BY COALESCE(first_call_at,created_at) DESC,created_at DESC
+     LIMIT 100`,
     [input.workspaceId, input.brandId, phone]
   );
-
-  const open = result.rows.find(row => OPEN_LEAD_STATUSES.has(String(row.status || '').toUpperCase()));
-  if (open) return open;
-
-  const graceMs = settings.reopenGraceMinutes * 60_000;
-  let best: any = null;
-  let bestAt = -1;
-  for (const row of result.rows) {
-    if (!TERMINAL_LEAD_STATUSES.has(String(row.status || '').toUpperCase())) continue;
-    const terminalAt = toDate(row.status_changed_at) || toDate(row.updated_at);
-    if (!terminalAt) continue;
-    const delta = input.callAt.getTime() - terminalAt.getTime();
-    if (delta >= 0 && delta <= graceMs && terminalAt.getTime() > bestAt) {
-      best = row;
-      bestAt = terminalAt.getTime();
-    }
-  }
-  return best;
-}
-
-async function refreshLeadSummary(workspaceId: string, brandId: string, leadId: string, actor: string) {
-  const [summary, latest] = await Promise.all([
-    pgQuery(
-      `SELECT
-         COUNT(*)::int total,
-         COUNT(*) FILTER (WHERE call_status='ANSWERED')::int answered,
-         COUNT(*) FILTER (WHERE call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED'))::int unanswered,
-         MIN(COALESCE(call_started_at,created_at)) first_call_at
-       FROM call_commerce.call_attempts
-       WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
-      [workspaceId, brandId, leadId]
-    ),
-    pgQuery(
-      `SELECT *,COALESCE(call_started_at,created_at) activity_at
-       FROM call_commerce.call_attempts
-       WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3
-       ORDER BY COALESCE(call_started_at,created_at) DESC,COALESCE(provider_updated_at,updated_at) DESC
-       LIMIT 1`,
-      [workspaceId, brandId, leadId]
-    ),
-  ]);
-
-  const s = summary.rows[0] || {};
-  const l = latest.rows[0] || {};
-  await pgQuery(
-    `UPDATE call_commerce.call_leads
-     SET
-       first_call_at=COALESCE($4::timestamptz,first_call_at),
-       latest_call_at=$5::timestamptz,
-       latest_call_status=$6,
-       latest_agent_name=$7,
-       latest_attempt_id=$8,
-       latest_provider_call_id=$9,
-       latest_business_number=$10,
-       latest_duration_seconds=$11,
-       latest_disconnect_party=$12,
-       latest_end_reason=$13,
-       call_attempt_count=$14,
-       answered_attempt_count=$15,
-       unanswered_attempt_count=$16,
-       updated_at=NOW(),updated_by=$17
-     WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
-    [
-      workspaceId,
-      brandId,
-      leadId,
-      s.first_call_at || null,
-      l.activity_at || null,
-      l.call_status || null,
-      l.agent_name || null,
-      l.attempt_id || null,
-      l.provider_call_id || null,
-      l.business_number || null,
-      l.duration_seconds == null ? null : Number(l.duration_seconds),
-      l.disconnect_party || null,
-      l.end_reason || null,
-      Number(s.total || 0),
-      Number(s.answered || 0),
-      Number(s.unanswered || 0),
-      actor,
-    ]
-  );
+  return selectLeadForNewAttempt(result.rows || [], input.callStartedAt || null);
 }
 
 export async function createManualLead(input: {
@@ -719,21 +845,28 @@ export async function createManualLead(input: {
   product?: string;
   notes?: string;
 }) {
-  const phone = normalizePhone(input.phone);
+  const phone = normalizePhoneIdentity(input.phone);
   if (!phone) throw new Error('CALL_PHONE_REQUIRED');
   const now = new Date();
-  const lead = await findAttachableLead({
-    workspaceId: input.workspaceId,
-    brandId: input.brandId,
-    phone,
-    callAt: now,
-  });
-  const createdLead = !lead;
-  const leadId = lead?.lead_id || id('CL');
-  const attemptId = id('CA');
   const providerCallId = `MANUAL_${crypto.randomUUID().replace(/-/g, '')}`;
+  const attemptId = id('CA');
 
-  await withPgTransaction(async client => {
+  const result = await withPgTransaction(async client => {
+    // One customer lifecycle resolver per tenant/brand at a time. Connector and
+    // business number never partition a lead; they remain attempt attributes.
+    const lockKey = `${input.workspaceId}:${input.brandId}:${phone}`;
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+
+    const lead = await findLeadForNewAttempt({
+      workspaceId: input.workspaceId,
+      brandId: input.brandId,
+      phone,
+      callStartedAt: now,
+    }, client);
+
+    const createdLead = !lead;
+    const leadId = lead?.lead_id || id('CL');
+
     if (!lead) {
       await client.query(
         `INSERT INTO call_commerce.call_leads (
@@ -760,7 +893,7 @@ export async function createManualLead(input: {
       `INSERT INTO call_commerce.call_attempts (
          attempt_id,workspace_id,brand_id,connection_id,provider_key,provider_call_id,lead_id,phone,
          event_type,call_status,direction,call_started_at,provider_updated_at,duration_seconds,created_at,updated_at
-       ) VALUES ($1,$2,$3,'manual','MANUAL',$4,$5,$6,'manual.incoming_call','MANUAL_CREATED','INBOUND',$7,$7,0,NOW(),NOW())`,
+       ) VALUES ($1,$2,$3,'manual','MANUAL',$4,$5,$6,'manual.incoming_call','UNKNOWN','INBOUND',$7,$7,0,NOW(),NOW())`,
       [attemptId, input.workspaceId, input.brandId, providerCallId, leadId, phone, now]
     );
 
@@ -771,17 +904,86 @@ export async function createManualLead(input: {
       entityType: 'call_attempt',
       entityId: attemptId,
       occurredAt: now,
-      payload: { lead_id: leadId, provider_call_id: providerCallId, phone },
+      payload: {
+        lead_id: leadId,
+        provider_call_id: providerCallId,
+        connection_id: 'manual',
+        phone,
+        direction: 'INBOUND',
+        call_status: 'UNKNOWN',
+      },
     });
+
+    // Recompute from all legs so front status always reflects the newest
+    // physical attempt, not whichever API request ran last.
+    const summary = await client.query(
+      `SELECT
+         COUNT(*)::int total,
+         COUNT(*) FILTER (WHERE call_status='ANSWERED')::int answered,
+         COUNT(*) FILTER (WHERE call_status IN ('MISSED','NO_ANSWER','BUSY','REJECTED','FAILED'))::int unanswered,
+         MIN(COALESCE(call_started_at,created_at)) first_call_at
+       FROM call_commerce.call_attempts
+       WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
+      [input.workspaceId, input.brandId, leadId]
+    );
+    const latest = await client.query(
+      `SELECT *,COALESCE(call_started_at,created_at) activity_at
+       FROM call_commerce.call_attempts
+       WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3
+       ORDER BY COALESCE(call_started_at,created_at) DESC,
+                COALESCE(provider_updated_at,updated_at) DESC,
+                created_at DESC,
+                attempt_id DESC
+       LIMIT 1`,
+      [input.workspaceId, input.brandId, leadId]
+    );
+    const sr = summary.rows[0] || {};
+    const lr = latest.rows[0] || {};
+    await client.query(
+      `UPDATE call_commerce.call_leads SET
+         first_call_at=COALESCE($4::timestamptz,first_call_at),
+         latest_call_at=$5::timestamptz,
+         latest_call_status=$6,
+         latest_agent_name=$7,
+         latest_attempt_id=$8,
+         latest_provider_call_id=$9,
+         latest_business_number=$10,
+         latest_duration_seconds=$11,
+         latest_disconnect_party=$12,
+         latest_end_reason=$13,
+         call_attempt_count=$14,
+         answered_attempt_count=$15,
+         unanswered_attempt_count=$16,
+         updated_at=NOW(),updated_by=$17
+       WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3`,
+      [
+        input.workspaceId,input.brandId,leadId,
+        sr.first_call_at || null,lr.activity_at || null,
+        canonicalCallStatus(lr.call_status || 'UNKNOWN'),lr.agent_name || null,
+        lr.attempt_id || null,lr.provider_call_id || null,lr.business_number || null,
+        lr.duration_seconds == null ? null : Number(lr.duration_seconds),
+        lr.disconnect_party || null,lr.end_reason || null,
+        Number(sr.total || 0),Number(sr.answered || 0),Number(sr.unanswered || 0),
+        input.actorUserId,
+      ]
+    );
+
+    return { leadId, createdLead };
   });
 
-  await refreshLeadSummary(input.workspaceId, input.brandId, leadId, input.actorUserId);
   try {
     await enqueueAnalyticsFlush(input.workspaceId, input.brandId);
   } catch (error) {
     console.error('CALL_COMMERCE_ANALYTICS_FLUSH_ENQUEUE_FAILED', error);
   }
-  return { leadId, attemptId, providerCallId, createdLead, attachedToExistingLead: !createdLead };
+
+  return {
+    leadId: result.leadId,
+    attemptId,
+    providerCallId,
+    createdLead: result.createdLead,
+    attachedToExistingLead: !result.createdLead,
+  };
 }
 
 export async function getSummary(workspaceId: string, brandId: string, start?: string, end?: string) {

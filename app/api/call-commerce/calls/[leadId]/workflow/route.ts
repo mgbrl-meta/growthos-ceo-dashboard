@@ -88,6 +88,39 @@ export async function POST(
       );
     }
 
+    const canCorrectStatus =
+      access.identity.principalType ===
+        'human'
+      &&
+      [
+        'owner',
+        'admin',
+      ].includes(
+        String(
+          access.access.role
+          ||
+          ''
+        ).toLowerCase()
+      );
+
+    if (
+      action ===
+        'admin_correct_status'
+      &&
+      !canCorrectStatus
+    ) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'CALL_STATUS_CORRECTION_ADMIN_REQUIRED',
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
     const data =
       await updateLeadWorkflow({
         workspaceId:
@@ -100,6 +133,9 @@ export async function POST(
 
         actorUserId:
           access.identity.userId,
+
+        allowStatusCorrection:
+          canCorrectStatus,
 
         action,
 

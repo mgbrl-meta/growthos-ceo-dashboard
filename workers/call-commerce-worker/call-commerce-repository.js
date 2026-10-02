@@ -1,13 +1,17 @@
 import crypto from 'crypto';
 import { pgQuery, pgTransaction, getPostgresConfig } from './postgres.js';
+import {
+  canonicalCallStatus,
+  normalizePhoneIdentity,
+  selectLeadForNewAttempt,
+  shouldIncomingLifecycleEventWin,
+  shouldIncomingStatusWin,
+} from './call-commerce-lifecycle.js';
 
 const PROJECT_ID = String(
   process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT || ''
 ).trim();
 
-const DEFAULT_REOPEN_GRACE_MINUTES = Number(
-  process.env.CALL_COMMERCE_REOPEN_GRACE_MINUTES || 30
-);
 
 const DEFAULT_CONTACT_MIN_DURATION_SECONDS = Number(
   process.env.CALL_COMMERCE_CONTACT_MIN_DURATION_SECONDS || 20
@@ -20,14 +24,8 @@ const deterministic = (prefix, parts) => `${prefix}_${crypto
   .digest('hex')
   .slice(0, 24)}`;
 
-const OPEN_LEAD_STATUSES = new Set(['NEW', 'QUALIFIED', 'FOLLOW_UP']);
-const TERMINAL_LEAD_STATUSES = new Set(['PURCHASED', 'UNQUALIFIED', 'CLOSED_LOST']);
 const SETTINGS_CACHE_TTL_MS = 60_000;
 const settingsCache = new Map();
-
-function normalizePhone(value) {
-  return String(value ?? '').replace(/[^0-9+]/g, '').trim();
-}
 
 function asDate(value) {
   if (!value) return null;
@@ -51,21 +49,6 @@ function laterIso(a, b) {
   return (da.getTime() >= db.getTime() ? da : db).toISOString();
 }
 
-function callStatusRank(status) {
-  const ranks = {
-    '': 0,
-    UNKNOWN: 1,
-    RINGING: 10,
-    MANUAL_CREATED: 20,
-    MISSED: 60,
-    NO_ANSWER: 65,
-    BUSY: 65,
-    REJECTED: 65,
-    FAILED: 65,
-    ANSWERED: 100,
-  };
-  return ranks[String(status || '').toUpperCase()] ?? 30;
-}
 
 function isAnswered(status) {
   return String(status || '').toUpperCase() === 'ANSWERED';
@@ -86,7 +69,7 @@ async function getRuntimeSettings(workspaceId, brandId, client = null) {
 
   const result = await run(
     client,
-    `SELECT contact_min_duration_seconds,reopen_grace_minutes
+    `SELECT contact_min_duration_seconds
      FROM call_commerce.settings
      WHERE workspace_id=$1 AND brand_id=$2
      LIMIT 1`,
@@ -96,9 +79,6 @@ async function getRuntimeSettings(workspaceId, brandId, client = null) {
   const value = {
     contactMinDurationSeconds: Number(
       result.rows[0]?.contact_min_duration_seconds ?? DEFAULT_CONTACT_MIN_DURATION_SECONDS
-    ),
-    reopenGraceMinutes: Number(
-      result.rows[0]?.reopen_grace_minutes ?? DEFAULT_REOPEN_GRACE_MINUTES
     ),
   };
 
@@ -265,46 +245,26 @@ async function getProviderAttempt(event, client = null) {
   return result.rows[0] || null;
 }
 
-async function findAttachableLead(input, settings, client) {
-  const phone = normalizePhone(input.phone);
+async function findLeadForNewAttempt(input, client) {
+  const phone = normalizePhoneIdentity(input.phone);
   if (!phone) return null;
 
   const result = await run(
     client,
-    `SELECT lead_id,status,status_changed_at,latest_call_at,updated_at,created_at
+    `SELECT
+       lead_id,status,status_changed_at,first_call_at,latest_call_at,
+       updated_at,created_at,is_archived
      FROM call_commerce.call_leads
      WHERE workspace_id=$1
        AND brand_id=$2
-       AND phone=$3
-       AND is_archived=FALSE
+       AND regexp_replace(COALESCE(phone,''),'[^0-9]','','g')=$3
        AND status IN ('NEW','QUALIFIED','FOLLOW_UP','PURCHASED','UNQUALIFIED','CLOSED_LOST')
-     ORDER BY COALESCE(latest_call_at,updated_at,created_at) DESC
-     LIMIT 50`,
+     ORDER BY COALESCE(first_call_at,created_at) DESC,created_at DESC
+     LIMIT 100`,
     [input.workspaceId, input.brandId, phone]
   );
 
-  const candidates = result.rows || [];
-  const open = candidates.find(row => OPEN_LEAD_STATUSES.has(String(row.status || '').toUpperCase()));
-  if (open) return open;
-
-  const callAt = asDate(input.callAt) || new Date();
-  const graceMs = Number(settings.reopenGraceMinutes || 0) * 60_000;
-  let bestTerminal = null;
-  let bestTerminalAt = -1;
-
-  for (const row of candidates) {
-    const status = String(row.status || '').toUpperCase();
-    if (!TERMINAL_LEAD_STATUSES.has(status)) continue;
-    const terminalAt = asDate(row.status_changed_at) || asDate(row.updated_at);
-    if (!terminalAt) continue;
-    const delta = callAt.getTime() - terminalAt.getTime();
-    if (delta >= 0 && delta <= graceMs && terminalAt.getTime() > bestTerminalAt) {
-      bestTerminal = row;
-      bestTerminalAt = terminalAt.getTime();
-    }
-  }
-
-  return bestTerminal;
+  return selectLeadForNewAttempt(result.rows || [], input.callStartedAt || null);
 }
 
 async function createCallLead(input, client) {
@@ -327,7 +287,7 @@ async function createCallLead(input, client) {
       leadId,
       input.workspaceId,
       input.brandId,
-      normalizePhone(input.phone),
+      normalizePhoneIdentity(input.phone),
       input.customerName || '',
       input.email || '',
       input.product || '',
@@ -349,19 +309,25 @@ async function upsertCallAttempt(event, leadId, existingAttempt, client) {
     event.providerCallId,
   ]);
 
-  const oldStatus = String(existingAttempt?.call_status || '');
-  const incomingStatus = String(event.callStatus || '');
-  const oldUpdatedAt = asDate(existingAttempt?.provider_updated_at);
+  const oldStatus = canonicalCallStatus(existingAttempt?.call_status || 'UNKNOWN');
+  const incomingStatus = canonicalCallStatus(event.callStatus || 'UNKNOWN');
   const incomingUpdatedAt =
     asDate(event.updatedAt) || asDate(event.endedAt) || asDate(event.startedAt) || new Date();
 
-  const incomingWins =
-    !oldStatus ||
-    callStatusRank(incomingStatus) > callStatusRank(oldStatus) ||
-    (
-      callStatusRank(incomingStatus) === callStatusRank(oldStatus) &&
-      (!oldUpdatedAt || incomingUpdatedAt.getTime() >= oldUpdatedAt.getTime())
-    );
+  const statusWins = shouldIncomingStatusWin({
+    existingStatus: existingAttempt?.call_status || '',
+    incomingStatus,
+    existingUpdatedAt: existingAttempt?.provider_updated_at,
+    incomingUpdatedAt,
+    incomingEventType: event.eventType,
+  });
+  const lifecycleWins = shouldIncomingLifecycleEventWin({
+    existingUpdatedAt: existingAttempt?.provider_updated_at,
+    incomingUpdatedAt,
+  });
+  const outcomeWins = statusWins || (
+    incomingStatus === oldStatus && lifecycleWins
+  );
 
   const values = {
     attempt_id: attemptId,
@@ -371,11 +337,14 @@ async function upsertCallAttempt(event, leadId, existingAttempt, client) {
     provider_key: event.callingProvider,
     provider_call_id: event.providerCallId,
     lead_id: existingAttempt?.lead_id || leadId,
-    phone: normalizePhone(existingAttempt?.phone || event.customerPhone),
+    phone: normalizePhoneIdentity(existingAttempt?.phone || event.customerPhone),
     business_number: event.businessNumber || existingAttempt?.business_number || null,
-    event_type: incomingWins ? event.eventType : (existingAttempt?.event_type || event.eventType),
-    call_status: incomingWins ? incomingStatus : oldStatus,
-    direction: incomingWins ? event.direction : (existingAttempt?.direction || event.direction),
+    event_type: lifecycleWins ? event.eventType : (existingAttempt?.event_type || event.eventType),
+    call_status: statusWins ? incomingStatus : oldStatus,
+    direction:
+      lifecycleWins && ['INBOUND','OUTBOUND'].includes(String(event.direction || '').toUpperCase())
+        ? event.direction
+        : (existingAttempt?.direction || event.direction || 'UNKNOWN'),
     agent_id: event.agentId || existingAttempt?.agent_id || null,
     agent_name: event.agentName || existingAttempt?.agent_name || null,
     agent_phone: event.agentPhone || existingAttempt?.agent_phone || null,
@@ -387,27 +356,27 @@ async function upsertCallAttempt(event, leadId, existingAttempt, client) {
       Number(existingAttempt?.duration_seconds || 0),
       Number(event.durationSeconds || 0)
     ),
-    disconnected_by: incomingWins
+    disconnected_by: outcomeWins
       ? (event.disconnectedBy || existingAttempt?.disconnected_by || null)
       : (existingAttempt?.disconnected_by || null),
-    disconnect_party: incomingWins
+    disconnect_party: outcomeWins
       ? (event.disconnectParty || existingAttempt?.disconnect_party || null)
       : (existingAttempt?.disconnect_party || null),
-    end_reason: incomingWins
+    end_reason: outcomeWins
       ? (event.endReason || existingAttempt?.end_reason || null)
       : (existingAttempt?.end_reason || null),
-    outcome_source: incomingWins
+    outcome_source: outcomeWins
       ? (event.outcomeSource || existingAttempt?.outcome_source || null)
       : (existingAttempt?.outcome_source || null),
     recording_url: event.recordingUrl || existingAttempt?.recording_url || null,
-    reason: incomingWins
+    reason: outcomeWins
       ? (event.reason || existingAttempt?.reason || null)
       : (existingAttempt?.reason || null),
     ivr_inputs: event.ivrInputs ?? existingAttempt?.ivr_inputs ?? null,
-    raw_event_type: incomingWins
+    raw_event_type: lifecycleWins
       ? (event.rawEventType || existingAttempt?.raw_event_type || null)
       : (existingAttempt?.raw_event_type || null),
-    raw_status: incomingWins
+    raw_status: lifecycleWins
       ? (event.rawStatus || existingAttempt?.raw_status || null)
       : (existingAttempt?.raw_status || null),
   };
@@ -511,7 +480,9 @@ async function refreshLeadCallSummary(input, client) {
        call_ended_at,provider_updated_at
      FROM call_commerce.call_attempts
      WHERE workspace_id=$1 AND brand_id=$2 AND lead_id=$3
-     ORDER BY COALESCE(call_started_at,created_at) DESC,COALESCE(provider_updated_at,updated_at) DESC
+     ORDER BY COALESCE(call_started_at,created_at) DESC,
+              COALESCE(provider_updated_at,updated_at) DESC,
+              created_at DESC,attempt_id DESC
      LIMIT 1`,
     [input.workspaceId, input.brandId, input.leadId]
   );
@@ -545,7 +516,7 @@ async function refreshLeadCallSummary(input, client) {
       input.leadId,
       asDate(summary.first_call_at)?.toISOString() || null,
       asDate(latest.activity_at)?.toISOString() || null,
-      latest.call_status || null,
+      canonicalCallStatus(latest.call_status || 'UNKNOWN'),
       latest.agent_name || null,
       latest.attempt_id || null,
       latest.provider_call_id || null,
@@ -631,7 +602,7 @@ export async function ingestCanonicalEvent(event, actor = 'calling-cloud-run') {
   const settings = await getRuntimeSettings(event.workspaceId, event.brandId);
 
   const result = await pgTransaction(async client => {
-    const lockKey = `${event.workspaceId}:${event.brandId}:${normalizePhone(event.customerPhone)}`;
+    const lockKey = `${event.workspaceId}:${event.brandId}:${normalizePhoneIdentity(event.customerPhone)}`;
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
 
     const existingAttempt = await getProviderAttempt(event, client);
@@ -649,14 +620,16 @@ export async function ingestCanonicalEvent(event, actor = 'calling-cloud-run') {
     }
 
     if (!lead) {
-      lead = await findAttachableLead(
+      lead = await findLeadForNewAttempt(
         {
           workspaceId: event.workspaceId,
           brandId: event.brandId,
           phone: event.customerPhone,
-          callAt: event.startedAt || event.updatedAt || null,
+          // Only the physical call start defines which lead lifecycle owns a
+          // previously unseen call. Webhook/update arrival time must not reopen
+          // a terminal lifecycle.
+          callStartedAt: event.startedAt || null,
         },
-        settings,
         client
       );
     }
@@ -693,8 +666,12 @@ export async function ingestCanonicalEvent(event, actor = 'calling-cloud-run') {
       payload: {
         lead_id: leadId,
         provider_call_id: event.providerCallId,
-        call_status: attempt.call_status,
-        direction: attempt.direction,
+        connection_id: event.connectionId,
+        calling_provider: event.callingProvider,
+        customer_phone: normalizePhoneIdentity(event.customerPhone),
+        business_number: attempt.business_number || event.businessNumber || null,
+        call_status: canonicalCallStatus(attempt.call_status || 'UNKNOWN'),
+        direction: attempt.direction || 'UNKNOWN',
         duration_seconds: attempt.duration_seconds,
       },
     }, client);
@@ -747,6 +724,5 @@ export function getCallCommerceConfig() {
     store: 'postgres',
     postgres: getPostgresConfig(),
     defaultContactMinDurationSeconds: DEFAULT_CONTACT_MIN_DURATION_SECONDS,
-    defaultReopenGraceMinutes: DEFAULT_REOPEN_GRACE_MINUTES,
   };
 }

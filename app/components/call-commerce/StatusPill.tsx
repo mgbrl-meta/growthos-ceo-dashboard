@@ -1,7 +1,5 @@
 'use client';
 
-import { callOutcome } from './utils';
-
 const styles: Record<string, string> = {
   emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   rose: 'border-rose-200 bg-rose-50 text-rose-700',
@@ -27,12 +25,40 @@ export function WorkflowStatusPill({ status }: { status: unknown }) {
   );
 }
 
+const canonicalLabels: Record<string, string> = {
+  ANSWERED: 'Answered',
+  NO_ANSWER: 'No Answer',
+  RINGING: 'Ringing',
+  FAILED: 'Failed',
+  BUSY: 'Busy',
+  REJECTED: 'Rejected',
+  MISSED: 'Missed',
+  UNKNOWN: 'Unknown',
+};
+
+const canonicalTones: Record<string, string> = {
+  ANSWERED: 'emerald',
+  NO_ANSWER: 'rose',
+  RINGING: 'blue',
+  FAILED: 'rose',
+  BUSY: 'amber',
+  REJECTED: 'rose',
+  MISSED: 'rose',
+  UNKNOWN: 'slate',
+};
+
 export default function StatusPill({ value }: { value: any }) {
-  const outcome = callOutcome(value);
-  const className = styles[outcome.tone] || styles.slate;
+  const raw = value?.call_status ?? value?.latest_call_status ?? 'UNKNOWN';
+  const status = String(raw || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+  const label = canonicalLabels[status] || status.replaceAll('_', ' ');
+  const className = styles[canonicalTones[status] || 'slate'];
+
   return (
-    <span className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-semibold ${className}`}>
-      {outcome.label}
+    <span
+      title="Canonical status of this call attempt"
+      className={`inline-flex rounded-full border px-2 py-1 text-[9px] font-semibold ${className}`}
+    >
+      {label}
     </span>
   );
 }

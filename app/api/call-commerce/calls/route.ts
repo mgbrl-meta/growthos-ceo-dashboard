@@ -26,15 +26,27 @@ export async function GET(request: NextRequest) {
       status: url.searchParams.get('status') || '',
       search: url.searchParams.get('search') || '',
       callStatus: url.searchParams.get('callStatus') || '',
+      direction: url.searchParams.get('direction') || '',
       agent: url.searchParams.get('agent') || '',
       businessNumber: url.searchParams.get('businessNumber') || '',
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
 
+    const canCorrectStatus =
+      access.identity.principalType === 'human' &&
+      ['owner', 'admin'].includes(
+        String(access.access.role || '').toLowerCase()
+      );
+
     return NextResponse.json({
       ok: true,
-      data,
+      data: {
+        ...data,
+        capabilities: {
+          canCorrectStatus,
+        },
+      },
       meta: {
         page,
         pageSize,

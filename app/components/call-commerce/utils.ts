@@ -83,7 +83,7 @@ export function callOutcome(value: any) {
     return { key: 'ANSWERED', label: 'Answered', detail: 'Connected call', tone: 'emerald' };
   }
   if (endReason === 'CALLER_DROPPED_BEFORE_ANSWER') {
-    return { key: 'CALLER_DROPPED', label: 'Caller Dropped', detail: 'Before connection', tone: 'amber' };
+    return { key: 'CALLER_DROPPED', label: 'No Answer', detail: 'Caller dropped before answer', tone: 'amber' };
   }
   if (endReason === 'USER_UNREACHABLE') {
     return { key: 'USER_UNREACHABLE', label: 'No Answer', detail: 'User unreachable', tone: 'rose' };
@@ -91,14 +91,23 @@ export function callOutcome(value: any) {
   if (endReason === 'UNANSWERED' || party === 'BUSINESS_ROUTING') {
     return { key: 'NO_ANSWER', label: 'No Answer', detail: 'Agent/team did not answer', tone: 'rose' };
   }
+  if (status === 'NO_ANSWER') {
+    return { key: 'NO_ANSWER', label: 'No Answer', detail: 'Call was not connected', tone: 'rose' };
+  }
+  if (status === 'MISSED') {
+    return { key: 'MISSED', label: 'Missed', detail: 'Missed call', tone: 'rose' };
+  }
+  if (status === 'BUSY') {
+    return { key: 'BUSY', label: 'Busy', detail: 'Line was busy', tone: 'amber' };
+  }
+  if (status === 'REJECTED') {
+    return { key: 'REJECTED', label: 'Rejected', detail: 'Call was rejected', tone: 'rose' };
+  }
   if (status === 'FAILED') {
     return { key: 'FAILED', label: 'Failed', detail: endReason === 'NETWORK_FAILURE' ? 'Network failure' : 'Provider failure', tone: 'rose' };
   }
   if (status === 'RINGING') {
     return { key: 'RINGING', label: 'Ringing', detail: 'Call in progress', tone: 'blue' };
   }
-  if (status === 'MANUAL_CREATED') {
-    return { key: 'MANUAL_CREATED', label: 'Manual', detail: 'Manual call record', tone: 'violet' };
-  }
-  return { key: 'UNKNOWN', label: 'Unknown', detail: 'Insufficient call data', tone: 'slate' };
+  return { key: 'UNKNOWN', label: 'Unknown', detail: 'No mapped call status', tone: 'slate' };
 }

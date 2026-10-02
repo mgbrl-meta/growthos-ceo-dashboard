@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import StatusPill, { WorkflowStatusPill } from './StatusPill';
 import {
   callOutcome,
@@ -9,6 +9,34 @@ import {
   integer,
   normalizeDisplayPhone,
 } from './utils';
+
+function DirectionPill({ value }: { value: unknown }) {
+  const direction = String(value || 'UNKNOWN').toUpperCase();
+
+  if (direction === 'OUTBOUND') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[8px] font-semibold text-violet-700">
+        <ArrowUpRight size={10} />
+        Outbound
+      </span>
+    );
+  }
+
+  if (direction === 'INBOUND') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[8px] font-semibold text-sky-700">
+        <ArrowDownLeft size={10} />
+        Inbound
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[8px] font-semibold text-slate-500">
+      Unknown
+    </span>
+  );
+}
 
 export default function LeadTable({
   rows,
@@ -34,23 +62,25 @@ export default function LeadTable({
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-[900px] w-full table-fixed">
+        <table className="min-w-[1020px] w-full table-fixed">
           <colgroup>
-            <col className="w-[16%]" />
-            <col className="w-[16%]" />
-            <col className="w-[13%]" />
-            <col className="w-[16%]" />
-            <col className="w-[13%]" />
-            <col className="w-[9%]" />
+            <col className="w-[14%]" />
+            <col className="w-[15%]" />
             <col className="w-[10%]" />
-            <col className="w-[7%]" />
+            <col className="w-[12%]" />
+            <col className="w-[15%]" />
+            <col className="w-[12%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[6%]" />
           </colgroup>
 
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/70">
               {[
                 ['Customer', 'left'],
-                ['Latest Outcome', 'left'],
+                ['Latest Call Status', 'left'],
+                ['Direction', 'left'],
                 ['Agent', 'left'],
                 ['Last Call', 'left'],
                 ['Attempts', 'left'],
@@ -100,6 +130,10 @@ export default function LeadTable({
                       <div className="mt-1 truncate text-[8px] text-slate-400">
                         {outcome.detail}
                       </div>
+                    </td>
+
+                    <td className="px-3 py-2.5">
+                      <DirectionPill value={lead.latest_direction} />
                     </td>
 
                     <td className="px-3 py-2.5">
@@ -154,7 +188,7 @@ export default function LeadTable({
             ) : (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-12 text-center text-[10px] text-slate-400"
                 >
                   {loading

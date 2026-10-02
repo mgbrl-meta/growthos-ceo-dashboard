@@ -95,6 +95,11 @@ export async function GET(
               'callStatus'
             ) || '',
 
+          direction:
+            url.searchParams.get(
+              'direction'
+            ) || '',
+
           agent:
             url.searchParams.get(
               'agent'
@@ -121,6 +126,21 @@ export async function GET(
 
       ]);
 
+    const canCorrectStatus =
+      access.identity.principalType ===
+        'human'
+      &&
+      [
+        'owner',
+        'admin',
+      ].includes(
+        String(
+          access.access.role
+          ||
+          ''
+        ).toLowerCase()
+      );
+
     return NextResponse.json({
       ok:
         true,
@@ -128,6 +148,9 @@ export async function GET(
       data: {
         ...data,
         facets,
+        capabilities: {
+          canCorrectStatus,
+        },
       },
 
       meta: {

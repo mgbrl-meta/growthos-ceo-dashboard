@@ -105,7 +105,13 @@ export async function updateCallCommerceSettings(input: {
   settings: Partial<CallCommerceSettings>;
 }): Promise<CallCommerceSettings> {
   const current = await getCallCommerceSettings(input.workspaceId, input.brandId);
-  const next = validateSettings({ ...current, ...input.settings });
+  const next = validateSettings({
+    ...current,
+    ...input.settings,
+    // Compatibility column only. Lead lifecycle threading is system-managed
+    // and cannot be changed per brand in Call Commerce V2.
+    reopenGraceMinutes: current.reopenGraceMinutes,
+  });
 
   await pgQuery(
     `INSERT INTO call_commerce.settings (

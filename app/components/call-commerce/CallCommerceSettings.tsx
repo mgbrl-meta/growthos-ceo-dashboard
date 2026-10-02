@@ -30,9 +30,6 @@ type Settings = {
   contactMinDurationSeconds:
     number;
 
-  reopenGraceMinutes:
-    number;
-
   autoArchiveTerminalLeads:
     boolean;
 
@@ -67,9 +64,6 @@ const EMPTY:
 
   contactMinDurationSeconds:
     20,
-
-  reopenGraceMinutes:
-    30,
 
   autoArchiveTerminalLeads:
     true,
@@ -466,8 +460,8 @@ export default function CallCommerceSettings() {
           </div>
 
           <p className="mt-1 max-w-2xl text-[9px] leading-4 text-slate-400">
-            Brand-level operating rules for call qualification, lead threading,
-            workflow validation and archive lifecycle.
+            Brand-level operating rules for call qualification, workflow validation
+            and archive lifecycle. Lead identity/lifecycle rules are system-managed.
           </p>
 
         </div>
@@ -578,42 +572,28 @@ export default function CallCommerceSettings() {
               size={14}
             />
           }
-          title="Lead threading"
-          helper="Controls how repeat calls attach to an existing non-archived customer thread."
+          title="Lead lifecycle"
+          helper="System-managed identity rules. These rules are fixed across brands so lead, Meta and attribution history stay deterministic."
         >
 
-          <NumberSetting
-            label="Terminal lead reopen grace"
-            helper="A new call can still attach to a recently finalized non-archived lead inside this grace period."
-            value={
-              settings
-                .reopenGraceMinutes
-            }
-            suffix="minutes"
-            min={0}
-            max={10080}
-            onChange={
-              value =>
-                setSettings(
-                  current => ({
-                    ...current,
-                    reopenGraceMinutes:
-                      value,
-                  })
-                )
-            }
+          <ReadOnlyRule
+            label="Same call identity"
+            value="Same connector + provider call ID updates the same call leg"
           />
 
-
           <ReadOnlyRule
-            label="Repeated-call identity"
-            value="Normalized customer phone"
+            label="New call while lead is open"
+            value="New leg attaches to the existing NEW / QUALIFIED / FOLLOW_UP lead"
           />
 
+          <ReadOnlyRule
+            label="New call after lead is terminal"
+            value="Creates a new NEW lead; PURCHASED / UNQUALIFIED / CLOSED LOST are never auto-reopened"
+          />
 
           <ReadOnlyRule
-            label="Default new-lead status"
-            value="NEW"
+            label="Customer identity scope"
+            value="Normalized phone within the current workspace + brand; connector and business number do not split the lead"
           />
 
         </SettingSection>
@@ -1120,10 +1100,6 @@ function comparable(
       settings
         .contactMinDurationSeconds,
 
-    reopenGraceMinutes:
-      settings
-        .reopenGraceMinutes,
-
     autoArchiveTerminalLeads:
       settings
         .autoArchiveTerminalLeads,
@@ -1171,9 +1147,6 @@ function friendlyError(
 
     CALL_COMMERCE_CONTACT_DURATION_INVALID:
       'Quality connected duration must be a whole number between 1 and 600 seconds.',
-
-    CALL_COMMERCE_REOPEN_GRACE_INVALID:
-      'Reopen grace must be a whole number between 0 and 10,080 minutes.',
 
     CALL_COMMERCE_ARCHIVE_DAYS_INVALID:
       'Archive days must be a whole number between 1 and 365.',

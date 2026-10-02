@@ -4,6 +4,10 @@
 
 import {
 
+  ArrowDownLeft,
+
+  ArrowUpRight,
+
   CheckCircle2,
 
   ChevronDown,
@@ -46,6 +50,62 @@ import {
 
 
 
+function DirectionPill({ value }: { value: unknown }) {
+
+  const direction = String(value || 'UNKNOWN').toUpperCase();
+
+
+
+  if (direction === 'OUTBOUND') {
+
+    return (
+
+      <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[8px] font-semibold text-violet-700">
+
+        <ArrowUpRight size={10} />
+
+        Outbound
+
+      </span>
+
+    );
+
+  }
+
+
+
+  if (direction === 'INBOUND') {
+
+    return (
+
+      <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[8px] font-semibold text-sky-700">
+
+        <ArrowDownLeft size={10} />
+
+        Inbound
+
+      </span>
+
+    );
+
+  }
+
+
+
+  return (
+
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[8px] font-semibold text-slate-500">
+
+      Unknown
+
+    </span>
+
+  );
+
+}
+
+
+
 export default function LeadDrawer({
 
   lead,
@@ -53,6 +113,8 @@ export default function LeadDrawer({
   history,
 
   loading,
+
+  canCorrectStatus,
 
   onClose,
 
@@ -65,6 +127,8 @@ export default function LeadDrawer({
   history: any;
 
   loading: boolean;
+
+  canCorrectStatus: boolean;
 
   onClose: () => void;
 
@@ -110,6 +174,16 @@ export default function LeadDrawer({
 
   const [actionError, setActionError] = useState('');
 
+  const [adminTargetStatus, setAdminTargetStatus] = useState('');
+
+  const [adminCorrectionReason, setAdminCorrectionReason] = useState('');
+
+  const [adminStatusReason, setAdminStatusReason] = useState('');
+
+  const [adminOrderId, setAdminOrderId] = useState('');
+
+  const [adminOrderAmount, setAdminOrderAmount] = useState('');
+
 
 
   useEffect(() => {
@@ -147,6 +221,16 @@ export default function LeadDrawer({
     setBusyAction('');
 
     setActionError('');
+
+    setAdminTargetStatus('');
+
+    setAdminCorrectionReason('');
+
+    setAdminStatusReason('');
+
+    setAdminOrderId('');
+
+    setAdminOrderAmount('');
 
   }, [lead]);
 
@@ -348,6 +432,15 @@ export default function LeadDrawer({
 
           : [];
 
+  const adminCorrectionOptions = [
+    ['NEW', 'New'],
+    ['QUALIFIED', 'Qualified'],
+    ['FOLLOW_UP', 'Follow Up'],
+    ['PURCHASED', 'Purchased'],
+    ['UNQUALIFIED', 'Unqualified'],
+    ['CLOSED_LOST', 'Closed Lost'],
+  ].filter(([value]) => value !== status);
+
 
 
   async function saveDetails() {
@@ -495,6 +588,66 @@ export default function LeadDrawer({
 
     }
 
+  }
+
+
+
+  async function runAdminCorrection() {
+
+    if (actionBusy) return;
+
+    const correctionReason = adminCorrectionReason.trim();
+
+    if (!adminTargetStatus) {
+      setActionError('Select the corrected status.');
+      return;
+    }
+
+    if (!correctionReason) {
+      setActionError('Admin correction reason is required.');
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      targetStatus: adminTargetStatus,
+      correctionReason,
+    };
+
+    if (adminTargetStatus === 'FOLLOW_UP') {
+      payload.nextFollowUpAt = details.nextFollowUpAt || null;
+    }
+
+    if (
+      adminTargetStatus === 'UNQUALIFIED' ||
+      adminTargetStatus === 'CLOSED_LOST'
+    ) {
+      payload.statusReason = adminStatusReason.trim() || null;
+    }
+
+    if (adminTargetStatus === 'PURCHASED') {
+      payload.orderId = adminOrderId.trim() || null;
+      payload.orderAmount = adminOrderAmount
+        ? Number(adminOrderAmount)
+        : null;
+    }
+
+    try {
+      setActionBusy(true);
+      setBusyAction('admin_correct_status');
+      setActionError('');
+
+      await onAction(
+        'admin_correct_status',
+        payload
+      );
+    } catch (error: any) {
+      setActionError(
+        error?.message || 'Unable to correct lead status'
+      );
+    } finally {
+      setActionBusy(false);
+      setBusyAction('');
+    }
   }
 
 
@@ -666,7 +819,7 @@ export default function LeadDrawer({
 
               <Info
 
-                label="Latest Outcome"
+                label="Latest Call Status"
 
                 value={`${latestOutcome.label} — ${latestOutcome.detail}`}
 
@@ -1060,6 +1213,125 @@ export default function LeadDrawer({
 
 
 
+          {canCorrectStatus && (
+
+            <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+
+              <h3 className="text-[11px] font-semibold text-amber-950">
+
+                Admin status correction
+
+              </h3>
+
+              <p className="mt-1 text-[8px] leading-4 text-amber-700">
+
+                Use only to correct an incorrect workflow status. The correction is audited and does not create a new Meta conversion event.
+
+              </p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+
+                <label>
+
+                  <span className="text-[8px] font-semibold text-amber-800">
+
+                    Correct status to
+
+                  </span>
+
+                  <select
+                    value={adminTargetStatus}
+                    onChange={(event) =>
+                      setAdminTargetStatus(event.target.value)
+                    }
+                    disabled={actionBusy}
+                    className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[9px] text-slate-700 outline-none focus:border-amber-400 disabled:opacity-60"
+                  >
+                    <option value="">Select status</option>
+                    {adminCorrectionOptions.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+
+                </label>
+
+                {(adminTargetStatus === 'UNQUALIFIED' ||
+                  adminTargetStatus === 'CLOSED_LOST') && (
+                  <Field
+                    label="Status reason"
+                    value={adminStatusReason}
+                    onChange={setAdminStatusReason}
+                  />
+                )}
+
+                {adminTargetStatus === 'PURCHASED' && (
+                  <>
+                    <Field
+                      label="Order ID"
+                      value={adminOrderId}
+                      onChange={setAdminOrderId}
+                    />
+                    <Field
+                      label="Order Amount"
+                      value={adminOrderAmount}
+                      onChange={setAdminOrderAmount}
+                    />
+                  </>
+                )}
+
+              </div>
+
+              {adminTargetStatus === 'FOLLOW_UP' && (
+                <div className="mt-3 rounded-lg border border-amber-100 bg-white px-3 py-2 text-[8px] text-amber-800">
+                  The corrected Follow Up status will use the “Next follow-up” value from Lead details above.
+                </div>
+              )}
+
+              <label className="mt-3 block">
+
+                <span className="text-[8px] font-semibold text-amber-800">
+
+                  Admin correction reason
+
+                </span>
+
+                <textarea
+                  rows={3}
+                  value={adminCorrectionReason}
+                  onChange={(event) =>
+                    setAdminCorrectionReason(event.target.value)
+                  }
+                  disabled={actionBusy}
+                  placeholder="Example: Agent selected Unqualified by mistake"
+                  className="mt-1 w-full resize-none rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-[9px] text-slate-700 outline-none placeholder:text-slate-300 focus:border-amber-400 disabled:opacity-60"
+                />
+
+              </label>
+
+              <button
+                type="button"
+                onClick={runAdminCorrection}
+                disabled={actionBusy || !adminTargetStatus || !adminCorrectionReason.trim()}
+                className="mt-3 inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-900 px-3 py-2 text-[9px] font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busyAction === 'admin_correct_status' ? (
+                  <>
+                    <LoaderCircle size={12} className="animate-spin" />
+                    Correcting status...
+                  </>
+                ) : (
+                  'Confirm admin correction'
+                )}
+              </button>
+
+            </section>
+
+          )}
+
+
+
           <section className="rounded-xl border border-slate-200 bg-white">
 
             <div className="border-b border-slate-100 px-4 py-3">
@@ -1149,6 +1421,8 @@ export default function LeadDrawer({
                           <div className="flex flex-wrap items-center gap-2">
 
                             <StatusPill value={attempt} />
+
+                            <DirectionPill value={attempt.direction} />
 
                             <span className="text-[9px] font-semibold text-slate-700">
 
@@ -1377,19 +1651,35 @@ export default function LeadDrawer({
                       details.reason
                     );
 
+                  const correctionReason =
+                    cleanActivityText(
+                      details.correction_reason
+                    );
+
+                  const statusReason =
+                    cleanActivityText(
+                      details.status_reason
+                    );
+
                   const followUpAt =
                     cleanActivityText(
                       details.nextFollowUpAt
+                      ||
+                      details.next_follow_up_at
                     );
 
                   const activityOrderId =
                     cleanActivityText(
                       details.orderId
+                      ||
+                      details.order_id
                     );
 
                   const activityOrderAmount =
                     cleanActivityText(
                       details.orderAmount
+                      ||
+                      details.order_amount
                     );
 
                   return (
@@ -1479,6 +1769,26 @@ export default function LeadDrawer({
                             <span>
 
                               Reason: {reason}
+
+                            </span>
+
+                          )}
+
+                          {correctionReason && (
+
+                            <span>
+
+                              Admin correction: {correctionReason}
+
+                            </span>
+
+                          )}
+
+                          {statusReason && (
+
+                            <span>
+
+                              Status reason: {statusReason}
 
                             </span>
 

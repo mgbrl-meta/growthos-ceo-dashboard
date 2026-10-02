@@ -1,3 +1,5 @@
+import { canonicalCallStatus, normalizePhoneIdentity } from './call-commerce-lifecycle.js';
+
 // ============================================================
 // CALL COMMERCE PROVIDER -> CANONICAL MAPPING
 //
@@ -26,7 +28,7 @@ function readPath(input, path) {
 }
 
 function normalizePhone(value) {
-  return String(value ?? '').replace(/[^0-9+]/g, '').trim();
+  return normalizePhoneIdentity(value);
 }
 
 function transformValue(value, transform) {
@@ -157,10 +159,13 @@ function deriveMsg91Outcome(input) {
   const disconnectedBy = normalizeDisconnectValue(input.disconnectedBy);
   const ivrStatuses = parseIvrStatuses(input.ivrInputs);
 
+  // Restore the pre-PostgreSQL outcome semantics:
+  // any positive leg-level connection evidence wins over earlier no-answer
+  // routing legs. Provider lifecycle completion and duration are NOT answer
+  // evidence by themselves.
   const answeredEvidence =
     ivrStatuses.some(status => ['answered', 'connected', 'success'].includes(status))
-    || ['answered', 'connected'].includes(rawStatus)
-    || (rawEventType === 'completed' && Number(input.durationSeconds || 0) > 0);
+    || ['answered', 'connected'].includes(rawStatus);
 
   const noAnswerEvidence =
     ivrStatuses.some(status => ['no-answer', 'noanswer', 'unanswered', 'missed'].includes(status))
@@ -181,9 +186,9 @@ function deriveMsg91Outcome(input) {
   const disconnectedBySource =
     ['source', 'caller', 'customer'].includes(disconnectedBy);
 
-  const disconnectedByDestination =
-    ['destination', 'callee', 'agent'].includes(disconnectedBy);
-
+  // The old caller-dropped rule applies to inbound customer/source hangs only.
+  // For MSG91 outbound calls the customer is destination, so a destination-side
+  // pre-answer end remains NO_ANSWER rather than being mislabeled Caller Dropped.
   const callerDroppedBeforeAnswer =
     input.direction !== 'OUTBOUND' && disconnectedBySource;
 
@@ -205,8 +210,9 @@ function deriveMsg91Outcome(input) {
     };
   }
 
-  // A positive leg-level connection signal is authoritative. A later
-  // provider failure can still describe how the connected call ended.
+  // This is the key pre-PostgreSQL rule. A call flow may contain several
+  // No-answer routing legs and then an Answered fallback leg. Any explicit
+  // Answered/Connected/Success leg makes the whole provider call ANSWERED.
   if (answeredEvidence) {
     if (networkFailure) {
       return {
@@ -235,8 +241,6 @@ function deriveMsg91Outcome(input) {
     };
   }
 
-  // Customer/source cancellation before an answered leg is a caller
-  // drop, not an agent disconnect and not an answered call.
   if (
     ['canceled', 'cancelled'].includes(rawEventType)
     || cancelledEvidence
@@ -305,10 +309,9 @@ function deriveMsg91Outcome(input) {
     };
   }
 
-  // MSG91 sometimes emits completed without an explicit IVR leg result.
-  // If the caller/source ended it before any answered evidence, classify it
-  // as a caller drop. Destination-side completed events without evidence
-  // remain UNKNOWN rather than being falsely counted as answered.
+  // Provider "completed" means the lifecycle ended; it does not mean a human
+  // answered. Preserve the old inbound caller-drop inference, otherwise remain
+  // UNKNOWN until explicit outcome evidence exists.
   if (rawEventType === 'completed') {
     if (callerDroppedBeforeAnswer) {
       return {
@@ -324,9 +327,7 @@ function deriveMsg91Outcome(input) {
       eventType,
       callStatus: 'UNKNOWN',
       disconnectParty:
-        disconnectedByDestination
-          ? 'BUSINESS_ROUTING'
-          : 'UNKNOWN',
+        partyFromMsg91Disconnect(disconnectedBy, false, input.direction),
       endReason: 'UNKNOWN',
       outcomeSource: 'MSG91_EVENT',
     };
@@ -425,10 +426,11 @@ export function normalizeCallingPayload(input) {
     || mapValue('EVENT_TYPE', rawStatus, valueMappings)
     || 'UPDATED';
 
-  let callStatus =
+  let callStatus = canonicalCallStatus(
     mapValue('CALL_STATUS', rawStatus, valueMappings)
     || mapValue('CALL_STATUS', rawEventType, valueMappings)
-    || 'UNKNOWN';
+    || 'UNKNOWN'
+  );
 
   const directionCandidate =
     mapValue('DIRECTION', rawDirection, valueMappings)
@@ -468,9 +470,52 @@ export function normalizeCallingPayload(input) {
     ? null
     : Number(mapped.durationSeconds);
 
-  let disconnectParty = 'UNKNOWN';
-  let endReason = null;
-  let outcomeSource = 'VALUE_MAPPING';
+  const mappedDisconnectParty = String(
+    mapValue(
+      'DISCONNECT_PARTY',
+      mapped.disconnectParty ?? disconnectedBy ?? '',
+      valueMappings
+    ) || mapped.disconnectParty || 'UNKNOWN'
+  ).toUpperCase();
+
+  const mappedEndReason = String(
+    mapValue(
+      'END_REASON',
+      mapped.endReason ?? reason ?? '',
+      valueMappings
+    ) || mapped.endReason || ''
+  ).toUpperCase();
+
+  const validDisconnectParties = new Set([
+    'CUSTOMER',
+    'AGENT',
+    'BUSINESS_ROUTING',
+    'SYSTEM',
+    'UNKNOWN',
+  ]);
+  const validEndReasons = new Set([
+    'CALLER_DROPPED_BEFORE_ANSWER',
+    'CUSTOMER_DISCONNECTED',
+    'AGENT_DISCONNECTED',
+    'UNANSWERED',
+    'USER_UNREACHABLE',
+    'NETWORK_FAILURE',
+    'PROVIDER_FAILURE',
+    'UNKNOWN',
+  ]);
+
+  let disconnectParty =
+    validDisconnectParties.has(mappedDisconnectParty)
+      ? mappedDisconnectParty
+      : 'UNKNOWN';
+  let endReason =
+    mappedEndReason && validEndReasons.has(mappedEndReason)
+      ? mappedEndReason
+      : null;
+  let outcomeSource =
+    disconnectParty !== 'UNKNOWN' || endReason
+      ? 'VALUE_MAPPING'
+      : 'UNMAPPED';
 
   if (isMsg91Provider(input.providerKey)) {
     const outcome =

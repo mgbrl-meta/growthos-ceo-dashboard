@@ -89,7 +89,7 @@ export type CallingFieldMapping = {
 };
 
 export type CallingValueMapping = {
-  mappingType: 'EVENT_TYPE' | 'CALL_STATUS' | 'DIRECTION';
+  mappingType: 'EVENT_TYPE' | 'CALL_STATUS' | 'DIRECTION' | 'DISCONNECT_PARTY' | 'END_REASON';
   sourceValue: string;
   canonicalValue: string;
 };
